@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/卓越美學_獎金系統_最終版.html" }
+  ]
+}
