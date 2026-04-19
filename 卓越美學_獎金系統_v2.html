@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500&family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
 :root {
   --ink:#1a1a1a;--ink-light:#555;--ink-faint:#999;
@@ -192,6 +194,22 @@ table tr:hover td{background:var(--gold-pale);}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-md);width:100%;max-width:560px;max-height:85vh;overflow-y:auto;}
+.modal.modal-xl{max-width:1100px;}
+.item-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;}
+.item-table th{background:var(--surface-3);padding:6px 8px;text-align:left;font-weight:500;color:var(--ink-light);border-bottom:1px solid var(--border);}
+.item-table td{padding:4px 4px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.item-table input,.item-table select{width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;}
+.item-table .col-no{width:36px;text-align:center;color:var(--ink-faint);}
+.item-table .col-code{width:110px;}
+.item-table .col-spec{width:100px;}
+.item-table .col-qty{width:80px;}
+.item-table .col-price{width:80px;}
+.item-table .col-act{width:40px;text-align:center;}
+.btn-icon-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;}
+.btn-icon-del:hover{background:var(--red-pale);border-radius:4px;}
+.pdf-drop{border:1.5px dashed var(--gold);background:var(--gold-pale);border-radius:8px;padding:14px;text-align:center;cursor:pointer;font-size:13px;color:#7a5a2e;margin-bottom:8px;transition:all .15s;}
+.pdf-drop:hover{background:var(--gold-light);}
+.pdf-drop.loading{opacity:.6;cursor:wait;}
 .modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .modal-title{font-family:'Noto Serif TC',serif;font-size:16px;font-weight:500;}
 .modal-close{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:16px;color:var(--ink-faint);}
@@ -955,42 +973,68 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 <!-- MODALS -->
 <!-- 新增訂單 -->
 <div class="modal-overlay" id="newOrderModal">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title">📦 新增訂單</div><button class="modal-close" onclick="closeModal('newOrderModal')">✕</button></div>
+  <div class="modal modal-xl">
+    <div class="modal-header"><div class="modal-title">📦 新增訂單（訂購確認單）</div><button class="modal-close" onclick="closeModal('newOrderModal')">✕</button></div>
     <div class="modal-body">
+      <div class="pdf-drop" id="o-pdf-drop" onclick="document.getElementById('o-pdf-file').click()">
+        📄 點擊匯入訂單 PDF（自動抓取訂單編號／客戶／品項／數量）
+        <input type="file" id="o-pdf-file" accept="application/pdf" style="display:none" onchange="parseOrderPDF(this.files[0])" />
+      </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">訂購日期</label><input class="form-input" type="date" id="o-date" /></div>
+        <div class="form-group"><label class="form-label">訂購日期 *</label><input class="form-input" type="date" id="o-date" /></div>
         <div class="form-group"><label class="form-label">預計交貨日</label><input class="form-input" type="date" id="o-expected" /></div>
-      </div>
-      <div class="form-group"><label class="form-label">客戶名稱</label><input class="form-input" id="o-customer" placeholder="例：新享生活股份有限公司" /></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">產品編號</label><input class="form-input" id="o-code" placeholder="例：JP2506005" /></div>
-        <div class="form-group"><label class="form-label">品名</label><input class="form-input" id="o-name" placeholder="例：口香泡沫炸彈漱口水" /></div>
+        <div class="form-group"><label class="form-label">訂單編號</label><input class="form-input" id="o-order-no" placeholder="留空自動產生 YYYYMMDD-001" /></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">劑型</label>
-          <select class="form-select" id="o-formula">
-            <option value="liquid">液劑（化妝水、噴霧）</option>
-            <option value="essence">精華液／凝膠／面膜</option>
-            <option value="emulsion_ow">乳劑（水包油）- 乳液、乳霜</option>
-            <option value="emulsion_wo">乳劑（油包水）- 防曬、隔離</option>
-            <option value="special">特殊劑型</option>
-          </select>
+        <div class="form-group"><label class="form-label">客戶名稱 *</label><input class="form-input" id="o-customer" placeholder="例：新享生技股份有限公司" /></div>
+        <div class="form-group"><label class="form-label">統一編號</label><input class="form-input" id="o-tax-id" placeholder="例：28701550" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">聯絡人</label><input class="form-input" id="o-contact-person" /></div>
+        <div class="form-group"><label class="form-label">聯絡電話</label><input class="form-input" id="o-contact-phone" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">送貨地址</label><input class="form-input" id="o-ship-addr" /></div>
+        <div class="form-group"><label class="form-label">收件人</label><input class="form-input" id="o-ship-receiver" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">付款方式</label><input class="form-input" id="o-payment" placeholder="例：月結" /></div>
+        <div class="form-group"><label class="form-label">稅別</label>
+          <select class="form-select" id="o-tax-incl"><option value="true">含稅</option><option value="false">未稅</option></select>
         </div>
-        <div class="form-group"><label class="form-label">訂單總件數</label><input class="form-input" type="number" id="o-qty" placeholder="0" min="0" /></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">單價（元）</label><input class="form-input" type="number" id="o-price" placeholder="0" min="0" step="0.01" /></div>
-        <div></div>
-      </div>
+
       <hr class="divider">
-      <div class="form-group"><label class="form-label">負責業務</label><select class="form-select" id="o-sales"><option value="">請選擇</option></select></div>
-      <div class="form-group"><label class="form-label">負責企劃</label><select class="form-select" id="o-planning"><option value="">請選擇（選填）</option></select></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <label class="form-label" style="margin:0">品項清單 *</label>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addOrderItem()">＋ 新增品項</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="item-table">
+          <thead><tr>
+            <th class="col-no">#</th>
+            <th class="col-code">JP編號</th>
+            <th>品名</th>
+            <th class="col-spec">規格</th>
+            <th class="col-qty">數量</th>
+            <th class="col-price">單價</th>
+            <th>企劃</th>
+            <th class="col-act"></th>
+          </tr></thead>
+          <tbody id="o-items-tbody"></tbody>
+        </table>
+      </div>
+      <datalist id="o-product-codes"></datalist>
+
+      <hr class="divider">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">負責業務 *</label><select class="form-select" id="o-sales"><option value="">請選擇</option></select></div>
+        <div class="form-group"><label class="form-label">備註</label><input class="form-input" id="o-note" placeholder="選填" /></div>
+      </div>
       <div class="form-group">
-        <label class="form-label">負責研發（可多選）</label>
+        <label class="form-label">負責研發（可多選，第一個為主責）</label>
         <div id="o-rd-chips" class="emp-select-grid"></div>
       </div>
-      <div class="form-group"><label class="form-label">備註</label><input class="form-input" id="o-note" placeholder="選填" /></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newOrderModal')">取消</button>
@@ -1100,6 +1144,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null, currentRole = null, currentUserName = null;
 let employees = [];
+let products = [];
+let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
@@ -1143,6 +1189,7 @@ async function initApp(user) {
   applyRoleRestrictions();
   await loadSettings();
   await loadEmployees();
+  await loadProducts();
   await loadDashboard();
   initAllStars();
   initInnerTabs();
@@ -1265,7 +1312,6 @@ function populateEmpSelects() {
   fillSelect('pur-emp-sel', purEmps);
   fillSelect('special-emp-sel', allActiveEmps.map(e=>({...e, name:`${e.name}（${e.dept}）`})));
   fillSelect('o-sales', salesEmps);
-  fillSelect('o-planning', planEmps, true);
 
   // RD chips for order modal
   const rdChips = document.getElementById('o-rd-chips');
@@ -1421,45 +1467,250 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
     </div>`;
   }).join('');
 }
+async function loadProducts() {
+  const { data } = await sb.from('products').select('product_code, product_name, formula_type').order('product_code');
+  products = data || [];
+  const dl = document.getElementById('o-product-codes');
+  if (dl) dl.innerHTML = products.map(p => `<option value="${p.product_code}">${p.product_name}</option>`).join('');
+}
+
+function guessFormulaFromName(name) {
+  if (!name) return 'special';
+  const n = name;
+  if (/噴霧|化妝水|精粹|卸妝液|精萃|原生露/.test(n)) return 'liquid';
+  if (/霜|乳霜|乳|乳液|晚霜|眼霜|BB|修護乳/.test(n)) return 'emulsion_ow';
+  if (/防曬|隔離/.test(n)) return 'emulsion_wo';
+  if (/精華|凝露|凝膠|面膜|安瓶|微導/.test(n)) return 'essence';
+  return 'special';
+}
+
+function addOrderItem(prefill) {
+  const tbody = document.getElementById('o-items-tbody');
+  if (!tbody) return;
+  orderItemRow++;
+  const rowId = 'oi-' + orderItemRow;
+  const planEmps = employees.filter(e => e.dept === '企劃部' && e.is_active);
+  const planOptions = '<option value="">請選擇</option>' + planEmps.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.id = rowId;
+  tr.innerHTML = `
+    <td class="col-no"></td>
+    <td class="col-code"><input list="o-product-codes" class="oi-code" placeholder="JP000000" oninput="onItemCodeInput(this)" /></td>
+    <td><input class="oi-name" placeholder="品名" /></td>
+    <td class="col-spec"><input class="oi-spec" placeholder="50ml/盒" /></td>
+    <td class="col-qty"><input class="oi-qty" type="number" min="0" placeholder="0" /></td>
+    <td class="col-price"><input class="oi-price" type="number" min="0" step="0.01" placeholder="0" /></td>
+    <td><select class="oi-plan">${planOptions}</select></td>
+    <td class="col-act"><button type="button" class="btn-icon-del" onclick="removeOrderItem('${rowId}')" title="刪除">✕</button></td>`;
+  tbody.appendChild(tr);
+  if (prefill) {
+    tr.querySelector('.oi-code').value = prefill.code || '';
+    tr.querySelector('.oi-name').value = prefill.name || '';
+    tr.querySelector('.oi-spec').value = prefill.spec || '';
+    tr.querySelector('.oi-qty').value = prefill.qty || '';
+    tr.querySelector('.oi-price').value = prefill.price || '';
+  }
+  renumberItems();
+}
+
+function removeOrderItem(rowId) {
+  const el = document.getElementById(rowId);
+  if (el) el.remove();
+  renumberItems();
+}
+
+function renumberItems() {
+  const rows = document.querySelectorAll('#o-items-tbody tr');
+  rows.forEach((r,i) => { const c = r.querySelector('.col-no'); if (c) c.textContent = i+1; });
+}
+
+function onItemCodeInput(input) {
+  const code = input.value.trim().toUpperCase();
+  const p = products.find(x => x.product_code === code);
+  if (!p) return;
+  const tr = input.closest('tr');
+  const nameInput = tr.querySelector('.oi-name');
+  if (nameInput && !nameInput.value) nameInput.value = p.product_name;
+}
+
+function resetOrderModal() {
+  ['o-date','o-expected','o-order-no','o-customer','o-tax-id','o-contact-person','o-contact-phone','o-ship-addr','o-ship-receiver','o-payment','o-note'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  document.getElementById('o-tax-incl').value = 'true';
+  document.getElementById('o-sales').value = '';
+  document.querySelectorAll('#o-rd-chips .emp-chip.active').forEach(c=>c.classList.remove('active'));
+  document.getElementById('o-items-tbody').innerHTML = '';
+  orderItemRow = 0;
+  addOrderItem();
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('o-date').value = today;
+}
+
+async function parseOrderPDF(file) {
+  if (!file || !window.pdfjsLib) { showToast('❌ PDF 讀取器未載入'); return; }
+  const drop = document.getElementById('o-pdf-drop');
+  drop.classList.add('loading');
+  drop.textContent = '📄 解析中...';
+  try {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    let text = '';
+    for (let i=1; i<=pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(it => it.str).join(' ') + '\n';
+    }
+    applyParsedPDF(text);
+    drop.textContent = '✓ 已匯入，請核對下方資料';
+    setTimeout(()=>{ drop.classList.remove('loading'); drop.innerHTML = '📄 點擊重新匯入 PDF<input type="file" id="o-pdf-file" accept="application/pdf" style="display:none" onchange="parseOrderPDF(this.files[0])" />'; }, 1500);
+  } catch(e) {
+    console.error(e);
+    showToast('❌ PDF 解析失敗：' + e.message);
+    drop.classList.remove('loading');
+    drop.textContent = '📄 點擊匯入訂單 PDF（自動抓取）';
+  }
+}
+
+function applyParsedPDF(text) {
+  const setVal = (id,v) => { const el=document.getElementById(id); if(el && v) el.value=v; };
+
+  const dateM = text.match(/(?:訂購日期|日期)[：:\s]*(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+  if (dateM) setVal('o-date', `${dateM[1]}-${String(dateM[2]).padStart(2,'0')}-${String(dateM[3]).padStart(2,'0')}`);
+
+  const custM = text.match(/(?:客戶名稱|客戶)[：:\s]*([^\s]{2,40}?(?:股份有限公司|有限公司|企業社|商行|診所|生技|生活|科技|國際|實業))/);
+  if (custM) setVal('o-customer', custM[1]);
+  const taxM = text.match(/(?:統[一編一]*編?[號碼]?)[：:\s]*(\d{8})/);
+  if (taxM) setVal('o-tax-id', taxM[1]);
+  const phoneM = text.match(/(?:電話|聯絡電話|TEL)[：:\s]*([\d\-\(\)\s]{7,20})/i);
+  if (phoneM) setVal('o-contact-phone', phoneM[1].trim());
+  const personM = text.match(/(?:聯絡人|連絡人)[：:\s]*([\u4e00-\u9fff]{2,6})/);
+  if (personM) setVal('o-contact-person', personM[1]);
+  const addrM = text.match(/(?:送貨地址|地址)[：:\s]*([^\n]{5,80}?號[^\n]{0,30})/);
+  if (addrM) setVal('o-ship-addr', addrM[1].trim());
+  const recvM = text.match(/(?:收件人|收貨人)[：:\s]*([\u4e00-\u9fff]{2,6})/);
+  if (recvM) setVal('o-ship-receiver', recvM[1]);
+  const payM = text.match(/(?:付款方式|付款條件)[：:\s]*([^\s]{1,10})/);
+  if (payM) setVal('o-payment', payM[1]);
+  if (/未稅/.test(text) && !/含稅/.test(text)) document.getElementById('o-tax-incl').value='false';
+  const orderNoM = text.match(/(?:訂單編號|單號)[：:\s]*([A-Z0-9\-]{4,30})/);
+  if (orderNoM) setVal('o-order-no', orderNoM[1]);
+
+  document.getElementById('o-items-tbody').innerHTML = '';
+  orderItemRow = 0;
+  const itemRegex = /(JP\d{6})\s+([\u4e00-\u9fff][^\n]{1,60}?)\s+(\d+(?:\.\d+)?(?:ml|g|ML|G|片|盒|粒|顆)[^\s]{0,8})\s+(\d{1,6})\s+(\d{1,6}(?:\.\d+)?)/g;
+  let m, count=0;
+  while ((m = itemRegex.exec(text)) !== null) {
+    const code = m[1];
+    const p = products.find(x => x.product_code === code);
+    addOrderItem({
+      code,
+      name: (p && p.product_name) || m[2].trim(),
+      spec: m[3].trim(),
+      qty: m[4],
+      price: m[5]
+    });
+    count++;
+  }
+  if (count === 0) {
+    const fallback = /(JP\d{6})/g;
+    let fm;
+    while ((fm = fallback.exec(text)) !== null) {
+      const p = products.find(x => x.product_code === fm[1]);
+      addOrderItem({ code: fm[1], name: (p && p.product_name) || '' });
+      count++;
+    }
+    if (count === 0) addOrderItem();
+    showToast(`⚠️ 只抓到 ${count} 個 JP 編號，數量/單價請手動補`);
+  } else {
+    showToast(`✓ 已匯入 ${count} 個品項`);
+  }
+}
+
+async function generateOrderNo(dateStr) {
+  const ymd = dateStr.replace(/-/g,'');
+  const { data } = await sb.from('orders').select('order_no').like('order_no', `${ymd}-%`);
+  const nums = (data||[]).map(r => parseInt((r.order_no||'').split('-')[1])||0);
+  const next = (Math.max(0, ...nums) + 1).toString().padStart(3,'0');
+  return `${ymd}-${next}`;
+}
+
 async function saveOrder() {
   const date = document.getElementById('o-date').value;
   const customer = document.getElementById('o-customer').value.trim();
-  const code = document.getElementById('o-code').value.trim();
-  const name = document.getElementById('o-name').value.trim();
-  const formula = document.getElementById('o-formula').value;
-  const qty = parseInt(document.getElementById('o-qty').value)||0;
-  const price = parseFloat(document.getElementById('o-price').value)||0;
   const salesId = document.getElementById('o-sales').value;
-  const planningId = document.getElementById('o-planning').value;
   const note = document.getElementById('o-note').value.trim();
-  if (!date||!customer||!name||!qty) { showToast('請填寫必要欄位'); return; }
+  if (!date || !customer) { showToast('請填訂購日期與客戶名稱'); return; }
+  if (!salesId) { showToast('請選擇負責業務'); return; }
 
-  // 季度從訂購日期推算（不被目前切換的季度覆蓋）
+  const rows = Array.from(document.querySelectorAll('#o-items-tbody tr'));
+  const items = rows.map((tr,i) => ({
+    line_no: i+1,
+    product_code: tr.querySelector('.oi-code').value.trim().toUpperCase() || null,
+    product_name: tr.querySelector('.oi-name').value.trim(),
+    spec: tr.querySelector('.oi-spec').value.trim() || null,
+    qty: parseInt(tr.querySelector('.oi-qty').value)||0,
+    unit_price: parseFloat(tr.querySelector('.oi-price').value)||0,
+    planning_id: tr.querySelector('.oi-plan').value || null
+  })).filter(it => it.product_name || it.product_code);
+  if (!items.length) { showToast('請至少新增一個品項'); return; }
+  if (items.some(it => !it.product_name)) { showToast('品項必須有品名'); return; }
+  if (items.some(it => it.qty <= 0)) { showToast('品項數量必須 > 0'); return; }
+
+  let orderNo = document.getElementById('o-order-no').value.trim();
+  if (!orderNo) orderNo = await generateOrderNo(date);
+
   const d = new Date(date);
   const month = d.getMonth()+1;
   const q = month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
   const y = d.getFullYear();
 
+  // 為了向下兼容現有列表顯示，header 填彙整資訊
+  const totalQty = items.reduce((s,it)=>s+it.qty, 0);
+  const firstFormula = guessFormulaFromName(items[0].product_name);
+  const summaryName = items.length === 1
+    ? items[0].product_name
+    : `${items[0].product_name} 等 ${items.length} 項`;
+  const firstPlan = items.find(it => it.planning_id)?.planning_id || null;
+
   const { data:order, error } = await sb.from('orders').insert({
-    order_date:date, customer_name:customer, product_code:code||null, product_name:name,
-    formula_type:formula, total_qty:qty, unit_price:price||0,
-    sales_id:salesId||null, planning_id:planningId||null,
-    expected_delivery:document.getElementById('o-expected').value||null,
-    year:y, quarter:q, note:note||null,
-    created_by:currentUser.id
+    order_date: date,
+    order_no: orderNo,
+    customer_name: customer,
+    tax_id: document.getElementById('o-tax-id').value.trim() || null,
+    contact_person: document.getElementById('o-contact-person').value.trim() || null,
+    contact_phone: document.getElementById('o-contact-phone').value.trim() || null,
+    shipping_address: document.getElementById('o-ship-addr').value.trim() || null,
+    shipping_receiver: document.getElementById('o-ship-receiver').value.trim() || null,
+    payment_terms: document.getElementById('o-payment').value.trim() || null,
+    tax_included: document.getElementById('o-tax-incl').value === 'true',
+    product_code: items[0].product_code,
+    product_name: summaryName,
+    formula_type: firstFormula,
+    total_qty: totalQty,
+    unit_price: items[0].unit_price,
+    sales_id: salesId,
+    planning_id: firstPlan,
+    expected_delivery: document.getElementById('o-expected').value || null,
+    year: y, quarter: q, note: note || null,
+    created_by: currentUser.id
   }).select().single();
   if (error) { showToast('❌ 儲存失敗：'+error.message); return; }
 
-  // Save RD staff
+  // 品項明細
+  const { error: itemErr } = await sb.from('order_items').insert(items.map(it => ({ ...it, order_id: order.id })));
+  if (itemErr) { showToast('⚠️ 訂單已建立但品項寫入失敗：'+itemErr.message); }
+
+  // 研發
   const selectedRd = Array.from(document.querySelectorAll('#o-rd-chips .emp-chip.active'));
   if (selectedRd.length > 0) {
     await sb.from('order_rd_staff').insert(selectedRd.map((chip,i) => ({
-      order_id:order.id, employee_id:chip.dataset.id, is_final_confirmer: i===0
+      order_id: order.id, employee_id: chip.dataset.id, is_final_confirmer: i===0
     })));
   }
+
   closeModal('newOrderModal');
   await loadOrders();
-  showToast(`✓ 已儲存訂單：${customer} - ${name}`);
+  showToast(`✓ 已儲存訂單 ${orderNo}：${customer}（${items.length} 項／${totalQty} 件）`);
+  resetOrderModal();
 }
 
 // SHIPMENTS
@@ -2007,7 +2258,10 @@ function fmt(n){return(n||0).toLocaleString('zh-TW')+' 元';}
 function fmtNum(n){return(n||0).toLocaleString('zh-TW');}
 function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'teal',生管部:'red'}[d]||'gold';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
-function openModal(id){document.getElementById(id).classList.add('open');}
+function openModal(id){
+  document.getElementById(id).classList.add('open');
+  if (id === 'newOrderModal') resetOrderModal();
+}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 </script>
 </body>
