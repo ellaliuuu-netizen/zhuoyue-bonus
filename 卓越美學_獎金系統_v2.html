@@ -1576,7 +1576,7 @@ function applyParsedPDF(text) {
   const dateM = text.match(/(?:訂購日期|日期)[：:\s]*(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
   if (dateM) setVal('o-date', `${dateM[1]}-${String(dateM[2]).padStart(2,'0')}-${String(dateM[3]).padStart(2,'0')}`);
 
-  const custM = text.match(/(?:客戶名稱|客戶)[：:\s]*([^\s]{2,40}?(?:股份有限公司|有限公司|企業社|商行|診所|生技|生活|科技|國際|實業))/);
+  const custM = text.match(/(?:客戶名稱|客戶)[：:\s]*([^\s]{2,40}?(?:股份有限公司|有限公司|企業社|股份公司|合夥|商行|診所|工作室))/);
   if (custM) setVal('o-customer', custM[1]);
   const taxM = text.match(/(?:統[一編一]*編?[號碼]?)[：:\s]*(\d{8})/);
   if (taxM) setVal('o-tax-id', taxM[1]);
@@ -1596,7 +1596,7 @@ function applyParsedPDF(text) {
 
   document.getElementById('o-items-tbody').innerHTML = '';
   orderItemRow = 0;
-  const itemRegex = /(JP\d{6})\s+([\u4e00-\u9fff][^\n]{1,60}?)\s+(\d+(?:\.\d+)?(?:ml|g|ML|G|片|盒|粒|顆)[^\s]{0,8})\s+(\d{1,6})\s+(\d{1,6}(?:\.\d+)?)/g;
+  const itemRegex = /(JP\d{6})\s+(\S[^\n]{1,60}?)\s+(\d+(?:\.\d+)?\s*(?:ml|g|ML|G|片|盒|粒|顆)[^\s]{0,8})\s+(\d{1,6})\s+(\d{1,6}(?:\.\d+)?)/g;
   let m, count=0;
   while ((m = itemRegex.exec(text)) !== null) {
     const code = m[1];
