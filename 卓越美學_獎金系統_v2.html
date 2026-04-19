@@ -1334,16 +1334,22 @@ async function saveSalesM() {
 }
 function calcSalesQ() {
   const rev=parseFloat(document.getElementById('sales-q-rev').value)||0;
-  let bonus=0,label='';
-  if (rev<1500000){bonus=0;label='未達150萬';}
-  else if (rev<3000000){bonus=6000;label='150–300萬';}
-  else if (rev<5000000){bonus=10000;label='300–500萬';}
-  else if (rev<7000000){bonus=15000;label='500–700萬';}
-  else if (rev<9000000){bonus=20000;label='700–900萬';}
-  else{bonus=25000;label='超過900萬';}
+  let base=0,label='';
+  if (rev<1500000){base=0;label='未達150萬';}
+  else if (rev<3000000){base=6000;label='150–300萬';}
+  else if (rev<5000000){base=10000;label='300–500萬';}
+  else if (rev<7000000){base=15000;label='500–700萬';}
+  else if (rev<9000000){base=20000;label='700–900萬';}
+  else{base=25000;label='超過900萬';}
+  const empId=document.getElementById('sales-q-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
+  const pr=emp?probationRatio(emp):{ratio:1,note:''};
+  const bonus=Math.round(base*pr.ratio);
   show('sales-q-result');
   document.getElementById('sales-q-total').textContent=fmt(bonus);
-  document.getElementById('sales-q-breakdown').innerHTML=`<div class="res-item"><span class="res-item-dot"></span>季業績：${fmtNum(Math.round(rev))}元（${label}）</div>`;
+  let html=`<div class="res-item"><span class="res-item-dot"></span>季業績：${fmtNum(Math.round(rev))}元（${label}）</div>`;
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(bonus)}${pr.note}</div>`;
+  document.getElementById('sales-q-breakdown').innerHTML=html;
 }
 async function saveSalesQ() {
   const empId=document.getElementById('sales-q-emp-sel').value;
@@ -1372,7 +1378,7 @@ function calcRd() {
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇研發人員');return;}
   if (emp.role_level==='assistant') return;
-  let total=0,breakdown=[];
+  let base=0,breakdown=[];
   document.querySelectorAll('.rd-row').forEach(row=>{
     const type=row.querySelector('.rd-type').value;
     const qty=parseInt(row.querySelector('.rd-qty').value)||0;
@@ -1380,11 +1386,15 @@ function calcRd() {
     const eb=Math.min(info.base, appSettings.rdMaxBase);
     const b=Math.round(appSettings.aValue*eb*qty);
     const capped=eb<info.base?`（上限 ${appSettings.rdMaxBase}）`:'';
-    if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}${capped}`);total+=b;}
+    if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}${capped}`);base+=b;}
   });
+  const pr=probationRatio(emp);
+  const total=Math.round(base*pr.ratio);
   show('rd-result');
   document.getElementById('rd-total').textContent=fmt(total);
-  document.getElementById('rd-breakdown').innerHTML=breakdown.map(b=>`<div class="res-item"><span class="res-item-dot"></span>${b}</div>`).join('');
+  let html=breakdown.map(b=>`<div class="res-item"><span class="res-item-dot"></span>${b}</div>`).join('');
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  document.getElementById('rd-breakdown').innerHTML=html;
 }
 async function saveRd() {
   const empId=document.getElementById('rd-emp-sel').value;
@@ -1483,6 +1493,8 @@ function calcPlanScore(){
   document.getElementById('plan-score-tot').textContent=total; return total;
 }
 function calcPlanning(){
+  const empId=document.getElementById('plan-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
   const role=document.getElementById('plan-role').value;
   const ships=parseInt(document.getElementById('plan-shipments').value)||0;
   let shipBonus=0;
@@ -1491,10 +1503,14 @@ function calcPlanning(){
   let scoreBonus=0;
   if (role==='同仁'){const t=calcPlanScore();if(t>=90)scoreBonus=8000;else if(t>=75)scoreBonus=5000;else if(t>=60)scoreBonus=3000;}
   else{const map={'待改進':0,'普通':8000,'滿意':12000,'非常滿意':18000};scoreBonus=map[document.getElementById('plan-mgr-rating').value]||0;}
-  const total=Math.round(shipBonus*.5+scoreBonus*.5);
+  const base=Math.round(shipBonus*.5+scoreBonus*.5);
+  const pr=emp?probationRatio(emp):{ratio:1,note:''};
+  const total=Math.round(base*pr.ratio);
   show('plan-result');
   document.getElementById('plan-total').textContent=fmt(total);
-  document.getElementById('plan-breakdown').innerHTML=`<div class="res-item"><span class="res-item-dot"></span>件數：${fmt(shipBonus)} × 50% = ${fmt(Math.round(shipBonus*.5))}</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)} × 50% = ${fmt(Math.round(scoreBonus*.5))}</div>`;
+  let html=`<div class="res-item"><span class="res-item-dot"></span>件數：${fmt(shipBonus)} × 50% = ${fmt(Math.round(shipBonus*.5))}</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)} × 50% = ${fmt(Math.round(scoreBonus*.5))}</div>`;
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  document.getElementById('plan-breakdown').innerHTML=html;
 }
 async function savePlanning(){
   const empId=document.getElementById('plan-emp-sel').value;
@@ -1525,6 +1541,8 @@ function calcPurScore(){
   document.getElementById('pur-score-tot').textContent=total; return total;
 }
 function calcPurchase(){
+  const empId=document.getElementById('pur-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const concurrent=document.getElementById('pur-concurrent').value==='yes';
   let shipBonus=0;
@@ -1533,10 +1551,14 @@ function calcPurchase(){
   let scoreBonus=0;
   if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
   const supplement=concurrent?appSettings.purSupplement:0;
-  const total=shipBonus+scoreBonus+supplement;
+  const base=shipBonus+scoreBonus+supplement;
+  const pr=emp?probationRatio(emp):{ratio:1,note:''};
+  const total=Math.round(base*pr.ratio);
   show('pur-result');
   document.getElementById('pur-total').textContent=fmt(total);
-  document.getElementById('pur-breakdown').innerHTML=`<div class="res-item"><span class="res-item-dot"></span>件數：${fmt(shipBonus)}</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)}（${score}分）</div>${supplement?`<div class="res-item"><span class="res-item-dot"></span>兼任補貼：${fmt(supplement)}</div>`:''}`;
+  let html=`<div class="res-item"><span class="res-item-dot"></span>件數：${fmt(shipBonus)}</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)}（${score}分）</div>${supplement?`<div class="res-item"><span class="res-item-dot"></span>兼任補貼：${fmt(supplement)}</div>`:''}`;
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  document.getElementById('pur-breakdown').innerHTML=html;
 }
 async function savePurchase(){
   const empId=document.getElementById('pur-emp-sel').value;
