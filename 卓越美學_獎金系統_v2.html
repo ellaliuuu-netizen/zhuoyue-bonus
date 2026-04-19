@@ -162,6 +162,7 @@ table tr:hover td{background:var(--gold-pale);}
 .badge-purple{background:var(--purple-pale);color:var(--purple);border:1px solid rgba(107,79,138,.2);}
 .badge-orange{background:var(--orange-pale);color:var(--orange);border:1px solid rgba(200,120,64,.2);}
 .badge-gray{background:var(--surface-3);color:var(--ink-faint);border:1px solid var(--border);}
+.badge-teal{background:#e0f3ef;color:#2a6f60;border:1px solid rgba(42,111,96,.25);}
 .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
 .info-box{background:var(--blue-pale);border:1px solid rgba(61,106,138,.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--blue);margin-bottom:13px;}
 .warn-box{background:var(--orange-pale);border:1px solid rgba(200,120,64,.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--orange);margin-bottom:13px;}
@@ -372,7 +373,7 @@ table tr:hover td{background:var(--gold-pale);}
           <div class="card">
             <div class="card-header">
               <div class="card-title">📅 月獎金計算</div>
-              <select class="form-select" style="width:85px;padding:5px 9px" id="sales-month-sel"><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option></select>
+              <select class="form-select" style="width:85px;padding:5px 9px" id="sales-month-sel"></select>
             </div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">業務人員</label><select class="form-select" id="sales-emp-sel"><option value="">請選擇</option></select></div>
@@ -467,7 +468,8 @@ table tr:hover td{background:var(--gold-pale);}
           </div>
         </div>
         <div id="rd-team-sec" style="display:none">
-          <div class="card"><div class="card-header"><div class="card-title">👥 研發團隊彙整</div><button class="btn btn-outline btn-sm" onclick="exportDeptCSV('研發部')">匯出 CSV</button></div>
+          <div class="card"><div class="card-header"><div class="card-title">👥 研發團隊彙整</div><div><button class="btn btn-gold btn-sm" onclick="saveRdTeam()" style="margin-right:8px">儲存團隊加成</button><button class="btn btn-outline btn-sm" onclick="exportDeptCSV('研發部')">匯出 CSV</button></div></div>
+            <div class="info-box">課長 +15%、助理 5%。按下「儲存團隊加成」會寫入 bonus_records（record_type = team_bonus），避免匯出時漏算。</div>
             <div id="rd-team-content"><div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">載入中...</div></div></div>
           </div>
         </div>
@@ -583,6 +585,10 @@ table tr:hover td{background:var(--gold-pale);}
       <div class="page" id="page-production">
         <div class="section-title" style="color:var(--red)">生管部獎金計算</div>
         <div class="section-desc">季獎金 = 基礎獎金（準時率）＋ 評分加成</div>
+        <div class="warn-box" style="font-size:13px;padding:14px 18px">
+          <strong>⚠ 本制度尚未啟用</strong><br>
+          依據《生管部獎金規範書》：此制度於「自有 ISO 工廠落地（2026/08）」後才實施。當前由採購部施詠心兼任生管工作，獎金列計於採購部。本頁僅供模擬試算，儲存後標記為 <code>preview</code>。
+        </div>
         <div id="prod-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card">
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
@@ -630,6 +636,7 @@ table tr:hover td{background:var(--gold-pale);}
           <div class="inner-tab active" onclick="switchInner(this,'set-general-sec')">基本設定</div>
           <div class="inner-tab" onclick="switchInner(this,'set-employees-sec')">員工管理</div>
           <div class="inner-tab" onclick="switchInner(this,'set-rd-sec')">研發 A值</div>
+          <div class="inner-tab" onclick="switchInner(this,'set-special-sec')">特別貢獻獎</div>
         </div>
         <div id="set-general-sec">
           <div class="card">
@@ -656,7 +663,11 @@ table tr:hover td{background:var(--gold-pale);}
             <div class="card-header"><div class="card-title">研發部 A值設定</div></div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">目前 A值（元）</label><input class="form-input" type="number" id="set-aval" value="3000" /></div>
+              <div class="form-group"><label class="form-label">基數上限（依階段）</label><input class="form-input" type="number" id="set-maxbase" value="1.2" step="0.1" /></div>
+            </div>
+            <div class="form-row">
               <div class="form-group"><label class="form-label">公司目前月營收（自動判斷用）</label><input class="form-input" type="number" id="set-rev" placeholder="0" /></div>
+              <div></div>
             </div>
             <button class="btn btn-outline btn-sm" onclick="autoAVal()" style="margin-bottom:10px">根據營收自動設定</button><br>
             <button class="btn btn-primary" onclick="saveAVal()">儲存 A值</button>
@@ -670,6 +681,21 @@ table tr:hover td{background:var(--gold-pale);}
               <tr><td>躍升期</td><td>月營收 7,000萬</td><td class="td-right">5,000</td><td class="td-right">10,000</td></tr>
               <tr><td>榮譽期</td><td>月營收破億</td><td class="td-right">5,000</td><td class="td-right">12,500</td></tr>
             </tbody></table>
+          </div>
+        </div>
+        <div id="set-special-sec" style="display:none">
+          <div class="card">
+            <div class="card-header"><div class="card-title">🌟 特別貢獻獎（主管提報）</div></div>
+            <div class="info-box">規範書：五部門皆可提報。條件：突破性創新、跨部門規劃貢獻、解決重大異常。金額 5,000 – 10,000 元，由主管提報並寫入 <code>bonus_records (record_type='special')</code>。同人同季可有多筆，不觸發防重複檢查。</div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">員工</label><select class="form-select" id="special-emp-sel"><option value="">請選擇</option></select></div>
+              <div class="form-group"><label class="form-label">金額（5000–10000）</label><input class="form-input" type="number" id="special-amount" min="5000" max="10000" step="500" placeholder="例：8000" /></div>
+            </div>
+            <div class="form-group"><label class="form-label">提報事由</label><input class="form-input" id="special-reason" placeholder="例：導入 PIF 自建流程，節省外包費 15 萬/年" /></div>
+            <button class="btn btn-gold manager-only" onclick="saveSpecial()">提報儲存</button>
+          </div>
+          <div class="card"><div class="card-header"><div class="card-title">本季特別貢獻獎紀錄</div></div>
+            <div id="special-list"><div class="empty-state"><div class="empty-icon">🌟</div><div style="font-size:14px">載入中...</div></div></div>
           </div>
         </div>
       </div>
@@ -781,6 +807,10 @@ table tr:hover td{background:var(--gold-pale);}
           </select>
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">試用期結束日</label><input class="form-input" id="e-probation" type="date" /></div>
+        <div class="form-group"><label class="form-label">&nbsp;</label><div style="font-size:11px;color:var(--ink-faint);line-height:1.5;padding:8px 0">企劃部三個月試用期規則：若本季季底仍在此日期之前，系統自動將該員該季獎金寫為 0。其他部門可留空。</div></div>
+      </div>
       <div class="form-group"><label class="form-label">備註</label><input class="form-input" id="e-note" placeholder="例：留職停薪中、兼任生管" /></div>
     </div>
     <div class="modal-footer">
@@ -822,9 +852,18 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null, currentRole = null, currentUserName = null;
 let employees = [];
-let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000 };
+let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
+// 研發 A值升級路線（規範書 2026/05 版）
+const rdStages = [
+  { name:'起步期', threshold:0,         aValue:3000, maxBase:1.2, maxPerItem:3600  },
+  { name:'成長期', threshold:10000000,  aValue:4000, maxBase:1.2, maxPerItem:4800  },
+  { name:'卓越期', threshold:30000000,  aValue:5000, maxBase:1.2, maxPerItem:6000  },
+  { name:'擴張期', threshold:50000000,  aValue:5000, maxBase:1.5, maxPerItem:7500  },
+  { name:'躍升期', threshold:70000000,  aValue:5000, maxBase:2.0, maxPerItem:10000 },
+  { name:'榮譽期', threshold:100000000, aValue:5000, maxBase:2.5, maxPerItem:12500 },
+];
 
 // AUTH
 async function doLogin() {
@@ -883,6 +922,7 @@ async function loadSettings() {
     if (r.key === 'current_year') appSettings.year = parseInt(r.value);
     if (r.key === 'current_quarter') appSettings.quarter = r.value;
     if (r.key === 'rd_a_value') appSettings.aValue = parseInt(r.value);
+    if (r.key === 'rd_max_base') appSettings.rdMaxBase = parseFloat(r.value);
     if (r.key === 'sales_new_client_bonus') appSettings.newClientBonus = parseInt(r.value);
     if (r.key === 'purchase_supplement') appSettings.purSupplement = parseInt(r.value);
   });
@@ -893,10 +933,15 @@ function syncSettingsUI() {
   document.getElementById('set-year').value = appSettings.year;
   document.getElementById('set-quarter').value = appSettings.quarter;
   document.getElementById('set-aval').value = appSettings.aValue;
+  const mb=document.getElementById('set-maxbase'); if(mb) mb.value = appSettings.rdMaxBase;
   document.getElementById('set-new-client').value = appSettings.newClientBonus;
   document.getElementById('set-pur-supp').value = appSettings.purSupplement;
   document.getElementById('rd-aval-disp').textContent = fmtNum(appSettings.aValue);
   document.getElementById('dash-quarter-disp').textContent = `${appSettings.year} ${appSettings.quarter}`;
+  // 動態填入當前季度的三個月份
+  const qMonths={Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]}[appSettings.quarter]||[4,5,6];
+  const mSel=document.getElementById('sales-month-sel');
+  if (mSel) mSel.innerHTML = qMonths.map(m=>`<option value="${m}">${m}月</option>`).join('');
 }
 async function saveSetting(key, value) { await sb.from('system_settings').update({ value: String(value) }).eq('key', key); }
 async function saveGeneralSettings() {
@@ -910,14 +955,38 @@ async function saveGeneralSettings() {
 }
 async function saveAVal() {
   const a = parseInt(document.getElementById('set-aval').value)||3000;
-  await saveSetting('rd_a_value', a); appSettings.aValue = a;
-  document.getElementById('rd-aval-disp').textContent = fmtNum(a); showToast('✓ A值已更新');
+  const mb = parseFloat(document.getElementById('set-maxbase').value)||1.2;
+  await Promise.all([saveSetting('rd_a_value', a), saveSetting('rd_max_base', mb)]);
+  appSettings.aValue = a; appSettings.rdMaxBase = mb;
+  document.getElementById('rd-aval-disp').textContent = fmtNum(a); showToast('✓ A值與基數上限已更新');
+}
+function stageOf(rev){
+  let stage = rdStages[0];
+  for (const s of rdStages) if (rev >= s.threshold) stage = s;
+  return stage;
+}
+// 試用期比例：正式錄用期才開始計獎金。跨季按「正式天數 / 當季總天數」比例發放
+function probationRatio(emp){
+  if(!emp||!emp.probation_end_date) return { ratio:1, note:'' };
+  const qStartMap={Q1:'01-01',Q2:'04-01',Q3:'07-01',Q4:'10-01'};
+  const qEndMap={Q1:'03-31',Q2:'06-30',Q3:'09-30',Q4:'12-31'};
+  const qStart=new Date(`${appSettings.year}-${qStartMap[appSettings.quarter]}`);
+  const qEnd=new Date(`${appSettings.year}-${qEndMap[appSettings.quarter]}`);
+  const qDays=Math.round((qEnd-qStart)/86400000)+1;
+  const pEnd=new Date(emp.probation_end_date);
+  const formalStart=new Date(pEnd); formalStart.setDate(formalStart.getDate()+1);
+  if(formalStart>qEnd) return { ratio:0, note:`｜整季試用期中（至 ${emp.probation_end_date}）` };
+  if(formalStart<=qStart) return { ratio:1, note:'' };
+  const formalDays=Math.round((qEnd-formalStart)/86400000)+1;
+  const ratio=formalDays/qDays;
+  return { ratio, note:`｜正式錄用 ${formalDays}/${qDays} 天（${(ratio*100).toFixed(1)}%）` };
 }
 function autoAVal() {
   const rev = parseFloat(document.getElementById('set-rev').value)||0;
-  let a = 3000;
-  if (rev>=100000000) a=5000; else if (rev>=50000000) a=5000; else if (rev>=30000000) a=5000; else if (rev>=10000000) a=4000;
-  document.getElementById('set-aval').value = a; showToast('建議 A值 = ' + fmtNum(a) + ' 元');
+  const s = stageOf(rev);
+  document.getElementById('set-aval').value = s.aValue;
+  document.getElementById('set-maxbase').value = s.maxBase;
+  showToast(`${s.name}｜A值 ${fmtNum(s.aValue)} 元｜基數上限 ${s.maxBase}`);
 }
 function applyQuarter() {
   const y = parseInt(document.getElementById('m-year').value);
@@ -946,6 +1015,7 @@ function populateEmpSelects() {
   fillSelect('rd-emp-sel', employees.filter(e => e.dept === '研發部' && e.is_active));
   fillSelect('plan-emp-sel', planEmps);
   fillSelect('pur-emp-sel', purEmps);
+  fillSelect('special-emp-sel', allActiveEmps.map(e=>({...e, name:`${e.name}（${e.dept}）`})));
   fillSelect('o-sales', salesEmps);
   fillSelect('o-planning', planEmps, true);
 
@@ -1001,9 +1071,10 @@ async function saveEmployee() {
   const title = document.getElementById('e-title').value.trim();
   const level = document.getElementById('e-level').value;
   const note = document.getElementById('e-note').value.trim();
+  const probation = document.getElementById('e-probation').value || null;
   if (!name || !title) { showToast('請填寫姓名和職稱'); return; }
-  const { error } = await sb.from('employees').insert({ name, dept, role_title:title, role_level:level, note:note||null });
-  if (error) { showToast('❌ 儲存失敗'); return; }
+  const { error } = await sb.from('employees').insert({ name, dept, role_title:title, role_level:level, note:note||null, probation_end_date:probation });
+  if (error) { showToast('❌ 儲存失敗：'+error.message); return; }
   closeModal('newEmpModal');
   await loadEmployees();
   showToast(`✓ 已新增員工 ${name}`);
@@ -1104,16 +1175,18 @@ async function saveOrder() {
   const note = document.getElementById('o-note').value.trim();
   if (!date||!customer||!name||!qty) { showToast('請填寫必要欄位'); return; }
 
-  // Quarter detection
-  const month = new Date(date).getMonth()+1;
+  // 季度從訂購日期推算（不被目前切換的季度覆蓋）
+  const d = new Date(date);
+  const month = d.getMonth()+1;
   const q = month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
+  const y = d.getFullYear();
 
   const { data:order, error } = await sb.from('orders').insert({
     order_date:date, customer_name:customer, product_code:code||null, product_name:name,
     formula_type:formula, total_qty:qty, unit_price:price||0,
     sales_id:salesId||null, planning_id:planningId||null,
     expected_delivery:document.getElementById('o-expected').value||null,
-    year:appSettings.year, quarter:appSettings.quarter, note:note||null,
+    year:y, quarter:q, note:note||null,
     created_by:currentUser.id
   }).select().single();
   if (error) { showToast('❌ 儲存失敗：'+error.message); return; }
@@ -1164,10 +1237,15 @@ async function saveShipment() {
   const ontime = document.getElementById('s-ontime').value === 'yes';
   if (!orderId||!date||!qty) { showToast('請填寫必要欄位'); return; }
 
+  // 季度從出貨日期推算（不被目前切換的季度覆蓋）
+  const d = new Date(date);
+  const month = d.getMonth()+1;
+  const q = month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
+  const y = d.getFullYear();
   const { error } = await sb.from('shipments').insert({
     order_id:orderId, ship_date:date, shipment_no:no||null,
     ship_qty:qty, is_on_time:ontime,
-    year:appSettings.year, quarter:appSettings.quarter, created_by:currentUser.id
+    year:y, quarter:q, created_by:currentUser.id
   });
   if (error) { showToast('❌ 儲存失敗：'+error.message); return; }
 
@@ -1204,7 +1282,23 @@ async function loadDashboard() {
 
 // SAVE RECORD
 async function saveRecord(data) {
-  const { error } = await sb.from('bonus_records').insert({ ...data, year:appSettings.year, quarter:appSettings.quarter, created_by:currentUser.id });
+  // 防重複：同人同部門同季同類型同月份（special 除外）已存在則覆蓋，避免雙重撥發
+  const isSpecial = data.record_type === 'special';
+  const y = appSettings.year, q = appSettings.quarter;
+  const m = data.month ?? null;
+  if (!isSpecial) {
+    let qy = sb.from('bonus_records').select('id')
+      .eq('year',y).eq('quarter',q).eq('dept',data.dept)
+      .eq('name',data.name).eq('record_type',data.record_type);
+    qy = m===null ? qy.is('month',null) : qy.eq('month',m);
+    const { data:dup } = await qy;
+    if (dup && dup.length) {
+      if (!confirm(`${data.name} ${y} ${q}${m?` ${m}月`:''} ${data.record_type} 已存在一筆紀錄，確定要覆蓋嗎？`)) return false;
+      const ids = dup.map(r=>r.id);
+      await sb.from('bonus_records').delete().in('id', ids);
+    }
+  }
+  const { error } = await sb.from('bonus_records').insert({ ...data, year:y, quarter:q, created_by:currentUser.id });
   if (error) { showToast('❌ 儲存失敗：'+error.message); return false; }
   await loadDashboard(); return true;
 }
@@ -1215,10 +1309,10 @@ function calcSalesM() {
   const amt = parseFloat(document.getElementById('sales-ship-amount').value)||0;
   const ncBonus = nc*appSettings.newClientBonus;
   let ratio=.0015, rl='0.15%';
-  if (amt>4000000){ratio=.0035;rl='0.35%';}
-  else if (amt>2000000){ratio=.0028;rl='0.28%';}
-  else if (amt>1000000){ratio=.0022;rl='0.22%';}
-  else if (amt>500000){ratio=.0018;rl='0.18%';}
+  if (amt>=4000000){ratio=.0035;rl='0.35%';}
+  else if (amt>=2000000){ratio=.0028;rl='0.28%';}
+  else if (amt>=1000000){ratio=.0022;rl='0.22%';}
+  else if (amt>=500000){ratio=.0018;rl='0.18%';}
   const shipBonus=Math.round(amt*ratio);
   const total=ncBonus+shipBonus;
   show('sales-m-result');
@@ -1233,7 +1327,7 @@ async function saveSalesM() {
   const nc=parseInt(document.getElementById('sales-new-clients').value)||0;
   const amt=parseFloat(document.getElementById('sales-ship-amount').value)||0;
   let ratio=.0015;
-  if (amt>4000000) ratio=.0035; else if (amt>2000000) ratio=.0028; else if (amt>1000000) ratio=.0022; else if (amt>500000) ratio=.0018;
+  if (amt>=4000000) ratio=.0035; else if (amt>=2000000) ratio=.0028; else if (amt>=1000000) ratio=.0022; else if (amt>=500000) ratio=.0018;
   const bonus=Math.round(nc*appSettings.newClientBonus+amt*ratio);
   const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`${month}月｜新客${nc}個｜出貨${fmtNum(Math.round(amt))}元`,record_type:'monthly',month:parseInt(month)});
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${month}月獎金 ${fmt(bonus)}`);
@@ -1256,9 +1350,11 @@ async function saveSalesQ() {
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇業務人員');return;}
   const rev=parseFloat(document.getElementById('sales-q-rev').value)||0;
-  let bonus=0;
-  if (rev>=9000000) bonus=25000; else if (rev>=7000000) bonus=20000; else if (rev>=5000000) bonus=15000; else if (rev>=3000000) bonus=10000; else if (rev>=1500000) bonus=6000;
-  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`季達標｜業績${fmtNum(Math.round(rev))}元`,record_type:'quarterly'});
+  let base=0;
+  if (rev>=9000000) base=25000; else if (rev>=7000000) base=20000; else if (rev>=5000000) base=15000; else if (rev>=3000000) base=10000; else if (rev>=1500000) base=6000;
+  const pr=probationRatio(emp);
+  const bonus=Math.round(base*pr.ratio);
+  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`季達標｜業績${fmtNum(Math.round(rev))}元${pr.note}`,record_type:'quarterly'});
   if (ok) showToast(`✓ 已儲存 ${emp.name} 季達標獎金 ${fmt(bonus)}`);
 }
 
@@ -1281,8 +1377,10 @@ function calcRd() {
     const type=row.querySelector('.rd-type').value;
     const qty=parseInt(row.querySelector('.rd-qty').value)||0;
     const info=rdTypes[type];
-    const b=Math.round(appSettings.aValue*info.base*qty);
-    if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}`);total+=b;}
+    const eb=Math.min(info.base, appSettings.rdMaxBase);
+    const b=Math.round(appSettings.aValue*eb*qty);
+    const capped=eb<info.base?`（上限 ${appSettings.rdMaxBase}）`:'';
+    if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}${capped}`);total+=b;}
   });
   show('rd-result');
   document.getElementById('rd-total').textContent=fmt(total);
@@ -1293,15 +1391,18 @@ async function saveRd() {
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇研發人員');return;}
   if (emp.role_level==='assistant'){showToast('助理請至團隊彙整查看');return;}
-  let total=0,items=[];
+  let base=0,items=[];
   document.querySelectorAll('.rd-row').forEach(row=>{
     const type=row.querySelector('.rd-type').value;
     const qty=parseInt(row.querySelector('.rd-qty').value)||0;
     const info=rdTypes[type];
-    total+=Math.round(appSettings.aValue*info.base*qty);
+    const eb=Math.min(info.base, appSettings.rdMaxBase);
+    base+=Math.round(appSettings.aValue*eb*qty);
     if (qty>0) items.push(`${info.name}×${qty}`);
   });
-  const ok=await saveRecord({dept:'研發部',name:emp.name,bonus:total,role_title:emp.role_title,detail:`${emp.role_title}｜${items.join(', ')}｜A值${appSettings.aValue}`,record_type:'quarterly'});
+  const pr=probationRatio(emp);
+  const total=Math.round(base*pr.ratio);
+  const ok=await saveRecord({dept:'研發部',name:emp.name,bonus:total,role_title:emp.role_title,detail:`${emp.role_title}｜${items.join(', ')}｜A值${appSettings.aValue}｜上限${appSettings.rdMaxBase}${pr.note}`,record_type:'quarterly'});
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(total)}`);
 }
 async function calcRdTeam() {
@@ -1319,6 +1420,31 @@ async function calcRdTeam() {
     }).join('')}
     <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（5%）</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
   </tbody></table>`;
+}
+async function saveRdTeam(){
+  // 讀取本季研發部「quarterly」紀錄作為基礎（排除已存在的 team_bonus，避免疊加）
+  const {data}=await sb.from('bonus_records').select('*')
+    .eq('dept','研發部').eq('year',appSettings.year).eq('quarter',appSettings.quarter)
+    .eq('record_type','quarterly');
+  if (!data||!data.length){ showToast('尚無研發本季基礎獎金，請先儲存各人獎金'); return; }
+  const allBase=data.reduce((s,r)=>s+r.bonus,0);
+  const mgr=data.find(r=>r.role_title?.includes('課長'));
+  const assistant=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
+  const mgrAdd=mgr?Math.round(allBase*.15):0;
+  const asstBonus=assistant?Math.round(allBase*.05):0;
+  let count=0;
+  if (mgr && mgrAdd>0){
+    const ok=await saveRecord({dept:'研發部',name:mgr.name,bonus:mgrAdd,role_title:mgr.role_title,detail:`課長加成 15% × 團隊基礎 ${fmt(allBase)}`,record_type:'team_bonus'});
+    if (ok) count++;
+  }
+  if (assistant && asstBonus>0){
+    const pr=probationRatio(assistant);
+    const asstFinal=Math.round(asstBonus*pr.ratio);
+    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstFinal,role_title:assistant.role_title,detail:`助理獎金 5% × 團隊基礎 ${fmt(allBase)}${pr.note}`,record_type:'team_bonus'});
+    if (ok) count++;
+  }
+  showToast(`✓ 已寫入 ${count} 筆團隊加成`);
+  await calcRdTeam();
 }
 function addCollabRow(){
   const c=document.getElementById('collab-persons');const d=document.createElement('div');
@@ -1382,9 +1508,12 @@ async function savePlanning(){
   let scoreBonus=0;
   if (role==='同仁'){const t=calcPlanScore();if(t>=90)scoreBonus=8000;else if(t>=75)scoreBonus=5000;else if(t>=60)scoreBonus=3000;}
   else{const map={'待改進':0,'普通':8000,'滿意':12000,'非常滿意':18000};scoreBonus=map[document.getElementById('plan-mgr-rating').value]||0;}
-  const bonus=Math.round(shipBonus*.5+scoreBonus*.5);
-  const ok=await saveRecord({dept:'企劃部',name:emp.name,bonus,role_title:role,detail:`${role}｜出貨${ships}件`,record_type:'quarterly'});
-  if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
+  const base=Math.round(shipBonus*.5+scoreBonus*.5);
+  const pr=probationRatio(emp);
+  const bonus=Math.round(base*pr.ratio);
+  const detail=`${role}｜出貨${ships}件${pr.note}`;
+  const ok=await saveRecord({dept:'企劃部',name:emp.name,bonus,role_title:role,detail,record_type:'quarterly'});
+  if (ok) showToast(pr.ratio<1?`⚠️ ${emp.name} 依比例 ${(pr.ratio*100).toFixed(1)}%，${fmt(bonus)}`:`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
 }
 
 // PURCHASE
@@ -1399,7 +1528,7 @@ function calcPurchase(){
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const concurrent=document.getElementById('pur-concurrent').value==='yes';
   let shipBonus=0;
-  if(ships>50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
+  if(ships>=50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
   const score=calcPurScore();
   let scoreBonus=0;
   if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
@@ -1416,13 +1545,15 @@ async function savePurchase(){
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const concurrent=document.getElementById('pur-concurrent').value==='yes';
   let shipBonus=0;
-  if(ships>50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
+  if(ships>=50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
   const score=calcPurScore();
   let scoreBonus=0;
   if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
   const supplement=concurrent?appSettings.purSupplement:0;
-  const bonus=shipBonus+scoreBonus+supplement;
-  const ok=await saveRecord({dept:'採購部',name:emp.name,bonus,detail:`出貨${ships}件｜評分${score}分${concurrent?'｜兼任補貼':''}`,record_type:'quarterly'});
+  const base=shipBonus+scoreBonus+supplement;
+  const pr=probationRatio(emp);
+  const bonus=Math.round(base*pr.ratio);
+  const ok=await saveRecord({dept:'採購部',name:emp.name,bonus,detail:`出貨${ships}件｜評分${score}分${concurrent?'｜兼任補貼':''}${pr.note}`,record_type:'quarterly'});
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
 }
 
@@ -1463,8 +1594,8 @@ async function saveProduction(){
   let scoreBonus=0;
   if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
   const bonus=baseBonus+scoreBonus;
-  const ok=await saveRecord({dept:'生管部',name,bonus,detail:`準時率${ontime}%｜評分${score}分`,record_type:'quarterly'});
-  if (ok) showToast(`✓ 已儲存 ${name} ${fmt(bonus)}`);
+  const ok=await saveRecord({dept:'生管部',name,bonus,detail:`[未啟用試算] 準時率${ontime}%｜評分${score}分`,record_type:'preview'});
+  if (ok) showToast(`✓ 已儲存 ${name} 模擬試算 ${fmt(bonus)}（不列入撥發）`);
 }
 
 // HISTORY
@@ -1536,6 +1667,30 @@ function switchInner(el,id){
   if(id==='rd-team-sec')calcRdTeam();
   if(id==='sales-sum-sec')renderSalesSummary();
   if(id==='set-employees-sec')renderEmployeeList();
+  if(id==='set-special-sec')renderSpecialList();
+}
+async function saveSpecial(){
+  const empId=document.getElementById('special-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
+  if(!emp){showToast('請選擇員工');return;}
+  const amt=parseInt(document.getElementById('special-amount').value)||0;
+  if(amt<5000||amt>10000){showToast('金額須在 5000–10000 之間');return;}
+  const reason=document.getElementById('special-reason').value.trim();
+  if(!reason){showToast('請填寫提報事由');return;}
+  const ok=await saveRecord({dept:emp.dept,name:emp.name,bonus:amt,role_title:emp.role_title,detail:`🌟 特別貢獻｜${reason}`,record_type:'special'});
+  if(ok){
+    showToast(`✓ 已提報 ${emp.name} 特別貢獻獎 ${fmt(amt)}`);
+    document.getElementById('special-amount').value='';
+    document.getElementById('special-reason').value='';
+    renderSpecialList();
+  }
+}
+async function renderSpecialList(){
+  const el=document.getElementById('special-list');
+  if(!el)return;
+  const {data}=await sb.from('bonus_records').select('*').eq('record_type','special').eq('year',appSettings.year).eq('quarter',appSettings.quarter).order('created_at',{ascending:false});
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🌟</div><div style="font-size:14px">本季尚無特別貢獻獎紀錄</div></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>部門</th><th>姓名</th><th>事由</th><th class="td-right">金額</th></tr></thead><tbody>${data.map(r=>`<tr><td><span class="badge badge-${deptColor(r.dept)}">${r.dept}</span></td><td>${r.name}</td><td style="font-size:12px;color:var(--ink-faint)">${r.detail||''}</td><td class="td-right" style="font-weight:500">${fmt(r.bonus)}</td></tr>`).join('')}</tbody></table>`;
 }
 function initInnerTabs(){
   document.querySelectorAll('.inner-tabs').forEach(tabs=>{
@@ -1556,7 +1711,7 @@ async function renderSalesSummary(){
 function show(id){const el=document.getElementById(id);if(el)el.style.display='block';}
 function fmt(n){return(n||0).toLocaleString('zh-TW')+' 元';}
 function fmtNum(n){return(n||0).toLocaleString('zh-TW');}
-function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'blue',生管部:'red'}[d]||'gold';}
+function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'teal',生管部:'red'}[d]||'gold';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
