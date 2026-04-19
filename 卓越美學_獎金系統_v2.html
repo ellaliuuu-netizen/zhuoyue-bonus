@@ -583,8 +583,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card">
             <div class="card-header"><div class="card-title">全部訂單</div></div>
             <div class="table-wrap"><table>
-              <thead><tr><th>訂購日期</th><th>客戶</th><th>品名</th><th>劑型</th><th>訂單件數</th><th>已出貨</th><th>業務</th><th>研發</th><th class="td-center">狀態</th></tr></thead>
-              <tbody id="orders-all-tbody"><tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
+              <thead><tr><th>訂購日期</th><th>客戶</th><th>品名</th><th>劑型</th><th>訂單件數</th><th>已出貨</th><th>業務</th><th>企劃</th><th>研發</th><th class="td-center">狀態</th></tr></thead>
+              <tbody id="orders-all-tbody"><tr><td colspan="10" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
             </table></div>
           </div>
         </div>
@@ -1330,7 +1330,7 @@ async function saveEmployee() {
 
 // ORDERS
 async function loadOrders() {
-  const { data } = await sb.from('orders').select('*, sales:employees!orders_sales_id_fkey(name), planning:employees!orders_planning_id_fkey(name)').eq('year', appSettings.year).eq('quarter', appSettings.quarter).order('order_date', { ascending:false });
+  const { data } = await sb.from('orders').select('*, sales:employees!orders_sales_id_fkey(name), planning:employees!orders_planning_id_fkey(name), order_rd_staff(is_final_confirmer, sample_count, employees(name))').eq('year', appSettings.year).eq('quarter', appSettings.quarter).order('order_date', { ascending:false });
   const orders = data || [];
 
   // Get shipments for progress
@@ -1347,11 +1347,16 @@ async function loadOrders() {
   // All table
   const tbody = document.getElementById('orders-all-tbody');
   if (tbody) {
-    if (!orders.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">尚無訂單</td></tr>'; }
+    if (!orders.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--ink-faint);padding:24px">尚無訂單</td></tr>'; }
     else {
       tbody.innerHTML = orders.map(o => {
         const shipped = shipMap[o.id]||0;
         const pct = o.total_qty > 0 ? Math.round(shipped/o.total_qty*100) : 0;
+        const rdList = (o.order_rd_staff||[]).map(r=>({name:r.employees?.name, final:r.is_final_confirmer})).filter(r=>r.name);
+        const rdMain = rdList.find(r=>r.final) || rdList[0];
+        const rdRest = rdList.length - (rdMain?1:0);
+        const rdAllTitle = rdList.map(r=>r.name+(r.final?'（主責）':'')).join('、');
+        const rdCell = rdList.length ? `<span title="${rdAllTitle}">${rdMain.name}${rdRest>0?` <span style="color:var(--ink-faint);font-size:11px">+${rdRest}</span>`:''}</span>` : '<span style="color:var(--ink-faint)">—</span>';
         return `<tr>
           <td style="font-size:12px">${o.order_date}</td>
           <td>${o.customer_name}</td>
@@ -1359,8 +1364,9 @@ async function loadOrders() {
           <td><span class="badge badge-blue">${formulaLabels[o.formula_type]||o.formula_type}</span></td>
           <td class="td-right">${fmtNum(o.total_qty)}</td>
           <td class="td-right">${fmtNum(shipped)} <span style="font-size:11px;color:var(--ink-faint)">(${pct}%)</span></td>
-          <td>${o.sales?.name||'—'}</td>
-          <td style="font-size:12px;color:var(--ink-faint)">—</td>
+          <td>${o.sales?.name||'<span style="color:var(--ink-faint)">—</span>'}</td>
+          <td>${o.planning?.name||'<span style="color:var(--ink-faint)">—</span>'}</td>
+          <td>${rdCell}</td>
           <td class="td-center"><span class="badge badge-${o.status==='completed'?'green':'gold'}">${o.status==='completed'?'完成':'進行中'}</span></td>
         </tr>`;
       }).join('');
@@ -1391,6 +1397,10 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
     const shipped = shipMap[o.id]||0;
     const pct = o.total_qty > 0 ? Math.round(shipped/o.total_qty*100) : 0;
     const isCompleted = o.status === 'completed';
+    const rdList = (o.order_rd_staff||[]).map(r=>({name:r.employees?.name, final:r.is_final_confirmer})).filter(r=>r.name);
+    const rdDisplay = rdList.length
+      ? rdList.map(r=>r.final?`<b>${r.name}（主責）</b>`:r.name).join('、')
+      : '';
     return `<div class="order-card ${isCompleted?'completed':''}">
       <div class="order-card-header">
         <div class="order-card-title">${o.customer_name} — ${o.product_name}</div>
@@ -1401,6 +1411,7 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
         <span>🏷️ ${formulaLabels[o.formula_type]||o.formula_type}</span>
         <span>👤 業務：${o.sales?.name||'—'}</span>
         ${o.planning?.name?`<span>✏️ 企劃：${o.planning.name}</span>`:''}
+        ${rdDisplay?`<span>🔬 研發：${rdDisplay}</span>`:''}
         ${o.unit_price?`<span>💰 ${fmtNum(o.total_qty)}件 × ${fmtNum(o.unit_price)}元</span>`:`<span>📦 共 ${fmtNum(o.total_qty)} 件</span>`}
       </div>
       <div class="order-progress">
