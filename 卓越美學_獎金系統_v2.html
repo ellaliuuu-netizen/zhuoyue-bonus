@@ -1314,10 +1314,16 @@ function calcSalesM() {
   else if (amt>=1000000){ratio=.0022;rl='0.22%';}
   else if (amt>=500000){ratio=.0018;rl='0.18%';}
   const shipBonus=Math.round(amt*ratio);
-  const total=ncBonus+shipBonus;
+  const base=ncBonus+shipBonus;
+  const empId=document.getElementById('sales-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
+  const pr=emp?probationRatio(emp):{ratio:1,note:''};
+  const total=Math.round(base*pr.ratio);
   show('sales-m-result');
   document.getElementById('sales-m-total').textContent=fmt(total);
-  document.getElementById('sales-m-breakdown').innerHTML=`<div class="res-item"><span class="res-item-dot"></span>新客：${nc}個 × ${fmtNum(appSettings.newClientBonus)} = ${fmt(ncBonus)}</div><div class="res-item"><span class="res-item-dot"></span>出貨：${fmtNum(Math.round(amt))}元 × ${rl} = ${fmt(shipBonus)}</div>`;
+  let html=`<div class="res-item"><span class="res-item-dot"></span>新客：${nc}個 × ${fmtNum(appSettings.newClientBonus)} = ${fmt(ncBonus)}</div><div class="res-item"><span class="res-item-dot"></span>出貨：${fmtNum(Math.round(amt))}元 × ${rl} = ${fmt(shipBonus)}</div>`;
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  document.getElementById('sales-m-breakdown').innerHTML=html;
 }
 async function saveSalesM() {
   const empId = document.getElementById('sales-emp-sel').value;
@@ -1328,8 +1334,10 @@ async function saveSalesM() {
   const amt=parseFloat(document.getElementById('sales-ship-amount').value)||0;
   let ratio=.0015;
   if (amt>=4000000) ratio=.0035; else if (amt>=2000000) ratio=.0028; else if (amt>=1000000) ratio=.0022; else if (amt>=500000) ratio=.0018;
-  const bonus=Math.round(nc*appSettings.newClientBonus+amt*ratio);
-  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`${month}月｜新客${nc}個｜出貨${fmtNum(Math.round(amt))}元`,record_type:'monthly',month:parseInt(month)});
+  const base=nc*appSettings.newClientBonus+amt*ratio;
+  const pr=probationRatio(emp);
+  const bonus=Math.round(base*pr.ratio);
+  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`${month}月｜新客${nc}個｜出貨${fmtNum(Math.round(amt))}元${pr.note}`,record_type:'monthly',month:parseInt(month)});
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${month}月獎金 ${fmt(bonus)}`);
 }
 function calcSalesQ() {
@@ -1695,6 +1703,11 @@ async function saveSpecial(){
   const empId=document.getElementById('special-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   if(!emp){showToast('請選擇員工');return;}
+  if(emp.probation_end_date){
+    const today=new Date(); today.setHours(0,0,0,0);
+    const pEnd=new Date(emp.probation_end_date);
+    if(today<=pEnd){showToast(`❌ ${emp.name} 試用期至 ${emp.probation_end_date}，試用期內不可提報特別貢獻獎`);return;}
+  }
   const amt=parseInt(document.getElementById('special-amount').value)||0;
   if(amt<5000||amt>10000){showToast('金額須在 5000–10000 之間');return;}
   const reason=document.getElementById('special-reason').value.trim();
