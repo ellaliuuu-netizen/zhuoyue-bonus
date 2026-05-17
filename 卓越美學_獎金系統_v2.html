@@ -963,6 +963,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="inner-tab" onclick="switchInner(this,'set-employees-sec')">員工管理</div>
           <div class="inner-tab" onclick="switchInner(this,'set-rd-sec')">研發 A值</div>
           <div class="inner-tab" onclick="switchInner(this,'set-special-sec')">特別貢獻獎</div>
+          <div class="inner-tab" onclick="switchInner(this,'set-audit-sec')">審計日誌</div>
         </div>
         <div id="set-general-sec">
           <div class="card">
@@ -1022,6 +1023,32 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <div class="card"><div class="card-header"><div class="card-title">本季特別貢獻獎紀錄</div></div>
             <div id="special-list"><div class="empty-state"><div class="empty-icon">🌟</div><div style="font-size:14px">載入中...</div></div></div>
+          </div>
+        </div>
+        <div id="set-audit-sec" style="display:none">
+          <div class="card">
+            <div class="card-header"><div class="card-title">📋 操作軌跡（最近 200 筆）</div>
+              <div>
+                <select id="audit-filter-table" class="form-select" style="width:auto;display:inline-block;margin-right:6px" onchange="loadAuditLogs()">
+                  <option value="">所有表</option>
+                  <option value="rd_samples">打樣 (rd_samples)</option>
+                  <option value="rd_customers">客戶 (rd_customers)</option>
+                  <option value="rd_monthly_settlement">月結算 (rd_monthly_settlement)</option>
+                  <option value="orders">訂單 (orders)</option>
+                  <option value="shipments">出貨 (shipments)</option>
+                  <option value="bonus_records">獎金紀錄 (bonus_records)</option>
+                </select>
+                <select id="audit-filter-op" class="form-select" style="width:auto;display:inline-block;margin-right:6px" onchange="loadAuditLogs()">
+                  <option value="">全部動作</option>
+                  <option value="INSERT">新增</option>
+                  <option value="UPDATE">修改</option>
+                  <option value="DELETE">刪除</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="loadAuditLogs()">重新整理</button>
+              </div>
+            </div>
+            <div class="info-box">所有寫入動作自動記錄，無法手動修改或刪除。差異對比顯示舊值 → 新值。</div>
+            <div id="audit-list"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">點「重新整理」載入</div></div></div>
           </div>
         </div>
       </div>
@@ -2415,6 +2442,42 @@ async function loadOverdueLogs(){
   el.innerHTML=`<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>研發</th><th>實際打樣日</th><th>延遲</th><th>原因</th></tr></thead><tbody>${data.map(s=>`<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong></td><td>${s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>`;
 }
 
+// AUDIT LOGS（v8）
+function auditDiffSummary(op, oldData, newData){
+  if(op==='INSERT') return `新增 ${Object.keys(newData||{}).filter(k=>newData[k]!=null&&!['id','created_at','updated_at'].includes(k)).slice(0,3).map(k=>k+'='+JSON.stringify(newData[k])).join(', ')}`;
+  if(op==='DELETE') return `刪除 ${oldData?.customer_name||oldData?.sample_code||oldData?.short_name||oldData?.name||oldData?.id?.substring(0,8)||'—'}`;
+  if(op==='UPDATE'){
+    const changes=[];
+    const skipKeys=['updated_at','created_at'];
+    Object.keys(newData||{}).forEach(k=>{
+      if(skipKeys.includes(k))return;
+      const o=oldData?.[k], n=newData[k];
+      if(JSON.stringify(o)!==JSON.stringify(n)) changes.push(`${k}: ${JSON.stringify(o)} → ${JSON.stringify(n)}`);
+    });
+    return changes.length?changes.slice(0,3).join('；'):'（無欄位變動）';
+  }
+  return '';
+}
+async function loadAuditLogs(){
+  const tbl=document.getElementById('audit-filter-table').value;
+  const op=document.getElementById('audit-filter-op').value;
+  let q=sb.from('audit_logs').select('*').order('changed_at',{ascending:false}).limit(200);
+  if(tbl)q=q.eq('table_name',tbl);
+  if(op)q=q.eq('operation',op);
+  const {data,error}=await q;
+  const el=document.getElementById('audit-list');
+  if(error){el.innerHTML=`<div class="empty-state"><div class="empty-icon">❌</div><div style="font-size:13px;color:var(--red)">讀取失敗：${error.message}</div></div>`;return;}
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無操作紀錄</div></div>';return;}
+  const opBadge={INSERT:'green',UPDATE:'gold',DELETE:'red'};
+  const opLabel={INSERT:'新增',UPDATE:'修改',DELETE:'刪除'};
+  el.innerHTML=`<table><thead><tr><th>時間</th><th>操作者</th><th>身份</th><th>表</th><th>動作</th><th>內容摘要</th></tr></thead><tbody>${data.map(r=>{
+    const dt=new Date(r.changed_at);
+    const dtStr=`${dt.toLocaleDateString('zh-TW')} ${dt.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+    const summary=auditDiffSummary(r.operation, r.old_data, r.new_data);
+    return `<tr><td style="font-size:11px;color:var(--ink-faint)">${dtStr}</td><td>${r.user_name||'—'}</td><td><span class="badge badge-${r.user_role==='manager'?'gold':r.user_role==='rd_manager'?'blue':'gray'}">${r.user_role||'—'}</span></td><td style="font-size:12px">${r.table_name}</td><td><span class="badge badge-${opBadge[r.operation]||'gray'}">${opLabel[r.operation]||r.operation}</span></td><td style="font-size:11px;color:var(--ink-faint);max-width:400px;overflow:hidden;text-overflow:ellipsis">${summary}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
 // PLANNING
 function calcPlanScore(){
   const scores=['plan-s1','plan-s2','plan-s3','plan-s4'].map(id=>getStarScore(id));
@@ -2620,6 +2683,7 @@ function switchInner(el,id){
   if(id==='sales-sum-sec')renderSalesSummary();
   if(id==='set-employees-sec')renderEmployeeList();
   if(id==='set-special-sec')renderSpecialList();
+  if(id==='set-audit-sec')loadAuditLogs();
 }
 async function saveSpecial(){
   const empId=document.getElementById('special-emp-sel').value;
