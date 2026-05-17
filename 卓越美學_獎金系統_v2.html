@@ -786,8 +786,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div id="rds-list-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div></div>
         </div>
 
-        <!-- Card 2: 待審核（manager-only） -->
-        <div class="card manager-only">
+        <!-- Card 2: 待審核（manager + rd_manager 都可看） -->
+        <div class="card manager-only rdmgr-show">
           <div class="card-header">
             <div class="card-title">⏳ 待審核（隔天補登需通過）</div>
             <div><span id="rds-pending-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆</span><button class="btn btn-outline btn-sm" onclick="loadPendingReviews()">重新整理</button></div>
@@ -817,8 +817,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div id="rds-carryover-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">沒有暫緩中的打樣獎金</div></div></div>
         </div>
 
-        <!-- Card 5: 課長補登明細（manager-only，月度報表） -->
-        <div class="card manager-only">
+        <!-- Card 5: 課長補登明細（manager + rd_manager 都可看） -->
+        <div class="card manager-only rdmgr-show">
           <div class="card-header">
             <div class="card-title">📊 本月課長補登明細</div>
             <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆延遲</span></div>
@@ -1325,6 +1325,8 @@ function applyRoleRestrictions() {
   if (currentRole === 'rd_manager') {
     // 研發課長只看研發相關 + 訂單/出貨（追蹤客戶出貨觸發補發）
     document.querySelectorAll('.rdmgr-hide').forEach(el => el.style.display = 'none');
+    // 例外：manager-only + rdmgr-show 兩個 class 同時掛的 → 對 rd_manager 開放
+    document.querySelectorAll('.manager-only.rdmgr-show').forEach(el => el.style.display = '');
   }
 }
 window.addEventListener('DOMContentLoaded', async () => {
