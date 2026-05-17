@@ -1,0 +1,23 @@
+name: Keep Supabase Awake
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 每天 UTC 03:00 = 台灣 11:00
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlnd2Z6cnlxaXF0endlc2Z2dHllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0Mjc3MTQsImV4cCI6MjA5MjAwMzcxNH0.HjW5EUI3RJaGuc037G41kotJNorlIfn5Rw2620d0Gys" \
+            "https://ygwfzryqiqtzwesfvtye.supabase.co/rest/v1/")
+          echo "HTTP Response: $code"
+          if [ "$code" -lt 500 ]; then
+            echo "✅ Supabase responded — activity registered, 7-day pause counter reset"
+          else
+            echo "❌ Supabase returned 5xx — investigate"
+            exit 1
+          fi
