@@ -1505,14 +1505,32 @@ function renderEmployeeList() {
   const el = document.getElementById('employees-list');
   if (!el) return;
   if (!employees.length) { el.innerHTML = '<div style="color:var(--ink-faint);font-size:13px">尚無員工資料</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th>備註</th></tr></thead>
+  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
     <tbody>${employees.map(e => `<tr>
       <td style="font-weight:500">${e.name}</td>
       <td><span class="badge badge-${deptColor(e.dept)}">${e.dept}</span></td>
       <td>${e.role_title}</td>
-      <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'停薪'}</span></td>
+      <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'離職/停薪'}</span></td>
       <td style="font-size:12px;color:var(--ink-faint)">${e.note||''}</td>
+      <td class="td-center manager-only"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+async function toggleEmployeeStatus(empId, currentActive) {
+  const emp = employees.find(e=>e.id===empId);
+  if(!emp) return;
+  const action = currentActive ? '設為離職/停薪' : '恢復在職';
+  if(!confirm(`確定將「${emp.name}」${action}？\n（保留歷史獎金/打樣紀錄不會刪除，僅從獎金計算下拉中移除）`))return;
+  const today = new Date().toISOString().slice(0,10);
+  let newNote;
+  if (currentActive) {
+    newNote = ((emp.note||'').trim() + ` [離職 ${today}]`).trim();
+  } else {
+    newNote = (emp.note||'').replace(/\s*\[離職 \d{4}-\d{2}-\d{2}\]\s*/g, '').trim() || null;
+  }
+  const {error} = await sb.from('employees').update({is_active: !currentActive, note: newNote}).eq('id', empId);
+  if(error){showToast('❌ '+error.message);return;}
+  showToast(`✓ ${emp.name} 已${action}`);
+  await loadEmployees();
 }
 async function saveEmployee() {
   const name = document.getElementById('e-name').value.trim();
