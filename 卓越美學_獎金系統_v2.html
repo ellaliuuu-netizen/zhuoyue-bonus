@@ -2081,8 +2081,9 @@ async function settleSalesMonth(){
   const {data:ordersInMonth}=await sb.from('orders')
     .select('id,sales_id,customer_name,unit_price,total_qty,payment_received_at,is_refunded')
     .gte('order_date',start).lt('order_date',nm);
-  const {data:priorOrders}=await sb.from('orders').select('sales_id,customer_name').lt('order_date',start);
-  const priorPairs=new Set((priorOrders||[]).map(o=>`${o.sales_id}_${o.customer_name}`));
+  // 政策 B：全公司首次成交 — 客戶第一次出現就只算一次新客，後續換業務不再算
+  const {data:priorOrders}=await sb.from('orders').select('customer_name').lt('order_date',start);
+  const priorCustomers=new Set((priorOrders||[]).map(o=>o.customer_name));
   const {data:shipsInMonth}=await sb.from('shipments').select('order_id,ship_qty,is_refunded')
     .gte('ship_date',start).lt('ship_date',nm);
   const orderIds=[...new Set((shipsInMonth||[]).map(s=>s.order_id))];
@@ -2091,13 +2092,17 @@ async function settleSalesMonth(){
     const {data:ords}=await sb.from('orders').select('id,unit_price,sales_id,is_refunded').in('id',orderIds);
     (ords||[]).forEach(o=>{omap[o.id]=o;});
   }
+  // 當月新客戶集合（避免同月內同客戶被多筆訂單算重複）
+  const monthNewCustomers=new Set();
   const ncByEmp={}; const amtByEmp={};
   (ordersInMonth||[]).forEach(o=>{
     if(!o.sales_id||o.is_refunded||!o.payment_received_at)return;
-    if(!priorPairs.has(`${o.sales_id}_${o.customer_name}`)){
-      if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
-      ncByEmp[o.sales_id].add(o.customer_name);
-    }
+    // 政策 B：客戶須是「全公司歷史第一次」且當月也只算一次
+    if(priorCustomers.has(o.customer_name))return;
+    if(monthNewCustomers.has(o.customer_name))return;
+    monthNewCustomers.add(o.customer_name);
+    if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
+    ncByEmp[o.sales_id].add(o.customer_name);
   });
   (shipsInMonth||[]).forEach(s=>{
     if(s.is_refunded)return;
