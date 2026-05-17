@@ -507,7 +507,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
-    <div class="nav-tab" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
     <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('planning')" id="tab-planning"><span class="tab-dot" style="background:#6b4f8a"></span>企劃部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
@@ -539,7 +539,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>出貨登記</div>
           <div class="sidebar-card-desc">登記分批出貨</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('rd');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('rd');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d6a8a"></span>研發部獎金</div>
           <div class="sidebar-card-desc">確樣件數試算</div>
         </div>
@@ -1504,7 +1504,15 @@ async function saveEmployee() {
 
 // ORDERS
 async function loadOrders() {
-  const { data } = await sb.from('orders').select('*, sales:employees!orders_sales_id_fkey(name), planning:employees!orders_planning_id_fkey(name), order_rd_staff(is_final_confirmer, sample_count, employees(name))').eq('year', appSettings.year).eq('quarter', appSettings.quarter).order('order_date', { ascending:false });
+  let data;
+  if (currentRole === 'rd_manager') {
+    // rd_manager 走 RPC 取剝離金額後的 orders
+    const r = await sb.rpc('get_orders_for_rd', { p_year: appSettings.year, p_quarter: appSettings.quarter });
+    data = r.data || [];
+  } else {
+    const r = await sb.from('orders').select('*, sales:employees!orders_sales_id_fkey(name), planning:employees!orders_planning_id_fkey(name), order_rd_staff(is_final_confirmer, sample_count, employees(name))').eq('year', appSettings.year).eq('quarter', appSettings.quarter).order('order_date', { ascending:false });
+    data = r.data;
+  }
   const orders = data || [];
 
   // Get shipments for progress
@@ -1843,7 +1851,15 @@ async function saveOrder() {
 
 // SHIPMENTS
 async function loadShipments() {
-  const { data } = await sb.from('shipments').select('*, order:orders(customer_name,product_name,total_qty)').eq('year',appSettings.year).eq('quarter',appSettings.quarter).order('ship_date',{ascending:false});
+  let data;
+  if (currentRole === 'rd_manager') {
+    // rd_manager 走 RPC（含 join orders 的客戶/品項，無金額）
+    const r = await sb.rpc('get_shipments_for_rd', { p_year: appSettings.year, p_quarter: appSettings.quarter });
+    data = r.data || [];
+  } else {
+    const r = await sb.from('shipments').select('*, order:orders(customer_name,product_name,total_qty)').eq('year',appSettings.year).eq('quarter',appSettings.quarter).order('ship_date',{ascending:false});
+    data = r.data;
+  }
   const tbody = document.getElementById('shipments-tbody');
   if (!data||!data.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">本季尚無出貨紀錄</td></tr>'; return; }
 
