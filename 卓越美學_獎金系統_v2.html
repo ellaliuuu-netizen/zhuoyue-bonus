@@ -1869,11 +1869,11 @@ async function saveShipment() {
   const month = d.getMonth()+1;
   const q = month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
   const y = d.getFullYear();
-  const { error } = await sb.from('shipments').insert({
+  const { data:newShip, error } = await sb.from('shipments').insert({
     order_id:orderId, ship_date:date, shipment_no:no||null,
     ship_qty:qty, is_on_time:ontime,
     year:y, quarter:q, created_by:currentUser.id
-  });
+  }).select('id').single();
   if (error) { showToast('❌ 儲存失敗：'+error.message); return; }
 
   // Check if order is now complete
@@ -1882,7 +1882,13 @@ async function saveShipment() {
   const totalShipped = (allShip||[]).reduce((s,r) => s+r.ship_qty, 0);
   if (order && totalShipped >= order.total_qty) {
     await sb.from('orders').update({ status:'completed' }).eq('id', orderId);
-    showToast(`✓ 出貨完成！訂單已標記為完成`);
+    // Phase 3: 觸發研發打樣回溯補發
+    let carryoverMsg = '';
+    try {
+      const { data:cnt, error:rpcErr } = await sb.rpc('trigger_rd_carryover_on_shipment', { p_shipment_id: newShip.id });
+      if (!rpcErr && cnt && cnt > 0) carryoverMsg = `；🎉 觸發 ${cnt} 筆研發回溯補發`;
+    } catch(e){ console.warn('carryover trigger failed', e); }
+    showToast(`✓ 出貨完成！訂單已標記為完成${carryoverMsg}`);
   } else {
     showToast(`✓ 已登記出貨 ${fmtNum(qty)} 件`);
   }
@@ -2335,19 +2341,23 @@ async function settleRdMonth(){
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const rdEmps=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
+  // deadline = 打樣月 + 6 個月後的月底（用 local string 避時區）
+  const dlD=new Date(y,m+6,0);
+  const dl=`${dlD.getFullYear()}-${String(dlD.getMonth()+1).padStart(2,'0')}-${String(dlD.getDate()).padStart(2,'0')}`;
   let results=[];
   for(const emp of rdEmps){
     const {data:samples}=await sb.from('rd_samples').select('id').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
     const count=samples?.length||0;
+    if(count===0){results.push({name:emp.name,count:0,bonus:0,status:'— 無打樣'});continue;}
     const bonus=rdSamplingBonus(count);
-    // deadline = 打樣月 + 6 個月
-    const dl=new Date(y,m-1+6,0).toISOString().slice(0,10);
+    const settleStatus=count<18?'expired':'pending_carryover';
+    const statusLabel=count<18?'未達門檻（不發）':'待回溯（等出貨完成）';
     const {error}=await sb.from('rd_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,sample_count:count,base_bonus:bonus,
-      status:count<18?'paid':'pending_carryover',carryover_deadline:dl,updated_at:new Date().toISOString()
+      status:settleStatus,carryover_deadline:dl,updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
     if(error)showToast('結算失敗('+emp.name+'): '+error.message);
-    results.push({name:emp.name,count,bonus,status:count<18?'未達門檻':'待回溯（等出貨完成）'});
+    results.push({name:emp.name,count,bonus,status:statusLabel});
   }
   document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th>件數</th><th>階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.count}</td><td>${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table>`;
   showToast(`✓ ${ym} 結算完成`);
