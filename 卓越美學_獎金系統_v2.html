@@ -508,6 +508,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
     <div class="nav-tab" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
     <div class="nav-tab" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
+    <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
     <div class="nav-tab" onclick="switchPage('planning')" id="tab-planning"><span class="tab-dot" style="background:#6b4f8a"></span>企劃部</div>
     <div class="nav-tab" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
     <div class="nav-tab" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生管部</div>
@@ -764,6 +765,65 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div id="collab-result" style="display:none"><hr class="divider"><div id="collab-result-content"></div></div>
             <button class="btn btn-gold" onclick="calcCollab()">計算協作分配</button>
           </div>
+        </div>
+      </div>
+
+      <!-- RD SAMPLING (研發打樣 - 對齊 PDF v6 雙軌制) -->
+      <div class="page" id="page-rd-sampling">
+        <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
+        <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
+
+        <!-- Card 1: 打樣登記 + 列表 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📝 打樣紀錄（當月）</div>
+            <div>
+              <select id="rds-month-filter" onchange="loadRdSamples()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
+              <select id="rds-emp-filter" onchange="loadRdSamples()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
+              <button class="btn btn-gold btn-sm" onclick="openRdSampleModal()">＋ 新增打樣</button>
+            </div>
+          </div>
+          <div id="rds-list-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div></div>
+        </div>
+
+        <!-- Card 2: 待審核（manager-only） -->
+        <div class="card manager-only">
+          <div class="card-header">
+            <div class="card-title">⏳ 待審核（隔天補登需通過）</div>
+            <div><span id="rds-pending-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆</span><button class="btn btn-outline btn-sm" onclick="loadPendingReviews()">重新整理</button></div>
+          </div>
+          <div id="rds-pending-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div></div>
+        </div>
+
+        <!-- Card 3: 月底結算（manager-only） -->
+        <div class="card manager-only">
+          <div class="card-header">
+            <div class="card-title">💰 月底結算</div>
+            <div>
+              <select id="rds-settle-month" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
+              <button class="btn btn-primary btn-sm" onclick="settleRdMonth()">執行結算</button>
+            </div>
+          </div>
+          <div class="info-box" style="margin-bottom:12px;font-size:13px">點「執行結算」會：套階梯公式算每人件數獎金 → 檢查當月有無任一客戶出貨完成 → 有則 paid，無則進待回溯台帳（6 個月）</div>
+          <div id="rds-settle-content"></div>
+        </div>
+
+        <!-- Card 4: 待回溯台帳 -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔄 待回溯台帳（pending_carryover）</div>
+            <div><button class="btn btn-outline btn-sm" onclick="loadCarryover()">重新整理</button></div>
+          </div>
+          <div id="rds-carryover-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">沒有暫緩中的打樣獎金</div></div></div>
+        </div>
+
+        <!-- Card 5: 課長補登明細（manager-only，月度報表） -->
+        <div class="card manager-only">
+          <div class="card-header">
+            <div class="card-title">📊 本月課長補登明細</div>
+            <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆延遲</span></div>
+          </div>
+          <div id="rds-overdue-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲補登</div></div></div>
         </div>
       </div>
 
@@ -1108,6 +1168,63 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newEmpModal')">取消</button>
       <button class="btn btn-gold" onclick="saveEmployee()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增打樣紀錄（rd_manager / manager） -->
+<div class="modal-overlay" id="newRdSampleModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><div class="modal-title">＋ 新增打樣紀錄</div><button class="modal-close" onclick="closeModal('newRdSampleModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
+        <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
+        <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp"><option value="">請選擇</option></select></div>
+        <div class="form-group"><label class="form-label">劑型 *</label><select class="form-select" id="rds-formula">
+          <option value="liquid">液劑（0.3）</option>
+          <option value="essence">精華液/凝膠/面膜（0.4）</option>
+          <option value="emulsion_ow">乳劑-水包油（0.8）</option>
+          <option value="emulsion_wo">乳劑-油包水（1.0）</option>
+          <option value="special">特殊劑型（1.2）</option>
+        </select></div>
+        <div class="form-group"><label class="form-label">版本號</label><input class="form-input" id="rds-version" placeholder="v1, v2..." /></div>
+        <div class="form-group"><label class="form-label">產品代號</label><input class="form-input" id="rds-product" placeholder="JP000001…（選填）" /></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">客戶（可多選） *</label>
+        <div id="rds-customers-chips" style="margin-bottom:8px;min-height:30px;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px"></div>
+        <div style="display:flex;gap:8px">
+          <select id="rds-customer-picker" class="form-select" style="flex:1"><option value="">＋ 選擇既有客戶</option></select>
+          <button class="btn btn-outline btn-sm" type="button" onclick="addRdSampleCustomer()">加入</button>
+          <button class="btn btn-outline btn-sm" type="button" onclick="openModal('newRdCustomerModal')">＋ 新客戶</button>
+        </div>
+      </div>
+      <div class="form-group" id="rds-reason-wrap" style="display:none">
+        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（2 天以上需填寫，會送 ELLA 經理審核）</label>
+        <textarea class="form-input" id="rds-reason" rows="2" placeholder="如：出差、連假、客戶緊急…"></textarea>
+      </div>
+      <div class="info-box" id="rds-delay-info" style="display:none;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('newRdSampleModal')">取消</button>
+      <button class="btn btn-gold" onclick="saveRdSample()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增客戶（短名稱關鍵字） -->
+<div class="modal-overlay" id="newRdCustomerModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><div class="modal-title">＋ 新增客戶</div><button class="modal-close" onclick="closeModal('newRdCustomerModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">關鍵字短名稱 *</label><input class="form-input" id="rdc-short" placeholder="如：新享" /></div>
+      <div class="form-group"><label class="form-label">完整名稱</label><input class="form-input" id="rdc-full" placeholder="如：新享生技股份有限公司（選填）" /></div>
+      <div class="info-box" style="font-size:13px">關鍵字會用來跟訂單客戶名稱比對，做回溯補發的觸發。例：訂單寫「新享生技股份有限公司」，這邊填「新享」就能 match。</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('newRdCustomerModal')">取消</button>
+      <button class="btn btn-gold" onclick="saveNewRdCustomer()">儲存</button>
     </div>
   </div>
 </div>
@@ -2006,6 +2123,261 @@ function calcCollab(){
     <tbody>${results.map(r=>`<tr><td>${r.name}${r.isWinner?' <span class="badge badge-gold">確認者</span>':''}</td><td class="td-right">${r.samples}</td><td class="td-right">${fmt(r.base)}</td><td class="td-right">${r.extra?fmt(r.extra):'—'}</td><td class="td-right"><strong>${fmt(r.total)}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 
+// ==================== RD SAMPLING (打樣模組 v5) ====================
+let rdCustomers=[];           // 客戶主檔快取
+let rdsSelectedCustomers=[];  // 新增 modal 內已選的客戶
+
+function rdSamplingBonus(count){
+  const eff=Math.min(count,88);
+  if(eff<18)return 0;
+  if(eff<=24)return 1000;
+  return 1000+(eff-24)*50;
+}
+
+function rdFormulaLabel(t){const m={liquid:'液劑',essence:'精華液/凝膠/面膜',emulsion_ow:'乳劑(水包油)',emulsion_wo:'乳劑(油包水)',special:'特殊劑型'};return m[t]||t;}
+
+function rdStatusBadge(s){
+  const m={auto_approved:['🟢','自動通過'],pending_review:['🟡','待審核'],approved:['✅','已通過'],rejected:['🔴','已退回']};
+  const [icon,txt]=m[s]||['❓',s];return `${icon} ${txt}`;
+}
+
+async function loadRdCustomers(){
+  const {data}=await sb.from('rd_customers').select('*').order('short_name');
+  rdCustomers=data||[];
+  // 更新下拉
+  const sel=document.getElementById('rds-customer-picker');
+  if(sel){
+    sel.innerHTML='<option value="">＋ 選擇既有客戶</option>'+rdCustomers.map(c=>`<option value="${c.id}">${c.short_name}${c.full_name?' ('+c.full_name+')':''}</option>`).join('');
+  }
+}
+
+function buildMonthOptions(selectorId, defaultYM){
+  const sel=document.getElementById(selectorId);if(!sel)return;
+  const now=new Date(); const opts=[];
+  for(let i=-6;i<=2;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()+i,1);
+    const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    opts.push(`<option value="${v}"${v===defaultYM?' selected':''}>${v}</option>`);
+  }
+  sel.innerHTML=opts.join('');
+}
+
+function initRdSamplingPage(){
+  const now=new Date(); const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  buildMonthOptions('rds-month-filter',ym);
+  buildMonthOptions('rds-settle-month',ym);
+  // 研發人員下拉
+  const empSel=document.getElementById('rds-emp-filter');
+  if(empSel)empSel.innerHTML='<option value="">全部研發</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  const empNew=document.getElementById('rds-emp');
+  if(empNew)empNew.innerHTML='<option value="">請選擇</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+  loadRdCustomers();
+  loadRdSamples();
+  loadPendingReviews();
+  loadCarryover();
+  loadOverdueLogs();
+}
+
+async function loadRdSamples(){
+  const ym=document.getElementById('rds-month-filter')?.value;
+  const empId=document.getElementById('rds-emp-filter')?.value;
+  if(!ym)return;
+  const [y,m]=ym.split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
+  let q=sb.from('rd_samples').select('*, employees(name, role_title), rd_sample_customers(rd_customers(id, short_name))')
+    .gte('sample_date',start).lt('sample_date',nm).order('sample_date',{ascending:false});
+  if(empId)q=q.eq('employee_id',empId);
+  const {data,error}=await q;
+  const el=document.getElementById('rds-list-content');
+  if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>研發</th><th>劑型</th><th>客戶</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
+    const custs=(s.rd_sample_customers||[]).map(rc=>rc.rd_customers?.short_name).filter(Boolean).join('、')||'—';
+    const canDel=currentRole==='manager';
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">原因: ${s.approval_reason}</div>`:''}</td><td>${s.delay_days||0} 天</td><td>${canDel?`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`:'—'}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function openRdSampleModal(){
+  rdsSelectedCustomers=[];
+  document.getElementById('rds-code').value='';
+  document.getElementById('rds-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('rds-emp').value='';
+  document.getElementById('rds-formula').value='liquid';
+  document.getElementById('rds-version').value='';
+  document.getElementById('rds-product').value='';
+  document.getElementById('rds-reason').value='';
+  document.getElementById('rds-customers-chips').innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';
+  updateRdsDelayInfo();
+  document.getElementById('rds-date').onchange=updateRdsDelayInfo;
+  openModal('newRdSampleModal');
+}
+
+function updateRdsDelayInfo(){
+  const d=document.getElementById('rds-date').value;
+  if(!d)return;
+  const delay=Math.floor((new Date()-new Date(d))/86400000);
+  const info=document.getElementById('rds-delay-info');
+  const reasonWrap=document.getElementById('rds-reason-wrap');
+  if(delay<0){info.style.display='block';info.innerHTML='⚠ 未來日期，請改正';info.style.color='var(--red)';reasonWrap.style.display='none';return;}
+  if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，將自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay===1){info.style.display='block';info.innerHTML='🟡 隔天補登，將送 ELLA 經理審核（無需寫原因）';info.style.color='#a68a3a';reasonWrap.style.display='none';}
+  else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+  else{info.style.display='block';info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
+}
+
+function addRdSampleCustomer(){
+  const sel=document.getElementById('rds-customer-picker');
+  const id=sel.value;if(!id)return;
+  if(rdsSelectedCustomers.includes(id)){showToast('已加入');return;}
+  rdsSelectedCustomers.push(id);
+  renderRdsCustomerChips();
+  sel.value='';
+}
+
+function removeRdSampleCustomer(id){
+  rdsSelectedCustomers=rdsSelectedCustomers.filter(x=>x!==id);
+  renderRdsCustomerChips();
+}
+
+function renderRdsCustomerChips(){
+  const el=document.getElementById('rds-customers-chips');
+  if(!rdsSelectedCustomers.length){el.innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';return;}
+  el.innerHTML=rdsSelectedCustomers.map(id=>{
+    const c=rdCustomers.find(x=>x.id===id);
+    return `<span class="badge badge-gold" style="margin:2px;padding:4px 8px;display:inline-block">${c?.short_name||id} <span style="cursor:pointer;margin-left:4px" onclick="removeRdSampleCustomer('${id}')">✕</span></span>`;
+  }).join('');
+}
+
+async function saveRdSample(){
+  const code=document.getElementById('rds-code').value.trim();
+  const date=document.getElementById('rds-date').value;
+  const empId=document.getElementById('rds-emp').value;
+  const formula=document.getElementById('rds-formula').value;
+  const ver=document.getElementById('rds-version').value.trim();
+  const prod=document.getElementById('rds-product').value.trim();
+  const reason=document.getElementById('rds-reason').value.trim();
+  if(!code||!date||!empId||!formula){showToast('請填必填欄位');return;}
+  if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
+  const delay=Math.floor((new Date()-new Date(date))/86400000);
+  if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
+  if(delay<0){showToast('打樣日期不能是未來');return;}
+  if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
+  const {data:user}=await sb.auth.getUser();
+  const {data:s,error}=await sb.from('rd_samples').insert({
+    sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
+    version:ver||null,product_code:prod||null,
+    approval_reason:reason||null,created_by:user.user.id
+  }).select('id').single();
+  if(error){showToast('儲存失敗：'+error.message);return;}
+  // 寫客戶對應
+  const inserts=rdsSelectedCustomers.map(cid=>({sample_id:s.id,customer_id:cid}));
+  const {error:e2}=await sb.from('rd_sample_customers').insert(inserts);
+  if(e2)showToast('客戶綁定失敗：'+e2.message);
+  else showToast(`✓ 已登記${delay===0?'（自動通過）':delay===1?'（送審）':'（送審+原因）'}`);
+  closeModal('newRdSampleModal');
+  loadRdSamples();loadPendingReviews();loadOverdueLogs();
+}
+
+async function saveNewRdCustomer(){
+  const short=document.getElementById('rdc-short').value.trim();
+  const full=document.getElementById('rdc-full').value.trim();
+  if(!short){showToast('請填關鍵字短名稱');return;}
+  const {data,error}=await sb.from('rd_customers').insert({short_name:short,full_name:full||null,source:'manually_added'}).select().single();
+  if(error){showToast('儲存失敗：'+error.message);return;}
+  showToast(`✓ 已新增客戶「${short}」`);
+  await loadRdCustomers();
+  // 自動加入當前選擇
+  if(data)rdsSelectedCustomers.push(data.id);
+  renderRdsCustomerChips();
+  document.getElementById('rdc-short').value='';
+  document.getElementById('rdc-full').value='';
+  closeModal('newRdCustomerModal');
+}
+
+async function deleteRdSample(id){
+  if(!confirm('確定刪除此筆打樣紀錄？'))return;
+  const {error}=await sb.from('rd_samples').delete().eq('id',id);
+  if(error){showToast('刪除失敗：'+error.message);return;}
+  showToast('✓ 已刪除');
+  loadRdSamples();
+}
+
+async function loadPendingReviews(){
+  const {data}=await sb.from('rd_samples').select('*, employees(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false});
+  const el=document.getElementById('rds-pending-content');
+  const cnt=document.getElementById('rds-pending-count');
+  if(cnt)cnt.textContent=`${data?.length||0} 筆`;
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>研發</th><th>延遲</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>`<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.employees?.name||'-'}</td><td>${s.delay_days} 天</td><td>${s.approval_reason||'（隔天補登）'}</td><td><button class="btn btn-primary btn-sm" onclick="approveRdSample('${s.id}')">✓ 通過</button> <button class="btn btn-outline btn-sm" onclick="rejectRdSample('${s.id}')">退回</button></td></tr>`).join('')}</tbody></table>`;
+}
+
+async function approveRdSample(id){
+  const {data:user}=await sb.auth.getUser();
+  const {error}=await sb.from('rd_samples').update({approval_status:'approved',approved_by:user.user.id,approved_at:new Date().toISOString()}).eq('id',id);
+  if(error){showToast('失敗：'+error.message);return;}
+  showToast('✓ 已通過');loadPendingReviews();loadRdSamples();
+}
+
+async function rejectRdSample(id){
+  const note=prompt('退回原因：');if(!note)return;
+  const {error}=await sb.from('rd_samples').update({approval_status:'rejected',rejection_note:note}).eq('id',id);
+  if(error){showToast('失敗：'+error.message);return;}
+  showToast('✓ 已退回');loadPendingReviews();loadRdSamples();
+}
+
+async function settleRdMonth(){
+  const ym=document.getElementById('rds-settle-month').value;
+  if(!ym){showToast('請選月份');return;}
+  if(!confirm(`確定要結算 ${ym} 的打樣獎金？`))return;
+  const [y,m]=ym.split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const rdEmps=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
+  let results=[];
+  for(const emp of rdEmps){
+    const {data:samples}=await sb.from('rd_samples').select('id').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
+    const count=samples?.length||0;
+    const bonus=rdSamplingBonus(count);
+    // deadline = 打樣月 + 6 個月
+    const dl=new Date(y,m-1+6,0).toISOString().slice(0,10);
+    const {error}=await sb.from('rd_monthly_settlement').upsert({
+      employee_id:emp.id,year:y,month:m,sample_count:count,base_bonus:bonus,
+      status:count<18?'paid':'pending_carryover',carryover_deadline:dl,updated_at:new Date().toISOString()
+    },{onConflict:'employee_id,year,month'});
+    if(error)showToast('結算失敗('+emp.name+'): '+error.message);
+    results.push({name:emp.name,count,bonus,status:count<18?'未達門檻':'待回溯（等出貨完成）'});
+  }
+  document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th>件數</th><th>階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.count}</td><td>${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table>`;
+  showToast(`✓ ${ym} 結算完成`);
+  loadCarryover();
+}
+
+async function loadCarryover(){
+  const {data}=await sb.from('rd_monthly_settlement').select('*, employees(name)').eq('status','pending_carryover').order('carryover_deadline');
+  const el=document.getElementById('rds-carryover-content');
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">沒有暫緩中的打樣獎金</div></div>';return;}
+  const today=new Date();
+  el.innerHTML=`<table><thead><tr><th>研發</th><th>暫緩月</th><th>件數</th><th>金額</th><th>時效到期</th><th>剩餘天數</th></tr></thead><tbody>${data.map(r=>{
+    const days=Math.floor((new Date(r.carryover_deadline)-today)/86400000);
+    const color=days<30?'var(--red)':days<60?'#a68a3a':'var(--ink-faint)';
+    return `<tr><td>${r.employees?.name||'-'}</td><td>${r.year}-${String(r.month).padStart(2,'0')}</td><td>${r.sample_count}</td><td>${fmt(r.base_bonus)}</td><td>${r.carryover_deadline}</td><td style="color:${color}">${days} 天</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+async function loadOverdueLogs(){
+  // 本月課長補登明細：delay_days >= 1 的當月紀錄
+  const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const start=ym+'-01';
+  const {data}=await sb.from('rd_samples').select('*, employees(name)').gte('logged_at',start).gt('delay_days',0).order('logged_at',{ascending:false});
+  const el=document.getElementById('rds-overdue-content');
+  const cnt=document.getElementById('rds-overdue-count');
+  if(cnt)cnt.textContent=`${data?.length||0} 筆延遲`;
+  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲補登</div></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>研發</th><th>實際打樣日</th><th>延遲</th><th>原因</th></tr></thead><tbody>${data.map(s=>`<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong></td><td>${s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>`;
+}
+
 // PLANNING
 function calcPlanScore(){
   const scores=['plan-s1','plan-s2','plan-s3','plan-s4'].map(id=>getStarScore(id));
@@ -2198,6 +2570,7 @@ function switchPage(page){
   if(page==='orders')loadOrders();
   if(page==='shipments')loadShipments();
   if(page==='settings')renderEmployeeList();
+  if(page==='rd-sampling')initRdSamplingPage();
 }
 function setSidebarActive(el){document.querySelectorAll('.sidebar-card').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
 function switchInner(el,id){
