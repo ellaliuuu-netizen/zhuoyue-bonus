@@ -620,45 +620,33 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>出貨日期</th><th>出貨單號</th><th>客戶</th><th>品名</th><th>本次件數</th><th>訂單進度</th><th class="td-center">是否準時</th></tr></thead>
-            <tbody id="shipments-tbody"><tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
+            <thead><tr><th>出貨日期</th><th>出貨單號</th><th>客戶</th><th>品名</th><th>本次件數</th><th>訂單進度</th><th class="td-center">準時/狀態</th><th class="td-center manager-only">動作</th></tr></thead>
+            <tbody id="shipments-tbody"><tr><td colspan="8" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
       </div>
 
       <!-- SALES -->
       <div class="page" id="page-sales">
-        <div class="section-title" style="color:var(--green)">業務部獎金計算</div>
-        <div class="section-desc">三段式：新客獎金（月）＋ 出貨獎金（月）＋ 季度達標獎金</div>
+        <div class="section-title" style="color:var(--green)">業務部獎金</div>
+        <div class="section-desc">三段式：新客獎金（月）＋ 出貨獎金（月）＋ 季度達標獎金；月底/季底一鍵結算，資料自動從訂單/出貨匯總</div>
         <div id="sales-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="inner-tabs">
-          <div class="inner-tab active" onclick="switchInner(this,'sales-m-sec')">月獎金</div>
-          <div class="inner-tab" onclick="switchInner(this,'sales-q-sec')">季達標獎金</div>
+          <div class="inner-tab active" onclick="switchInner(this,'sales-m-sec')">月結算</div>
+          <div class="inner-tab" onclick="switchInner(this,'sales-q-sec')">季結算</div>
           <div class="inner-tab" onclick="switchInner(this,'sales-sum-sec')">本季彙整</div>
         </div>
         <div id="sales-m-sec">
           <div class="card">
             <div class="card-header">
-              <div class="card-title">📅 月獎金計算</div>
-              <select class="form-select" style="width:85px;padding:5px 9px" id="sales-month-sel"></select>
+              <div class="card-title">💰 月底結算（自動）</div>
+              <div>
+                <select class="form-select" style="width:auto;display:inline-block;margin-right:6px" id="sales-settle-month"></select>
+                <button class="btn btn-primary manager-only" onclick="settleSalesMonth()">執行結算</button>
+              </div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">業務人員</label><select class="form-select" id="sales-emp-sel"><option value="">請選擇</option></select></div>
-              <div class="form-group"><label class="form-label">當月新客戶數（已付訂金）</label><input class="form-input" type="number" id="sales-new-clients" placeholder="0" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">當月出貨總金額（元）</label><input class="form-input" type="number" id="sales-ship-amount" placeholder="0" min="0" /></div>
-              <div></div>
-            </div>
-            <div id="sales-m-result" style="display:none" class="result-highlight">
-              <div class="res-label">月獎金合計</div>
-              <div class="res-value" id="sales-m-total">—</div>
-              <div class="res-breakdown" id="sales-m-breakdown"></div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:12px">
-              <button class="btn btn-gold" onclick="calcSalesM()">試算</button>
-              <button class="btn btn-primary manager-only" onclick="saveSalesM()">儲存</button>
-            </div>
+            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（首次訂單且已記錄回款）→ ×1,500 (2) 該月「出貨金額」（出貨件數×單價，扣退貨）→ 5 段階梯比例</div>
+            <div id="sales-m-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
             <table><thead><tr><th>出貨金額</th><th class="td-right">比例</th></tr></thead><tbody>
@@ -672,19 +660,22 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
         <div id="sales-q-sec" style="display:none">
           <div class="card">
-            <div class="card-header"><div class="card-title">🏆 季度達標獎金</div></div>
-            <div class="form-row">
-              <div class="form-group"><label class="form-label">業務人員</label><select class="form-select" id="sales-q-emp-sel"><option value="">請選擇</option></select></div>
-              <div class="form-group"><label class="form-label">個人季業績（已回款，元）</label><input class="form-input" type="number" id="sales-q-rev" placeholder="0" min="0" /></div>
+            <div class="card-header">
+              <div class="card-title">🏆 季底結算（自動）</div>
+              <button class="btn btn-primary manager-only" onclick="settleSalesQuarter()">執行結算（${appSettings?.quarter||'本季'}）</button>
             </div>
-            <div id="sales-q-result" style="display:none" class="result-highlight">
-              <div class="res-label">季達標獎金</div><div class="res-value" id="sales-q-total">—</div>
-              <div class="res-breakdown" id="sales-q-breakdown"></div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:12px">
-              <button class="btn btn-gold" onclick="calcSalesQ()">試算</button>
-              <button class="btn btn-primary manager-only" onclick="saveSalesQ()">儲存</button>
-            </div>
+            <div class="info-box">點「執行結算」會：自動匯總當季「已回款」訂單金額（須在訂單管理頁按「＋記錄回款」標記日期，且非退貨）→ 6 級距達標獎金</div>
+            <div id="sales-q-content"><div class="empty-state"><div class="empty-icon">🏆</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
+          </div>
+          <div class="card"><div class="card-header"><div class="card-title">季達標對照表</div></div>
+            <table><thead><tr><th>個人季業績（已回款）</th><th class="td-right">達標獎金</th></tr></thead><tbody>
+              <tr><td>未達 150 萬</td><td class="td-right">0 元</td></tr>
+              <tr><td>150 萬 – 300 萬</td><td class="td-right">6,000 元</td></tr>
+              <tr><td>300 萬 – 500 萬</td><td class="td-right">10,000 元</td></tr>
+              <tr><td>500 萬 – 700 萬</td><td class="td-right">15,000 元</td></tr>
+              <tr><td>700 萬 – 900 萬</td><td class="td-right">20,000 元</td></tr>
+              <tr><td>超過 900 萬</td><td class="td-right">25,000 元</td></tr>
+            </tbody></table>
           </div>
         </div>
         <div id="sales-sum-sec" style="display:none">
@@ -1645,6 +1636,10 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
     const rdDisplay = rdList.length
       ? rdList.map(r=>r.final?`<b>${r.name}（主責）</b>`:r.name).join('、')
       : '';
+    const paidBadge = o.payment_received_at
+      ? `<span style="color:var(--green);font-size:12px">💵 已回款 ${o.payment_received_at}</span>`
+      : '<span style="color:var(--ink-faint);font-size:12px">💳 尚未回款</span>';
+    const refundBadge = o.is_refunded ? '<span style="color:var(--red);font-size:12px;font-weight:500">⚠️ 此單已退貨（不計入業績）</span>' : '';
     return `<div class="order-card ${isCompleted?'completed':''}">
       <div class="order-card-header">
         <div class="order-card-title">${o.customer_name} — ${o.product_name}</div>
@@ -1658,12 +1653,46 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
         ${rdDisplay?`<span>🔬 研發：${rdDisplay}</span>`:''}
         ${o.unit_price?`<span>💰 ${fmtNum(o.total_qty)}件 × ${fmtNum(o.unit_price)}元</span>`:`<span>📦 共 ${fmtNum(o.total_qty)} 件</span>`}
       </div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:6px">${paidBadge}${refundBadge}<span class="manager-only" style="display:inline-flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="toggleOrderPayment('${o.id}',${!!o.payment_received_at})">${o.payment_received_at?'取消回款':'＋記錄回款'}</button><button class="btn btn-outline btn-sm" onclick="toggleOrderRefund('${o.id}',${o.is_refunded})" style="${o.is_refunded?'color:var(--ink)':'color:var(--red)'}">${o.is_refunded?'取消退貨':'標記退貨'}</button></span></div>
       <div class="order-progress">
         <div class="order-progress-text"><span>出貨進度</span><span>${fmtNum(shipped)} / ${fmtNum(o.total_qty)} 件（${pct}%）</span></div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--gold)'}"></div></div>
       </div>
     </div>`;
   }).join('');
+}
+async function toggleOrderPayment(orderId, hadPayment){
+  if(hadPayment){
+    if(!confirm('確定取消這筆訂單的回款紀錄？\n（季達標獎金將從「已回款」金額扣除）'))return;
+    const {error}=await sb.from('orders').update({payment_received_at:null}).eq('id',orderId);
+    if(error){showToast('❌ '+error.message);return;}
+    showToast('✓ 已取消回款記錄');
+  }else{
+    const today=new Date().toISOString().slice(0,10);
+    const date=prompt('輸入回款日期（YYYY-MM-DD）：',today);
+    if(!date)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){showToast('❌ 日期格式錯誤，請用 YYYY-MM-DD');return;}
+    const {error}=await sb.from('orders').update({payment_received_at:date}).eq('id',orderId);
+    if(error){showToast('❌ '+error.message);return;}
+    showToast(`✓ 已記錄回款日：${date}`);
+  }
+  await loadOrders();
+}
+async function toggleOrderRefund(orderId, isRefunded){
+  const action=isRefunded?'取消退貨標記':'標記為退貨';
+  if(!confirm(`確定${action}？\n（退貨後該訂單金額不計入業務月獎金/季達標）`))return;
+  const {error}=await sb.from('orders').update({is_refunded:!isRefunded}).eq('id',orderId);
+  if(error){showToast('❌ '+error.message);return;}
+  showToast(`✓ 已${action}`);
+  await loadOrders();
+}
+async function toggleShipmentRefund(shipmentId, isRefunded){
+  const action=isRefunded?'取消退貨標記':'標記為退貨';
+  if(!confirm(`確定${action}這筆出貨？\n（出貨退貨後該筆 ship_qty × 單價 不計入業務出貨獎金）`))return;
+  const {error}=await sb.from('shipments').update({is_refunded:!isRefunded}).eq('id',shipmentId);
+  if(error){showToast('❌ '+error.message);return;}
+  showToast(`✓ 已${action}`);
+  await loadShipments();
 }
 async function loadProducts() {
   const { data } = await sb.from('products').select('product_code, product_name, formula_type').order('product_code');
@@ -1941,7 +1970,8 @@ async function loadShipments() {
       <td>${s.order?.product_name||'—'}</td>
       <td class="td-right">${fmtNum(s.ship_qty)}</td>
       <td><div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">${fmtNum(totalShipped)}/${fmtNum(total)}（${pct}%）</div><div class="progress-bar" style="height:5px;width:100px"><div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--gold)'}"></div></div></td>
-      <td class="td-center"><span class="badge badge-${s.is_on_time?'green':'red'}">${s.is_on_time?'準時':'延遲'}</span></td>
+      <td class="td-center"><span class="badge badge-${s.is_on_time?'green':'red'}">${s.is_on_time?'準時':'延遲'}</span>${s.is_refunded?' <span class="badge badge-red">退貨</span>':''}</td>
+      <td class="td-center manager-only"><button class="btn btn-outline btn-sm" onclick="toggleShipmentRefund('${s.id}',${!!s.is_refunded})" style="${s.is_refunded?'':'color:var(--red)'}">${s.is_refunded?'取消退貨':'標記退貨'}</button></td>
     </tr>`;
   }).join('');
 }
@@ -2026,72 +2056,126 @@ async function saveRecord(data) {
 }
 
 // SALES
-function calcSalesM() {
-  const nc = parseInt(document.getElementById('sales-new-clients').value)||0;
-  const amt = parseFloat(document.getElementById('sales-ship-amount').value)||0;
-  const ncBonus = nc*appSettings.newClientBonus;
-  let ratio=.0015, rl='0.15%';
-  if (amt>=4000000){ratio=.0035;rl='0.35%';}
-  else if (amt>=2000000){ratio=.0028;rl='0.28%';}
-  else if (amt>=1000000){ratio=.0022;rl='0.22%';}
-  else if (amt>=500000){ratio=.0018;rl='0.18%';}
-  const shipBonus=Math.round(amt*ratio);
-  const base=ncBonus+shipBonus;
-  const empId=document.getElementById('sales-emp-sel').value;
-  const emp=employees.find(e=>e.id===empId);
-  const pr=emp?probationRatio(emp):{ratio:1,note:''};
-  const total=Math.round(base*pr.ratio);
-  show('sales-m-result');
-  document.getElementById('sales-m-total').textContent=fmt(total);
-  let html=`<div class="res-item"><span class="res-item-dot"></span>新客：${nc}個 × ${fmtNum(appSettings.newClientBonus)} = ${fmt(ncBonus)}</div><div class="res-item"><span class="res-item-dot"></span>出貨：${fmtNum(Math.round(amt))}元 × ${rl} = ${fmt(shipBonus)}</div>`;
-  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
-  document.getElementById('sales-m-breakdown').innerHTML=html;
+// SALES - 自動結算（S3 改寫，2026-05-17）
+function populateSalesMonthSel(){
+  const sel=document.getElementById('sales-settle-month');
+  if(!sel||sel.options.length)return;
+  const now=new Date(); const opts=[];
+  for(let i=6;i>=-2;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const ym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const cur=ym===`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    opts.push(`<option value="${ym}"${cur?' selected':''}>${ym}</option>`);
+  }
+  sel.innerHTML=opts.join('');
 }
-async function saveSalesM() {
-  const empId = document.getElementById('sales-emp-sel').value;
-  const emp = employees.find(e=>e.id===empId);
-  if (!emp) { showToast('請選擇業務人員'); return; }
-  const month=document.getElementById('sales-month-sel').value;
-  const nc=parseInt(document.getElementById('sales-new-clients').value)||0;
-  const amt=parseFloat(document.getElementById('sales-ship-amount').value)||0;
-  let ratio=.0015;
-  if (amt>=4000000) ratio=.0035; else if (amt>=2000000) ratio=.0028; else if (amt>=1000000) ratio=.0022; else if (amt>=500000) ratio=.0018;
-  const base=nc*appSettings.newClientBonus+amt*ratio;
-  const pr=probationRatio(emp);
-  const bonus=Math.round(base*pr.ratio);
-  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`${month}月｜新客${nc}個｜出貨${fmtNum(Math.round(amt))}元${pr.note}`,record_type:'monthly',month:parseInt(month)});
-  if (ok) showToast(`✓ 已儲存 ${emp.name} ${month}月獎金 ${fmt(bonus)}`);
+async function settleSalesMonth(){
+  const ym=document.getElementById('sales-settle-month').value;
+  if(!ym){showToast('請選月份');return;}
+  if(!confirm(`確定要結算 ${ym} 業務部月獎金？\n會自動匯總當月新客戶數 + 出貨金額`))return;
+  const [y,m]=ym.split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const salesEmps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
+  if(!salesEmps.length){showToast('沒有在職業務人員');return;}
+  const {data:ordersInMonth}=await sb.from('orders')
+    .select('id,sales_id,customer_name,unit_price,total_qty,payment_received_at,is_refunded')
+    .gte('order_date',start).lt('order_date',nm);
+  const {data:priorOrders}=await sb.from('orders').select('sales_id,customer_name').lt('order_date',start);
+  const priorPairs=new Set((priorOrders||[]).map(o=>`${o.sales_id}_${o.customer_name}`));
+  const {data:shipsInMonth}=await sb.from('shipments').select('order_id,ship_qty,is_refunded')
+    .gte('ship_date',start).lt('ship_date',nm);
+  const orderIds=[...new Set((shipsInMonth||[]).map(s=>s.order_id))];
+  let omap={};
+  if(orderIds.length){
+    const {data:ords}=await sb.from('orders').select('id,unit_price,sales_id,is_refunded').in('id',orderIds);
+    (ords||[]).forEach(o=>{omap[o.id]=o;});
+  }
+  const ncByEmp={}; const amtByEmp={};
+  (ordersInMonth||[]).forEach(o=>{
+    if(!o.sales_id||o.is_refunded||!o.payment_received_at)return;
+    if(!priorPairs.has(`${o.sales_id}_${o.customer_name}`)){
+      if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
+      ncByEmp[o.sales_id].add(o.customer_name);
+    }
+  });
+  (shipsInMonth||[]).forEach(s=>{
+    if(s.is_refunded)return;
+    const o=omap[s.order_id]; if(!o||o.is_refunded||!o.sales_id)return;
+    amtByEmp[o.sales_id]=(amtByEmp[o.sales_id]||0)+(o.unit_price||0)*s.ship_qty;
+  });
+  const ncUnit=appSettings.newClientBonus||1500;
+  let results=[];
+  for(const emp of salesEmps){
+    const ncCount=(ncByEmp[emp.id]||new Set()).size;
+    const ncBonus=ncCount*ncUnit;
+    const amt=amtByEmp[emp.id]||0;
+    let ratio=0.0015,rlabel='0.15%';
+    if(amt>=4000000){ratio=0.0035;rlabel='0.35%';}
+    else if(amt>=2000000){ratio=0.0028;rlabel='0.28%';}
+    else if(amt>=1000000){ratio=0.0022;rlabel='0.22%';}
+    else if(amt>=500000){ratio=0.0018;rlabel='0.18%';}
+    const shipBonus=Math.round(amt*ratio);
+    if(ncCount===0&&amt===0){
+      results.push({name:emp.name,nc:0,amt:0,rlabel:'—',ncBonus:0,shipBonus:0,total:0,status:'— 無業績'});
+      continue;
+    }
+    const pr=probationRatio(emp);
+    const base=ncBonus+shipBonus;
+    const total=Math.round(base*pr.ratio);
+    const {error}=await sb.from('sales_monthly_settlement').upsert({
+      employee_id:emp.id,year:y,month:m,
+      new_client_count:ncCount,new_client_bonus:ncBonus,
+      ship_amount:amt,ship_ratio:ratio,ship_bonus:shipBonus,
+      total_bonus:total,status:'paid',
+      note:pr.note||null,settled_by:currentUser.id,
+      settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
+    },{onConflict:'employee_id,year,month'});
+    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+  }
+  document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
+  showToast(`✓ ${ym} 業務月結算完成`);
 }
-function calcSalesQ() {
-  const rev=parseFloat(document.getElementById('sales-q-rev').value)||0;
-  let base=0,label='';
-  if (rev<1500000){base=0;label='未達150萬';}
-  else if (rev<3000000){base=6000;label='150–300萬';}
-  else if (rev<5000000){base=10000;label='300–500萬';}
-  else if (rev<7000000){base=15000;label='500–700萬';}
-  else if (rev<9000000){base=20000;label='700–900萬';}
-  else{base=25000;label='超過900萬';}
-  const empId=document.getElementById('sales-q-emp-sel').value;
-  const emp=employees.find(e=>e.id===empId);
-  const pr=emp?probationRatio(emp):{ratio:1,note:''};
-  const bonus=Math.round(base*pr.ratio);
-  show('sales-q-result');
-  document.getElementById('sales-q-total').textContent=fmt(bonus);
-  let html=`<div class="res-item"><span class="res-item-dot"></span>季業績：${fmtNum(Math.round(rev))}元（${label}）</div>`;
-  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(bonus)}${pr.note}</div>`;
-  document.getElementById('sales-q-breakdown').innerHTML=html;
-}
-async function saveSalesQ() {
-  const empId=document.getElementById('sales-q-emp-sel').value;
-  const emp=employees.find(e=>e.id===empId);
-  if (!emp){showToast('請選擇業務人員');return;}
-  const rev=parseFloat(document.getElementById('sales-q-rev').value)||0;
-  let base=0;
-  if (rev>=9000000) base=25000; else if (rev>=7000000) base=20000; else if (rev>=5000000) base=15000; else if (rev>=3000000) base=10000; else if (rev>=1500000) base=6000;
-  const pr=probationRatio(emp);
-  const bonus=Math.round(base*pr.ratio);
-  const ok=await saveRecord({dept:'業務部',name:emp.name,bonus,detail:`季達標｜業績${fmtNum(Math.round(rev))}元${pr.note}`,record_type:'quarterly'});
-  if (ok) showToast(`✓ 已儲存 ${emp.name} 季達標獎金 ${fmt(bonus)}`);
+async function settleSalesQuarter(){
+  const y=appSettings.year,q=appSettings.quarter;
+  if(!confirm(`確定要結算 ${y} ${q} 業務季達標獎金？\n會匯總當季所有已回款訂單金額`))return;
+  const qMonths={Q1:[1,3],Q2:[4,6],Q3:[7,9],Q4:[10,12]};
+  const [sm,em]=qMonths[q];
+  const startDate=`${y}-${String(sm).padStart(2,'0')}-01`;
+  const endDate=em===12?`${y+1}-01-01`:`${y}-${String(em+1).padStart(2,'0')}-01`;
+  const salesEmps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
+  if(!salesEmps.length){showToast('沒有在職業務人員');return;}
+  const {data:paidOrders}=await sb.from('orders')
+    .select('sales_id,total_amount,is_refunded,payment_received_at')
+    .gte('payment_received_at',startDate).lt('payment_received_at',endDate)
+    .eq('is_refunded',false);
+  const revByEmp={};
+  (paidOrders||[]).forEach(o=>{if(!o.sales_id)return;revByEmp[o.sales_id]=(revByEmp[o.sales_id]||0)+Number(o.total_amount||0);});
+  let results=[];
+  for(const emp of salesEmps){
+    const rev=revByEmp[emp.id]||0;
+    let bonus=0,label='';
+    if(rev<1500000){bonus=0;label='未達 150 萬';}
+    else if(rev<3000000){bonus=6000;label='150–300 萬';}
+    else if(rev<5000000){bonus=10000;label='300–500 萬';}
+    else if(rev<7000000){bonus=15000;label='500–700 萬';}
+    else if(rev<9000000){bonus=20000;label='700–900 萬';}
+    else{bonus=25000;label='超過 900 萬';}
+    if(rev===0){
+      results.push({name:emp.name,rev:0,bonus:0,label:'— 無回款',status:'—'});continue;
+    }
+    const pr=probationRatio(emp);
+    const finalBonus=Math.round(bonus*pr.ratio);
+    const {error}=await sb.from('sales_quarterly_settlement').upsert({
+      employee_id:emp.id,year:y,quarter:q,
+      paid_revenue:rev,achievement_bonus:finalBonus,level_label:label,
+      status:'paid',note:pr.note||null,settled_by:currentUser.id,
+      settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
+    },{onConflict:'employee_id,year,quarter'});
+    results.push({name:emp.name,rev,bonus:finalBonus,label,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+  }
+  document.getElementById('sales-q-content').innerHTML=`<table><thead><tr><th>業務</th><th>已回款</th><th>級距</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${fmtNum(Math.round(r.rev))}</td><td>${r.label}</td><td><strong>${fmt(r.bonus)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
+  showToast(`✓ ${y} ${q} 業務季結算完成`);
 }
 
 // RD
@@ -2706,6 +2790,7 @@ function switchPage(page){
   if(page==='shipments')loadShipments();
   if(page==='settings')renderEmployeeList();
   if(page==='rd-sampling')initRdSamplingPage();
+  if(page==='sales')populateSalesMonthSel();
 }
 function setSidebarActive(el){document.querySelectorAll('.sidebar-card').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
 function switchInner(el,id){
