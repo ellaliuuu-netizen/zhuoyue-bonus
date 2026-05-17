@@ -1512,7 +1512,7 @@ function renderEmployeeList() {
       <td>${e.role_title}</td>
       <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'離職/停薪'}</span></td>
       <td style="font-size:12px;color:var(--ink-faint)">${e.note||''}</td>
-      <td class="td-center manager-only"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button></td>
+      <td class="td-center manager-only" style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button> <button class="btn btn-danger btn-sm" onclick="hardDeleteEmployee('${e.id}')" title="僅限誤填可用；有歷史紀錄會被擋下">永久刪除</button></td>
     </tr>`).join('')}</tbody></table>`;
 }
 async function toggleEmployeeStatus(empId, currentActive) {
@@ -1530,6 +1530,23 @@ async function toggleEmployeeStatus(empId, currentActive) {
   const {error} = await sb.from('employees').update({is_active: !currentActive, note: newNote}).eq('id', empId);
   if(error){showToast('❌ '+error.message);return;}
   showToast(`✓ ${emp.name} 已${action}`);
+  await loadEmployees();
+}
+async function hardDeleteEmployee(empId) {
+  const emp = employees.find(e=>e.id===empId);
+  if(!emp) return;
+  if(!confirm(`⚠️ 永久刪除「${emp.name}」？\n\n此動作不可逆。若該員工有歷史獎金/打樣/訂單紀錄，刪除會被擋下 —— 請改用「設為離職」。\n\n確定要永久刪除？`)) return;
+  if(!confirm(`再次確認：永久刪除 ${emp.name}（${emp.dept} / ${emp.role_title}）？`)) return;
+  const {error} = await sb.from('employees').delete().eq('id', empId);
+  if(error){
+    if(error.code === '23503' || /foreign key|violates/i.test(error.message||'')){
+      showToast(`❌ ${emp.name} 已有歷史紀錄不能真刪，請改用「設為離職」`, 5000);
+    } else {
+      showToast('❌ '+error.message);
+    }
+    return;
+  }
+  showToast(`✓ 已永久刪除 ${emp.name}`);
   await loadEmployees();
 }
 async function saveEmployee() {
