@@ -506,13 +506,13 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
-    <div class="nav-tab" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
     <div class="nav-tab" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
     <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
-    <div class="nav-tab" onclick="switchPage('planning')" id="tab-planning"><span class="tab-dot" style="background:#6b4f8a"></span>企劃部</div>
-    <div class="nav-tab" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
-    <div class="nav-tab" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生管部</div>
-    <div class="nav-tab" onclick="switchPage('history')" id="tab-history"><span class="tab-dot" style="background:#888"></span>獎金紀錄</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('planning')" id="tab-planning"><span class="tab-dot" style="background:#6b4f8a"></span>企劃部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生管部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('history')" id="tab-history"><span class="tab-dot" style="background:#888"></span>獎金紀錄</div>
     <div class="nav-tab manager-only" onclick="switchPage('settings')" id="tab-settings"><span class="tab-dot" style="background:#555"></span>設定</div>
   </nav>
 
@@ -543,19 +543,19 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d6a8a"></span>研發部獎金</div>
           <div class="sidebar-card-desc">確樣件數試算</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('sales');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('sales');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#4a7c59"></span>業務部獎金</div>
           <div class="sidebar-card-desc">月獎金＋季達標</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('planning');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('planning');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#6b4f8a"></span>企劃部獎金</div>
           <div class="sidebar-card-desc">出貨件數＋評分</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('purchase');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('purchase');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>採購部獎金</div>
           <div class="sidebar-card-desc">出貨件數＋評分</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('production');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('production');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#9c3d3d"></span>生管部獎金</div>
           <div class="sidebar-card-desc">準時率＋評分</div>
         </div>
@@ -1301,8 +1301,10 @@ async function initApp(user) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-display-name').textContent = currentUserName;
-  document.getElementById('user-role-label').textContent = currentRole === 'manager' ? '｜ 經理' : '｜ 財務';
-  document.getElementById('role-dot').style.background = currentRole === 'manager' ? '#c8a96e' : '#3d6a8a';
+  const roleLabel = currentRole==='manager'?'｜ 經理':currentRole==='rd_manager'?'｜ 課長':'｜ 財務';
+  const roleColor = currentRole==='manager'?'#c8a96e':currentRole==='rd_manager'?'#5d8aa8':'#3d6a8a';
+  document.getElementById('user-role-label').textContent = roleLabel;
+  document.getElementById('role-dot').style.background = roleColor;
   applyRoleRestrictions();
   await loadSettings();
   await loadEmployees();
@@ -1312,11 +1314,18 @@ async function initApp(user) {
   initInnerTabs();
 }
 function applyRoleRestrictions() {
-  if (currentRole !== 'finance') return;
+  if (currentRole === 'manager') return;
+  // finance 跟 rd_manager 都看不到 manager-only（設定 tab 等）
   document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'none');
-  ['sales-readonly-notice','rd-readonly-notice','plan-readonly-notice','pur-readonly-notice','prod-readonly-notice','orders-readonly-notice','shipments-readonly-notice'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.style.display = 'flex';
-  });
+  if (currentRole === 'finance') {
+    ['sales-readonly-notice','rd-readonly-notice','plan-readonly-notice','pur-readonly-notice','prod-readonly-notice','orders-readonly-notice','shipments-readonly-notice'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = 'flex';
+    });
+  }
+  if (currentRole === 'rd_manager') {
+    // 研發課長只看研發相關 + 訂單/出貨（追蹤客戶出貨觸發補發）
+    document.querySelectorAll('.rdmgr-hide').forEach(el => el.style.display = 'none');
+  }
 }
 window.addEventListener('DOMContentLoaded', async () => {
   const { data: { session } } = await sb.auth.getSession();
