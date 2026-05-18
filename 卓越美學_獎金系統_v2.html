@@ -1193,13 +1193,14 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 <!-- 新增打樣紀錄（rd_manager / manager） -->
 <div class="modal-overlay" id="newRdSampleModal">
   <div class="modal" style="max-width:600px">
-    <div class="modal-header"><div class="modal-title">＋ 新增打樣紀錄</div><button class="modal-close" onclick="closeModal('newRdSampleModal')">✕</button></div>
+    <div class="modal-header"><div class="modal-title" id="rds-modal-title">＋ 新增打樣紀錄</div><button class="modal-close" onclick="closeModal('newRdSampleModal')">✕</button></div>
     <div class="modal-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
         <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp"><option value="">請選擇</option></select></div>
         <div class="form-group"><label class="form-label">劑型 *</label><select class="form-select" id="rds-formula">
+          <option value="">請選擇</option>
           <option value="liquid">液劑（0.3）</option>
           <option value="essence">精華液/凝膠/面膜（0.4）</option>
           <option value="emulsion_ow">乳劑-水包油（0.8）</option>
@@ -1222,6 +1223,10 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="form-group" id="rds-reason-wrap" style="display:none">
         <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（2 天以上需填寫，會送 ELLA 經理審核）</label>
         <textarea class="form-input" id="rds-reason" rows="2" placeholder="如：出差、連假、客戶緊急…"></textarea>
+      </div>
+      <div class="form-group" id="rds-edit-reason-wrap" style="display:none">
+        <label class="form-label" style="color:var(--red)">📝 修改原因 *（任何修改都會送 ELLA 經理審核）</label>
+        <textarea class="form-input" id="rds-edit-reason" rows="2" placeholder="如：客戶名稱填錯、劑型分類錯誤、日期 typo…"></textarea>
       </div>
       <div class="info-box" id="rds-delay-info" style="display:none;font-size:13px"></div>
     </div>
@@ -2314,6 +2319,7 @@ function calcCollab(){
 // ==================== RD SAMPLING (打樣模組 v5) ====================
 let rdCustomers=[];           // 客戶主檔快取
 let rdsSelectedCustomers=[];  // 新增 modal 內已選的客戶
+let currentEditId=null;       // 編輯模式下的 row id；null=新增模式
 
 function rdSamplingBonus(count){
   const eff=Math.min(count,88);
@@ -2382,25 +2388,70 @@ async function loadRdSamples(){
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
   el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const custs=(s.rd_sample_customers||[]).map(rc=>rc.rd_customers?.short_name).filter(Boolean).join('、')||'—';
-    const canDel=currentRole==='manager';
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">原因: ${s.approval_reason}</div>`:''}</td><td>${s.delay_days||0} 天</td><td>${canDel?`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`:'—'}</td></tr>`;
+    const isMgr=currentRole==='manager';
+    const isMine=currentUser && s.created_by===currentUser.id;
+    const isPendingEdit=s.approval_status==='pending_review' && s.edit_reason;
+    const actions=[];
+    if(isMgr||isMine) actions.push(`<button class="btn btn-outline btn-sm" onclick="openEditRdSampleModal('${s.id}')">✏️ 修改</button>`);
+    if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
+    if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
+    const editBadge=s.edit_reason?`<div style="font-size:11px;color:#a68a3a">📝 修改: ${s.edit_reason}</div>`:'';
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
 function openRdSampleModal(){
+  currentEditId=null;
+  document.getElementById('rds-modal-title').textContent='＋ 新增打樣紀錄';
   rdsSelectedCustomers=[];
   document.getElementById('rds-code').value='';
+  document.getElementById('rds-code').readOnly=false;
+  document.getElementById('rds-code').style.background='';
   document.getElementById('rds-date').value=new Date().toISOString().slice(0,10);
   document.getElementById('rds-emp').value='';
-  document.getElementById('rds-formula').value='liquid';
+  document.getElementById('rds-formula').value='';
   document.getElementById('rds-version').value='';
   document.getElementById('rds-item-name').value='';
   document.getElementById('rds-delivery-date').value='';
   document.getElementById('rds-reason').value='';
+  document.getElementById('rds-edit-reason').value='';
+  document.getElementById('rds-edit-reason-wrap').style.display='none';
   document.getElementById('rds-customers-chips').innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';
   updateRdsDelayInfo();
   document.getElementById('rds-date').onchange=updateRdsDelayInfo;
   openModal('newRdSampleModal');
+}
+
+async function openEditRdSampleModal(id){
+  const {data:s,error}=await sb.from('rd_samples').select('*, rd_sample_customers(customer_id)').eq('id',id).single();
+  if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
+  currentEditId=id;
+  document.getElementById('rds-modal-title').textContent='✏️ 修改打樣紀錄';
+  document.getElementById('rds-code').value=s.sample_code;
+  document.getElementById('rds-code').readOnly=true;  // 樣品編號鎖住不可改
+  document.getElementById('rds-code').style.background='var(--surface)';
+  document.getElementById('rds-date').value=s.sample_date;
+  document.getElementById('rds-emp').value=s.employee_id||'';
+  document.getElementById('rds-formula').value=s.formula_type||'';
+  document.getElementById('rds-version').value=s.version||'';
+  document.getElementById('rds-item-name').value=s.item_name||'';
+  document.getElementById('rds-delivery-date').value=s.delivery_date||'';
+  document.getElementById('rds-reason').value=s.approval_reason||'';
+  document.getElementById('rds-edit-reason').value='';
+  document.getElementById('rds-edit-reason-wrap').style.display='block';
+  rdsSelectedCustomers=(s.rd_sample_customers||[]).map(rc=>rc.customer_id);
+  renderRdsCustomerChips();
+  updateRdsDelayInfo();
+  document.getElementById('rds-date').onchange=updateRdsDelayInfo;
+  openModal('newRdSampleModal');
+}
+
+async function cancelRdSampleEdit(id){
+  if(!confirm('確定取消這次修改？\n\n資料會還原成修改前狀態（不還原客戶綁定）'))return;
+  const {error}=await sb.rpc('cancel_rd_sample_edit',{p_sample_id:id});
+  if(error){showToast('取消失敗：'+error.message);return;}
+  showToast('✓ 已還原修改前狀態');
+  loadRdSamples();loadPendingReviews();
 }
 
 function updateRdsDelayInfo(){
@@ -2449,7 +2500,9 @@ async function saveRdSample(){
   const itemName=document.getElementById('rds-item-name').value.trim();
   const deliveryDate=document.getElementById('rds-delivery-date').value;
   const reason=document.getElementById('rds-reason').value.trim();
-  if(!code||!date||!empId||!formula){showToast('請填必填欄位');return;}
+  const editReason=document.getElementById('rds-edit-reason').value.trim();
+  if(!code||!date||!empId){showToast('請填必填欄位');return;}
+  if(!formula){showToast('請選擇劑型');return;}
   if(!itemName){showToast('請填品項');return;}
   if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
   const delay=Math.floor((new Date()-new Date(date))/86400000);
@@ -2458,6 +2511,33 @@ async function saveRdSample(){
     if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
     if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
   }
+
+  if(currentEditId){
+    // === 編輯模式 ===
+    if(!editReason){showToast('修改必須填寫修改原因');return;}
+    const {error}=await sb.from('rd_samples').update({
+      sample_date:date,employee_id:empId,formula_type:formula,
+      version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
+      approval_reason:reason||null,
+      approval_status:'pending_review',
+      approved_by:null,approved_at:null,rejection_note:null,
+      edit_reason:editReason,last_edited_at:new Date().toISOString()
+    }).eq('id',currentEditId);
+    if(error){showToast('修改失敗：'+error.message);return;}
+    // 更新客戶綁定（先刪舊的再插新的）
+    await sb.from('rd_sample_customers').delete().eq('sample_id',currentEditId);
+    const inserts=rdsSelectedCustomers.map(cid=>({sample_id:currentEditId,customer_id:cid}));
+    if(inserts.length){
+      const {error:e2}=await sb.from('rd_sample_customers').insert(inserts);
+      if(e2){showToast('客戶綁定失敗：'+e2.message);return;}
+    }
+    showToast('✓ 已送出修改（待 ELLA 審核）');
+    closeModal('newRdSampleModal');
+    loadRdSamples();loadPendingReviews();loadOverdueLogs();
+    return;
+  }
+
+  // === 新增模式 ===
   const {data:user}=await sb.auth.getUser();
   const {data:s,error}=await sb.from('rd_samples').insert({
     sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
@@ -2504,7 +2584,12 @@ async function loadPendingReviews(){
   const cnt=document.getElementById('rds-pending-count');
   if(cnt)cnt.textContent=`${data?.length||0} 筆`;
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';return;}
-  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>研發</th><th>延遲</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>`<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.employees?.name||'-'}</td><td>${s.delay_days} 天</td><td>${s.approval_reason||'（隔天補登）'}</td><td><button class="btn btn-primary btn-sm" onclick="approveRdSample('${s.id}')">✓ 通過</button> <button class="btn btn-outline btn-sm" onclick="rejectRdSample('${s.id}')">退回</button></td></tr>`).join('')}</tbody></table>`;
+  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
+    const isEdit=!!s.edit_reason;
+    const typeBadge=isEdit?'<span class="badge badge-gold">📝 修改</span>':`<span class="badge badge-blue">⏰ 補登 ${s.delay_days}天</span>`;
+    const reasonText=isEdit?s.edit_reason:(s.approval_reason||'（隔天補登）');
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${typeBadge}</td><td>${reasonText}</td><td><button class="btn btn-primary btn-sm" onclick="approveRdSample('${s.id}')">✓ 通過</button> <button class="btn btn-outline btn-sm" onclick="rejectRdSample('${s.id}')">退回</button></td></tr>`;
+  }).join('')}</tbody></table>`;
 }
 
 async function approveRdSample(id){
