@@ -1206,8 +1206,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <option value="emulsion_wo">乳劑-油包水（1.0）</option>
           <option value="special">特殊劑型（1.2）</option>
         </select></div>
+        <div class="form-group"><label class="form-label">品項 *</label><input class="form-input" id="rds-item-name" placeholder="如：玫瑰水凝霜、保濕精華液…" /></div>
+        <div class="form-group"><label class="form-label">交樣日期</label><input class="form-input" type="date" id="rds-delivery-date" /></div>
         <div class="form-group"><label class="form-label">版本號</label><input class="form-input" id="rds-version" placeholder="v1, v2..." /></div>
-        <div class="form-group"><label class="form-label">產品代號</label><input class="form-input" id="rds-product" placeholder="JP000001…（選填）" /></div>
       </div>
       <div class="form-group">
         <label class="form-label">客戶（可多選） *</label>
@@ -1282,6 +1283,9 @@ let employees = [];
 let products = [];
 let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
+// 2026-05-18 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣（前端 + DB v10 同步放寬）
+// 補完後改回 false，並執行 v10 SQL 檔尾的「【還原】」區塊把 DB 限制加回來
+const RDS_BACKFILL_RELAXED = true;
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -2376,10 +2380,10 @@ async function loadRdSamples(){
   const el=document.getElementById('rds-list-content');
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
-  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>研發</th><th>劑型</th><th>客戶</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
+  el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const custs=(s.rd_sample_customers||[]).map(rc=>rc.rd_customers?.short_name).filter(Boolean).join('、')||'—';
     const canDel=currentRole==='manager';
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">原因: ${s.approval_reason}</div>`:''}</td><td>${s.delay_days||0} 天</td><td>${canDel?`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`:'—'}</td></tr>`;
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">原因: ${s.approval_reason}</div>`:''}</td><td>${s.delay_days||0} 天</td><td>${canDel?`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`:'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -2390,7 +2394,8 @@ function openRdSampleModal(){
   document.getElementById('rds-emp').value='';
   document.getElementById('rds-formula').value='liquid';
   document.getElementById('rds-version').value='';
-  document.getElementById('rds-product').value='';
+  document.getElementById('rds-item-name').value='';
+  document.getElementById('rds-delivery-date').value='';
   document.getElementById('rds-reason').value='';
   document.getElementById('rds-customers-chips').innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';
   updateRdsDelayInfo();
@@ -2407,6 +2412,7 @@ function updateRdsDelayInfo(){
   if(delay<0){info.style.display='block';info.innerHTML='⚠ 未來日期，請改正';info.style.color='var(--red)';reasonWrap.style.display='none';return;}
   if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，將自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(delay===1){info.style.display='block';info.innerHTML='🟡 隔天補登，將送 ELLA 經理審核（無需寫原因）';info.style.color='#a68a3a';reasonWrap.style.display='none';}
+  else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（原因選填）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
   else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因`;info.style.color='var(--red)';reasonWrap.style.display='block';}
   else{info.style.display='block';info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
 }
@@ -2440,18 +2446,22 @@ async function saveRdSample(){
   const empId=document.getElementById('rds-emp').value;
   const formula=document.getElementById('rds-formula').value;
   const ver=document.getElementById('rds-version').value.trim();
-  const prod=document.getElementById('rds-product').value.trim();
+  const itemName=document.getElementById('rds-item-name').value.trim();
+  const deliveryDate=document.getElementById('rds-delivery-date').value;
   const reason=document.getElementById('rds-reason').value.trim();
   if(!code||!date||!empId||!formula){showToast('請填必填欄位');return;}
+  if(!itemName){showToast('請填品項');return;}
   if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
   const delay=Math.floor((new Date()-new Date(date))/86400000);
-  if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
   if(delay<0){showToast('打樣日期不能是未來');return;}
-  if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
+  if(!RDS_BACKFILL_RELAXED){
+    if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
+    if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
+  }
   const {data:user}=await sb.auth.getUser();
   const {data:s,error}=await sb.from('rd_samples').insert({
     sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
-    version:ver||null,product_code:prod||null,
+    version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
     approval_reason:reason||null,created_by:user.user.id
   }).select('id').single();
   if(error){showToast('儲存失敗：'+error.message);return;}
