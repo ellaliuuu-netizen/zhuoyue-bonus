@@ -764,12 +764,21 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
         <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
 
+        <!-- Card 0: 本月打樣統計 (含跨人合計) -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📊 本月打樣統計</div>
+            <div id="rds-stats-month-label" style="font-size:13px;color:var(--ink-faint)"></div>
+          </div>
+          <div id="rds-stats-content"><div class="empty-state"><div style="font-size:14px">載入中…</div></div></div>
+        </div>
+
         <!-- Card 1: 打樣登記 + 列表 -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">📝 打樣紀錄（當月）</div>
             <div>
-              <select id="rds-month-filter" onchange="loadRdSamples()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
+              <select id="rds-month-filter" onchange="loadRdSamples();loadRdSamplingStats()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
               <select id="rds-emp-filter" onchange="loadRdSamples()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
               <button class="btn btn-gold btn-sm" onclick="openRdSampleModal()">＋ 新增打樣</button>
             </div>
@@ -1288,9 +1297,9 @@ let employees = [];
 let products = [];
 let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
-// 2026-05-18 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣（前端 + DB v10 同步放寬）
-// 補完後改回 false，並執行 v10 SQL 檔尾的「【還原】」區塊把 DB 限制加回來
-const RDS_BACKFILL_RELAXED = true;
+// 2026-05-18 ~ 2026-05-22 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣
+// 補完於 5/22；DB constraint 已用 NOT VALID 加回（既有 42 筆豁免、未來新 row 受限）
+const RDS_BACKFILL_RELAXED = false;
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -2367,9 +2376,39 @@ function initRdSamplingPage(){
   if(empNew)empNew.innerHTML='<option value="">請選擇</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   loadRdCustomers();
   loadRdSamples();
+  loadRdSamplingStats();
   loadPendingReviews();
   loadCarryover();
   loadOverdueLogs();
+}
+
+async function loadRdSamplingStats(){
+  const ym=document.getElementById('rds-month-filter')?.value;
+  if(!ym)return;
+  const [y,m]=ym.split('-').map(Number);
+  const start=`${y}-${String(m).padStart(2,'0')}-01`;
+  const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const {data,error}=await sb.from('rd_samples')
+    .select('employee_id, approval_status, employees(name)')
+    .gte('sample_date',start).lt('sample_date',nm);
+  const el=document.getElementById('rds-stats-content');
+  const lbl=document.getElementById('rds-stats-month-label');
+  if(lbl)lbl.textContent=`(${ym})`;
+  if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  // 以研發部為主，列出全部在職研發；無打樣者顯示 0
+  const rdEmps=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  const APPROVED=new Set(['auto_approved','approved']);
+  const PENDING=new Set(['pending_review']);
+  const stats=rdEmps.map(e=>{
+    const rows=(data||[]).filter(r=>r.employee_id===e.id);
+    const approved=rows.filter(r=>APPROVED.has(r.approval_status)).length;
+    const pending=rows.filter(r=>PENDING.has(r.approval_status)).length;
+    return {name:e.name,total:rows.length,approved,pending};
+  });
+  const totalAll=stats.reduce((s,r)=>s+r.total,0);
+  const apprAll=stats.reduce((s,r)=>s+r.approved,0);
+  const pendAll=stats.reduce((s,r)=>s+r.pending,0);
+  el.innerHTML=`<table><thead><tr><th>研發人員</th><th class="td-right">總件數</th><th class="td-right">✅ 已通過</th><th class="td-right">🟡 待審</th></tr></thead><tbody>${stats.map(s=>`<tr><td>${s.name}</td><td class="td-right"><strong>${s.total}</strong></td><td class="td-right">${s.approved}</td><td class="td-right">${s.pending}</td></tr>`).join('')}<tr style="border-top:2px solid var(--gold);font-weight:bold;background:var(--surface)"><td>團隊合計</td><td class="td-right">${totalAll}</td><td class="td-right">${apprAll}</td><td class="td-right">${pendAll}</td></tr></tbody></table>`;
 }
 
 async function loadRdSamples(){
