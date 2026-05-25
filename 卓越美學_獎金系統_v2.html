@@ -1209,14 +1209,17 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
         <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp"><option value="">請選擇</option></select></div>
-        <div class="form-group"><label class="form-label">劑型 *</label><select class="form-select" id="rds-formula">
-          <option value="">請選擇</option>
-          <option value="liquid">液劑（0.3）</option>
-          <option value="essence">精華液/凝膠/面膜（0.4）</option>
-          <option value="emulsion_ow">乳劑-水包油（0.8）</option>
-          <option value="emulsion_wo">乳劑-油包水（1.0）</option>
-          <option value="special">特殊劑型（1.2）</option>
-        </select></div>
+        <div class="form-group">
+          <label class="form-label">劑型 * <button type="button" class="btn btn-outline btn-sm" onclick="openModal('rdFormulaGuideModal')" style="margin-left:6px;padding:2px 8px;font-size:11px">📖 對照表</button></label>
+          <select class="form-select" id="rds-formula">
+            <option value="">請選擇</option>
+            <option value="liquid">液劑（0.3）</option>
+            <option value="essence">精華液/凝膠/面膜（0.4）</option>
+            <option value="emulsion_ow">乳劑-水包油（0.8）</option>
+            <option value="emulsion_wo">乳劑-油包水（1.0）</option>
+            <option value="special">特殊劑型（1.2）</option>
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">品項 *</label><input class="form-input" id="rds-item-name" placeholder="如：玫瑰水凝霜、保濕精華液…" /></div>
         <div class="form-group"><label class="form-label">交樣日期</label><input class="form-input" type="date" id="rds-delivery-date" /></div>
         <div class="form-group"><label class="form-label">版本號</label><input class="form-input" id="rds-version" placeholder="v1, v2..." /></div>
@@ -1243,6 +1246,35 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newRdSampleModal')">取消</button>
       <button class="btn btn-gold" onclick="saveRdSample()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 劑型對照表（給研發查詢產品歸屬） -->
+<div class="modal-overlay" id="rdFormulaGuideModal">
+  <div class="modal" style="max-width:800px">
+    <div class="modal-header"><div class="modal-title">📖 劑型對照表（v9 規範）</div><button class="modal-close" onclick="closeModal('rdFormulaGuideModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="font-size:13px;background:#f6f0e0;border-left:3px solid var(--gold);margin-bottom:12px">
+        <strong>判定順序（依序套用 L1 → L2 → L3）：</strong><br>
+        <strong>L1 委外 / 自主：</strong>委外代工（研發只對接，不下去配方）→ 歸液劑 (0.3)<br>
+        <strong>L2 自主研發 → 依「成品外觀/質地」分類：</strong>化妝水質地→液劑；精華/凝膠/面膜→精華液；乳液外觀（含凝乳、微乳液、水洗面膜）→乳劑<br>
+        <strong>L3 例外（升級到特殊 1.2）：</strong>研發本人面對的製程穩定性挑戰 — 多相分離、視覺變化、發泡、大顆粒入難攪拌基底、油珠/包覆型活性
+      </div>
+      <table style="width:100%;font-size:13px">
+        <thead><tr style="background:var(--surface)"><th style="width:160px">劑型（基數）</th><th>包含品項</th></tr></thead>
+        <tbody>
+          <tr><td><strong>液劑 (0.3)</strong></td><td>化妝水、噴霧、機能水（柔膚/收斂/調理水）、美容液（純水狀）、卸妝水、起泡慕斯（內料液態靠泵頭起泡）、<strong>凍晶粉/凍乾粉（委外代工，研發對接）</strong></td></tr>
+          <tr><td><strong>精華液 / 凝膠 / 面膜 (0.4)</strong></td><td>精華液（水性/油性/複合，含黏度低的）、保養油、安瓶、凝膠（保濕凍/修護凍/眼周凍/<strong>去角質凝膠</strong>）、凝凍（hydrogel）、油凝膠、單片面膜（無紡布/生物纖維/水凝/果凍）、面膜液、泥膜、撕剝面膜、睡眠面膜、唇膜、眼膜、凍膜、高濃度果酸劑型（精華質地）</td></tr>
+          <tr><td><strong>乳劑 - 水包油 O/W (0.8)</strong></td><td>乳液、乳霜（清爽型、含小顆粒易攪拌）、BB/CC 霜（水包油）、防曬乳（水包油）、凝乳、微乳液、水洗面膜（外觀偏乳液）、高濃度果酸劑型（乳液質地）</td></tr>
+          <tr><td><strong>乳劑 - 油包水 W/O (1.0)</strong></td><td>防曬霜（油包水）、隔離霜（油包水）、厚重型乳霜（油包水）、修護膏（油性）</td></tr>
+          <tr><td><strong>特殊劑型 (1.2)</strong></td><td><strong>雙層液、三層劑型</strong>、視覺變化劑型（變色/變泡/顯色）、發泡型面膜、大顆顆粒 + 水相凝膠（難攪拌）、油珠劑型（包覆型活性成分）</td></tr>
+        </tbody>
+      </table>
+      <div class="info-box" style="font-size:12px;color:var(--ink-faint);margin-top:12px">⚠️ 歸屬錯誤直接影響獎金（基數 0.3 ~ 1.2 差 4 倍）。歸屬有疑問請先諮詢經理或課長，不要憑感覺選</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gold" onclick="closeModal('rdFormulaGuideModal')">了解</button>
     </div>
   </div>
 </div>
@@ -2332,10 +2364,10 @@ let rdsSelectedCustomers=[];  // 新增 modal 內已選的客戶
 let currentEditId=null;       // 編輯模式下的 row id；null=新增模式
 
 function rdSamplingBonus(count){
+  // v8 公式（2026/05 文件）：< 18 → 0；≥ 18 → 1,000 + (件數 − 18) × 55；上限 88 件
   const eff=Math.min(count,88);
   if(eff<18)return 0;
-  if(eff<=24)return 1000;
-  return 1000+(eff-24)*50;
+  return 1000+(eff-18)*55;
 }
 
 function rdFormulaLabel(t){const m={liquid:'液劑',essence:'精華液/凝膠/面膜',emulsion_ow:'乳劑(水包油)',emulsion_wo:'乳劑(油包水)',special:'特殊劑型'};return m[t]||t;}
