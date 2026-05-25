@@ -2500,6 +2500,8 @@ function updateRdsDelayInfo(){
   const info=document.getElementById('rds-delay-info');
   const reasonWrap=document.getElementById('rds-reason-wrap');
   if(delay<0){info.style.display='block';info.innerHTML='⚠ 未來日期，請改正';info.style.color='var(--red)';reasonWrap.style.display='none';return;}
+  // 修改既有 row 永遠放行；UI 只顯示參考資訊不擋
+  if(currentEditId){info.style.display='block';info.innerHTML=`✏️ 修改模式：延遲 ${delay} 天可直接送審`;info.style.color='#5d8aa8';reasonWrap.style.display='none';return;}
   if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，將自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(delay===1){info.style.display='block';info.innerHTML='🟡 隔天補登，將送 ELLA 經理審核（無需寫原因）';info.style.color='#a68a3a';reasonWrap.style.display='none';}
   else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（原因選填）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
