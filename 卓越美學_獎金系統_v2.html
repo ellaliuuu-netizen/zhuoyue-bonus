@@ -780,7 +780,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div>
               <select id="rds-month-filter" onchange="loadRdSamples();loadRdSamplingStats()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
               <select id="rds-emp-filter" onchange="loadRdSamples()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
-              <button class="btn btn-outline btn-sm" onclick="openModal('newRdCustomerModal')" style="margin-right:8px">＋ 新客戶</button>
+              <button class="btn btn-outline btn-sm" onclick="openRdCustomerManagerModal()" style="margin-right:8px">📋 管理客戶</button>
+              <button class="btn btn-outline btn-sm" onclick="openRdCustomerModal()" style="margin-right:8px">＋ 新客戶</button>
               <button class="btn btn-gold btn-sm" onclick="openRdSampleModal()">＋ 新增打樣</button>
             </div>
           </div>
@@ -1279,10 +1280,10 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
-<!-- 新增客戶（短名稱關鍵字） -->
+<!-- 新增 / 編輯客戶（短名稱關鍵字） -->
 <div class="modal-overlay" id="newRdCustomerModal">
   <div class="modal" style="max-width:480px">
-    <div class="modal-header"><div class="modal-title">＋ 新增客戶</div><button class="modal-close" onclick="closeModal('newRdCustomerModal')">✕</button></div>
+    <div class="modal-header"><div class="modal-title" id="rdc-modal-title">＋ 新增客戶</div><button class="modal-close" onclick="closeModal('newRdCustomerModal')">✕</button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">關鍵字短名稱 *</label><input class="form-input" id="rdc-short" placeholder="如：新享" /></div>
       <div class="form-group"><label class="form-label">完整名稱</label><input class="form-input" id="rdc-full" placeholder="如：新享生技股份有限公司（選填）" /></div>
@@ -1290,7 +1291,47 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newRdCustomerModal')">取消</button>
-      <button class="btn btn-gold" onclick="saveNewRdCustomer()">儲存</button>
+      <button class="btn btn-gold" onclick="saveRdCustomer()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 客戶管理 modal -->
+<div class="modal-overlay" id="rdCustomerManagerModal">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-header"><div class="modal-title">📋 客戶管理</div><button class="modal-close" onclick="closeModal('rdCustomerManagerModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="font-size:12px;background:#f6f0e0;border-left:3px solid var(--gold);margin-bottom:10px">
+        <strong>操作說明：</strong>
+        ✏️ 編輯客戶資料（短名稱/完整名稱）｜
+        🗑️ 刪除（僅限無打樣紀錄者）｜
+        🔗 合併（重複客戶：打樣紀錄會轉到目標客戶，source 客戶被刪）
+      </div>
+      <div id="rdc-mgr-content"><div class="empty-state"><div style="font-size:14px">載入中…</div></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="openRdCustomerModal()">＋ 新增客戶</button>
+      <button class="btn btn-gold" onclick="closeModal('rdCustomerManagerModal')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 合併客戶 modal -->
+<div class="modal-overlay" id="rdCustomerMergeModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title">🔗 合併客戶</div><button class="modal-close" onclick="closeModal('rdCustomerMergeModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="font-size:13px;background:#ffe5e5;border-left:3px solid var(--red);margin-bottom:10px">
+        <strong>⚠️ 不可逆操作</strong><br>
+        source 客戶的所有打樣紀錄將轉移到 target 客戶；source 客戶會被永久刪除。audit_logs 會完整記錄此操作。
+      </div>
+      <div class="form-group"><label class="form-label">Source（要被合併並刪除的客戶）</label><div id="rdc-merge-source" style="padding:8px;background:var(--surface);border-radius:6px;font-weight:bold"></div></div>
+      <div class="form-group"><label class="form-label">Target（要保留的客戶 *）</label><select class="form-select" id="rdc-merge-target"><option value="">請選擇</option></select></div>
+      <div id="rdc-merge-preview" class="info-box" style="font-size:13px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('rdCustomerMergeModal')">取消</button>
+      <button class="btn btn-gold" onclick="confirmMergeRdCustomer()">確認合併</button>
     </div>
   </div>
 </div>
@@ -2629,20 +2670,121 @@ async function saveRdSample(){
   loadRdSamples();loadPendingReviews();loadOverdueLogs();
 }
 
-async function saveNewRdCustomer(){
+let currentEditCustomerId=null;
+let mergeSourceCustomerId=null;
+
+function openRdCustomerModal(){
+  currentEditCustomerId=null;
+  document.getElementById('rdc-modal-title').textContent='＋ 新增客戶';
+  document.getElementById('rdc-short').value='';
+  document.getElementById('rdc-full').value='';
+  openModal('newRdCustomerModal');
+}
+
+function openEditRdCustomerModal(id){
+  const c=rdCustomers.find(x=>x.id===id);
+  if(!c){showToast('找不到客戶');return;}
+  currentEditCustomerId=id;
+  document.getElementById('rdc-modal-title').textContent='✏️ 編輯客戶';
+  document.getElementById('rdc-short').value=c.short_name||'';
+  document.getElementById('rdc-full').value=c.full_name||'';
+  openModal('newRdCustomerModal');
+}
+
+async function saveRdCustomer(){
   const short=document.getElementById('rdc-short').value.trim();
   const full=document.getElementById('rdc-full').value.trim();
   if(!short){showToast('請填關鍵字短名稱');return;}
+  if(currentEditCustomerId){
+    // 編輯模式
+    const {error}=await sb.from('rd_customers').update({short_name:short,full_name:full||null}).eq('id',currentEditCustomerId);
+    if(error){showToast('修改失敗：'+error.message);return;}
+    showToast(`✓ 已更新客戶「${short}」`);
+    await loadRdCustomers();
+    closeModal('newRdCustomerModal');
+    if(document.querySelector('#rdCustomerManagerModal').classList.contains('active'))renderRdCustomerManager();
+    return;
+  }
+  // 新增模式
   const {data,error}=await sb.from('rd_customers').insert({short_name:short,full_name:full||null,source:'manually_added'}).select().single();
   if(error){showToast('儲存失敗：'+error.message);return;}
   showToast(`✓ 已新增客戶「${short}」`);
   await loadRdCustomers();
-  // 自動加入當前選擇
-  if(data)rdsSelectedCustomers.push(data.id);
-  renderRdsCustomerChips();
-  document.getElementById('rdc-short').value='';
-  document.getElementById('rdc-full').value='';
+  // 若打樣 modal 也開著，自動加入當前選擇
+  if(data && document.querySelector('#newRdSampleModal').classList.contains('active')){
+    rdsSelectedCustomers.push(data.id);
+    renderRdsCustomerChips();
+  }
   closeModal('newRdCustomerModal');
+  if(document.querySelector('#rdCustomerManagerModal').classList.contains('active'))renderRdCustomerManager();
+}
+
+async function openRdCustomerManagerModal(){
+  await loadRdCustomers();
+  await renderRdCustomerManager();
+  openModal('rdCustomerManagerModal');
+}
+
+async function renderRdCustomerManager(){
+  const el=document.getElementById('rdc-mgr-content');
+  // 撈每個客戶的打樣綁定筆數
+  const {data:counts}=await sb.from('rd_sample_customers').select('customer_id');
+  const countMap={};
+  (counts||[]).forEach(r=>{countMap[r.customer_id]=(countMap[r.customer_id]||0)+1;});
+  if(!rdCustomers.length){el.innerHTML='<div class="empty-state"><div style="font-size:14px">尚無客戶</div></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>短名稱</th><th>完整名稱</th><th class="td-right">打樣筆數</th><th>動作</th></tr></thead><tbody>${rdCustomers.map(c=>{
+    const cnt=countMap[c.id]||0;
+    const fullDisplay=c.full_name||'<span style="color:var(--red);font-size:12px">⚠ 未填</span>';
+    const delDisabled=cnt>0?'disabled title="該客戶有打樣紀錄，請改用合併"':'';
+    return `<tr><td><strong>${c.short_name}</strong></td><td>${fullDisplay}</td><td class="td-right">${cnt}</td><td><button class="btn btn-outline btn-sm" onclick="openEditRdCustomerModal('${c.id}')">✏️ 編輯</button> <button class="btn btn-outline btn-sm" onclick="deleteRdCustomer('${c.id}')" ${delDisabled}>🗑️ 刪除</button> <button class="btn btn-outline btn-sm" onclick="openMergeRdCustomerModal('${c.id}')">🔗 合併</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+async function deleteRdCustomer(id){
+  const c=rdCustomers.find(x=>x.id===id);
+  if(!c)return;
+  const {data}=await sb.from('rd_sample_customers').select('id').eq('customer_id',id).limit(1);
+  if(data&&data.length){showToast('該客戶有打樣紀錄，請改用合併');return;}
+  if(!confirm(`確定刪除客戶「${c.short_name}」？\n（無打樣紀錄、可安全刪除）`))return;
+  const {error}=await sb.from('rd_customers').delete().eq('id',id);
+  if(error){showToast('刪除失敗：'+error.message);return;}
+  showToast(`✓ 已刪除客戶「${c.short_name}」`);
+  await loadRdCustomers();
+  renderRdCustomerManager();
+}
+
+function openMergeRdCustomerModal(sourceId){
+  const c=rdCustomers.find(x=>x.id===sourceId);
+  if(!c)return;
+  mergeSourceCustomerId=sourceId;
+  document.getElementById('rdc-merge-source').textContent=`${c.short_name}${c.full_name?' ('+c.full_name+')':''}`;
+  const sel=document.getElementById('rdc-merge-target');
+  sel.innerHTML='<option value="">請選擇</option>'+rdCustomers.filter(x=>x.id!==sourceId).map(x=>`<option value="${x.id}">${x.short_name}${x.full_name?' ('+x.full_name+')':''}</option>`).join('');
+  document.getElementById('rdc-merge-preview').style.display='none';
+  sel.onchange=async ()=>{
+    const tid=sel.value;
+    if(!tid){document.getElementById('rdc-merge-preview').style.display='none';return;}
+    const {data}=await sb.from('rd_sample_customers').select('id').eq('customer_id',sourceId);
+    const cnt=data?.length||0;
+    const tc=rdCustomers.find(x=>x.id===tid);
+    document.getElementById('rdc-merge-preview').innerHTML=`將把「<strong>${c.short_name}</strong>」的 <strong>${cnt}</strong> 筆打樣綁定轉移到「<strong>${tc.short_name}</strong>」，然後刪除「${c.short_name}」`;
+    document.getElementById('rdc-merge-preview').style.display='block';
+  };
+  openModal('rdCustomerMergeModal');
+}
+
+async function confirmMergeRdCustomer(){
+  const tid=document.getElementById('rdc-merge-target').value;
+  if(!tid){showToast('請選擇目標客戶');return;}
+  if(!mergeSourceCustomerId){showToast('無 source 客戶');return;}
+  if(!confirm('確定合併？此動作不可逆。'))return;
+  const {data,error}=await sb.rpc('merge_rd_customers',{p_source_id:mergeSourceCustomerId,p_target_id:tid});
+  if(error){showToast('合併失敗：'+error.message);return;}
+  showToast(`✓ 已合併（轉移 ${data} 筆打樣綁定）`);
+  closeModal('rdCustomerMergeModal');
+  await loadRdCustomers();
+  renderRdCustomerManager();
+  if(document.querySelector('#page-rd-sampling').classList.contains('active'))loadRdSamples();
 }
 
 async function deleteRdSample(id){
