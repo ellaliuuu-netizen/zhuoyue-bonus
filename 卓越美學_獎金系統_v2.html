@@ -2546,7 +2546,8 @@ async function saveRdSample(){
   if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
   const delay=Math.floor((new Date()-new Date(date))/86400000);
   if(delay<0){showToast('打樣日期不能是未來');return;}
-  if(!RDS_BACKFILL_RELAXED){
+  // 7 天/2 天原因限制僅對「新增模式 + 非補登放寬」生效；修改既有 row 永遠放行
+  if(!currentEditId && !RDS_BACKFILL_RELAXED){
     if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
     if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
   }
