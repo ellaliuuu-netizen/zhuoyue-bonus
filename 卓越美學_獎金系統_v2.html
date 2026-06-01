@@ -695,9 +695,17 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="inner-tab" onclick="switchInner(this,'rd-collab-sec')">多人協作分配</div>
         </div>
         <div id="rd-calc-sec">
+          <div class="card" style="border-color:var(--gold)">
+            <div class="card-header">
+              <div class="card-title">📊 從本季訂單自動算研發部全員獎金（40% 件數比例 + 60% 最後確樣加成）</div>
+              <button class="btn btn-gold btn-sm" onclick="calcRdAllFromOrders()">▶ 一鍵試算</button>
+            </div>
+            <div class="info-box" style="font-size:12px">會自動撈本季每張訂單的研發貢獻紀錄（含件數 + 最後確樣 flag），套 40/60 拆分公式，列出每位研發的總獎金。試算結果可以一鍵儲存到獎金紀錄。</div>
+            <div id="rd-auto-result" style="display:none"></div>
+          </div>
           <div class="card">
             <div class="card-header">
-              <div class="card-title">🔬 研發人員試算</div>
+              <div class="card-title">🔬 研發人員試算（手動）</div>
               <span style="font-size:12px;color:var(--ink-faint)">A值：<strong id="rd-aval-disp" style="color:var(--blue)">3,000</strong> 元</span>
             </div>
             <div class="form-row">
@@ -1121,8 +1129,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="form-group"><label class="form-label">備註</label><input class="form-input" id="o-note" placeholder="選填" /></div>
       </div>
       <div class="form-group">
-        <label class="form-label">負責研發（可多選，第一個為主責）</label>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <label class="form-label" style="margin:0">負責研發（可多選；勾「最後確樣」那位獨得成交獎金 60% 加成）</label>
+          <button type="button" class="btn btn-outline btn-sm" onclick="openRdFromSamplesModal()">🔍 從打樣紀錄帶研發</button>
+        </div>
         <div id="o-rd-chips" class="emp-select-grid"></div>
+        <div id="o-rd-distribution" style="font-size:12px;color:#a68a3a;margin-top:8px;padding:8px;background:rgba(184,148,90,.08);border-radius:6px;display:none"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1197,6 +1209,29 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('newEmpModal')">取消</button>
       <button class="btn btn-gold" onclick="saveEmployee()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 從打樣紀錄帶研發到訂單 -->
+<div class="modal-overlay" id="rdFromSamplesModal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <div class="modal-title">🔍 從打樣紀錄帶研發</div>
+      <button class="modal-close" onclick="closeModal('rdFromSamplesModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:12px">
+        <strong>抓取條件：</strong>品名跟訂單品項相似（寬鬆比對）+ 打樣日近 6 個月內 + 已通過審核<br>
+        <strong>勾選後：</strong>系統自動算每位研發的打樣件數、助理打樣自動歸給協助對象；最後勾選一位「最後確樣」獨得 60% 加成
+      </div>
+      <div id="rd-from-samples-list">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div>載入中…</div></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('rdFromSamplesModal')">取消</button>
+      <button class="btn btn-gold" onclick="confirmRdFromSamples()">✓ 帶入訂單</button>
     </div>
   </div>
 </div>
@@ -1862,6 +1897,9 @@ function resetOrderModal() {
   document.getElementById('o-tax-incl').value = 'true';
   document.getElementById('o-sales').value = '';
   document.querySelectorAll('#o-rd-chips .emp-chip.active').forEach(c=>c.classList.remove('active'));
+  document.getElementById('o-rd-chips').querySelectorAll('.emp-chip').forEach(c=>{c.dataset.sampleCount=0; c.dataset.isFinal='false';});
+  const dist=document.getElementById('o-rd-distribution'); if(dist){dist.style.display='none'; dist.innerHTML='';}
+  window._orderRdSamplesPicked = null;
   document.getElementById('o-items-tbody').innerHTML = '';
   orderItemRow = 0;
   addOrderItem();
@@ -1949,6 +1987,110 @@ function applyParsedPDF(text) {
   }
 }
 
+// ===== A 方向：從打樣紀錄帶研發 =====
+// 從訂單品項清單抓品名做寬鬆比對
+function _normalizeName(s){return (s||'').replace(/\s+/g,'').replace(/[（）()【】\[\]［］]/g,'').toLowerCase();}
+function _fuzzyMatch(orderName, sampleName){
+  const a=_normalizeName(orderName), b=_normalizeName(sampleName);
+  if(!a||!b) return false;
+  if(a===b) return true;
+  if(a.includes(b)||b.includes(a)) return true;
+  // 至少 3 字重疊
+  let common=0; for(const ch of new Set(a)) if(b.includes(ch)) common++;
+  return common >= Math.min(3, Math.floor(Math.min(a.length,b.length)*0.6));
+}
+
+async function openRdFromSamplesModal(){
+  // 從訂單 modal 抓所有品項的品名
+  const itemNames=Array.from(document.querySelectorAll('#o-items-tbody .oi-name')).map(i=>i.value.trim()).filter(Boolean);
+  if(!itemNames.length){showToast('請先填訂單品項');return;}
+  openModal('rdFromSamplesModal');
+  document.getElementById('rd-from-samples-list').innerHTML='<div class="empty-state"><div class="empty-icon">⏳</div><div>載入中…</div></div>';
+  // 撈近 6 個月已通過審核的打樣
+  const sixMonthsAgo=new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth()-6);
+  const dateStr=sixMonthsAgo.toISOString().slice(0,10);
+  const {data,error}=await sb.from('rd_samples')
+    .select('*, employees!rd_samples_employee_id_fkey(name, role_level, role_title)')
+    .gte('sample_date', dateStr)
+    .in('approval_status',['auto_approved','approved'])
+    .order('sample_date',{ascending:false});
+  if(error){document.getElementById('rd-from-samples-list').innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  // 寬鬆比對：列出符合的
+  const matches=(data||[]).filter(s=>itemNames.some(n=>_fuzzyMatch(n,s.item_name)));
+  if(!matches.length){
+    document.getElementById('rd-from-samples-list').innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div><div>近 6 個月找不到「${itemNames.join('、')}」的打樣紀錄</div><div style="font-size:12px;color:var(--ink-faint);margin-top:8px">（這代表這張訂單的研發歸屬要手動勾選下方研發 chip）</div></div>`;
+    return;
+  }
+  // 渲染表格 + checkbox + radio for final confirmer
+  document.getElementById('rd-from-samples-list').innerHTML=`
+    <table>
+      <thead><tr><th style="width:40px">勾選</th><th style="width:60px">最後確樣</th><th>樣品編號</th><th>品名</th><th>研發</th><th>劑型</th><th>打樣日</th></tr></thead>
+      <tbody>${matches.map(s=>{
+        const assistedName=s.assisted_for_employee_id?(employees.find(e=>e.id===s.assisted_for_employee_id)?.name||''):'';
+        const empCell=assistedName?`${s.employees?.name||'-'}<br><span style="font-size:11px;color:#a68a3a">🤝 協助 ${assistedName}</span>`:(s.employees?.name||'-');
+        const isAssistant=s.employees?.role_level==='assistant';
+        return `<tr>
+          <td><input type="checkbox" class="rd-sample-check" data-sample-id="${s.id}" data-emp-id="${s.employee_id}" data-assisted-for="${s.assisted_for_employee_id||''}" data-is-assistant="${isAssistant}"></td>
+          <td><input type="radio" name="rd-final" class="rd-sample-final" data-sample-id="${s.id}" ${isAssistant?'disabled title="助理不能當最後確樣"':''}></td>
+          <td><strong>${s.sample_code}</strong></td>
+          <td>${s.item_name||'—'}</td>
+          <td>${empCell}</td>
+          <td>${rdFormulaLabel(s.formula_type)}</td>
+          <td>${s.sample_date}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--ink-faint);margin-top:8px">提示：勾選後系統自動算每位研發的件數；助理打樣自動歸給協助對象；最後確樣那位獨得 60% 加成</div>
+  `;
+}
+
+function confirmRdFromSamples(){
+  const checked=Array.from(document.querySelectorAll('.rd-sample-check:checked'));
+  if(!checked.length){showToast('請至少勾一筆打樣紀錄');return;}
+  const finalRadio=document.querySelector('.rd-sample-final:checked');
+  if(!finalRadio){showToast('請指定一筆「最後確樣」');return;}
+  // 算每位研發的件數（助理 → 歸到協助對象）
+  const counts={}; // empId -> count
+  let finalEmpId=null;
+  checked.forEach(cb=>{
+    const isAssistant=cb.dataset.isAssistant==='true';
+    const targetId=isAssistant?cb.dataset.assistedFor:cb.dataset.empId;
+    if(!targetId) return;
+    counts[targetId]=(counts[targetId]||0)+1;
+    if(cb.dataset.sampleId===finalRadio.dataset.sampleId){
+      const isAss=cb.dataset.isAssistant==='true';
+      finalEmpId=isAss?cb.dataset.assistedFor:cb.dataset.empId;
+    }
+  });
+  if(!Object.keys(counts).length){showToast('沒有可歸戶的研發（勾的都是助理但沒填協助對象？）');return;}
+  // 寫回訂單 modal：清掉舊 chip 狀態 → 啟用對應 chip + 設件數 + 最後確樣
+  const chipContainer=document.getElementById('o-rd-chips');
+  chipContainer.querySelectorAll('.emp-chip').forEach(c=>{
+    c.classList.remove('active');
+    c.dataset.sampleCount=0;
+    c.dataset.isFinal='false';
+    const id=c.dataset.id;
+    if(counts[id]){
+      c.classList.add('active');
+      c.dataset.sampleCount=counts[id];
+      if(id===finalEmpId) c.dataset.isFinal='true';
+    }
+  });
+  // 顯示分布
+  const dist=document.getElementById('o-rd-distribution');
+  const lines=Object.entries(counts).map(([id,cnt])=>{
+    const emp=employees.find(e=>e.id===id);
+    const isFinal=id===finalEmpId;
+    return `<div>${emp?.name||'?'}：${cnt} 件${isFinal?' <span style="color:var(--gold)">⭐ 最後確樣（+60% 加成）</span>':''}</div>`;
+  });
+  dist.innerHTML=`<strong>從打樣帶入的研發分布：</strong>${lines.join('')}`;
+  dist.style.display='block';
+  window._orderRdSamplesPicked=true;
+  closeModal('rdFromSamplesModal');
+  showToast('✓ 已帶入研發人員');
+}
+// ===== A 方向 END =====
+
 async function generateOrderNo(dateStr) {
   const ymd = dateStr.replace(/-/g,'');
   const { data } = await sb.from('orders').select('order_no').like('order_no', `${ymd}-%`);
@@ -2026,8 +2168,14 @@ async function saveOrder() {
   // 研發
   const selectedRd = Array.from(document.querySelectorAll('#o-rd-chips .emp-chip.active'));
   if (selectedRd.length > 0) {
+    // 若有從打樣帶入，使用 chip 上的 sample_count / is_final_confirmer
+    // 否則 fallback 舊行為：每人 sample_count=1、第一個為主責
+    const fromSamples = window._orderRdSamplesPicked === true;
     await sb.from('order_rd_staff').insert(selectedRd.map((chip,i) => ({
-      order_id: order.id, employee_id: chip.dataset.id, is_final_confirmer: i===0
+      order_id: order.id,
+      employee_id: chip.dataset.id,
+      sample_count: fromSamples ? parseInt(chip.dataset.sampleCount||'1') : 1,
+      is_final_confirmer: fromSamples ? (chip.dataset.isFinal==='true') : (i===0)
     })));
   }
 
@@ -2381,6 +2529,90 @@ function addCollabRow(){
   c.appendChild(d);
 }
 function removeCollabRow(btn){if(document.getElementById('collab-persons').children.length>1)btn.closest('div[style]').remove();}
+// ===== 從本季訂單自動算研發部獎金（40% 件數比例 + 60% 最後確樣加成）=====
+async function calcRdAllFromOrders(){
+  const {data:orders,error}=await sb.from('orders')
+    .select('id, order_no, customer_name, product_name, formula_type, order_rd_staff(employee_id, sample_count, is_final_confirmer, employees!order_rd_staff_employee_id_fkey(name, role_title, role_level))')
+    .eq('year',appSettings.year).eq('quarter',appSettings.quarter);
+  if(error){showToast('載入失敗：'+error.message);return;}
+  if(!orders||!orders.length){
+    document.getElementById('rd-auto-result').style.display='block';
+    document.getElementById('rd-auto-result').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div>本季尚無訂單</div></div>';
+    return;
+  }
+  const aValue=appSettings.aValue;
+  const rdMaxBase=appSettings.rdMaxBase;
+  // 每位研發累積：name, role_title, role_level, items[{order_no, customer, base, extra, samples}]
+  const empAcc={};
+  const orderRows=[];
+  for(const o of orders){
+    const rdStaff=(o.order_rd_staff||[]).filter(rs=>rs.employees && rs.employees.role_level!=='assistant'); // 助理不領這份
+    if(!rdStaff.length){orderRows.push({...o, _note:'⚠ 無研發歸屬'});continue;}
+    const totalSamples=rdStaff.reduce((s,r)=>s+(r.sample_count||0),0);
+    if(totalSamples===0){orderRows.push({...o, _note:'⚠ 件數全為 0'});continue;}
+    const eb=Math.min(rdTypes[o.formula_type]?.base||0, rdMaxBase);
+    const orderTotal=Math.round(aValue*eb*totalSamples);
+    const baseShare40=Math.round(orderTotal*0.4);
+    const finalShare60=Math.round(orderTotal*0.6);
+    const finalConfirmer=rdStaff.find(r=>r.is_final_confirmer);
+    const distribution=[];
+    rdStaff.forEach(r=>{
+      const eid=r.employee_id;
+      const base=Math.round(baseShare40*(r.sample_count/totalSamples));
+      const extra=(finalConfirmer && r.employee_id===finalConfirmer.employee_id)?finalShare60:0;
+      const total=base+extra;
+      distribution.push({name:r.employees.name, samples:r.sample_count, base, extra, total, isFinal:r.is_final_confirmer});
+      if(!empAcc[eid]){
+        empAcc[eid]={id:eid, name:r.employees.name, role_title:r.employees.role_title, role_level:r.employees.role_level, total:0, items:[]};
+      }
+      empAcc[eid].total+=total;
+      empAcc[eid].items.push({order_no:o.order_no, customer:o.customer_name, product:o.product_name, samples:r.sample_count, base, extra, total});
+    });
+    orderRows.push({...o, _orderTotal:orderTotal, _distribution:distribution, _totalSamples:totalSamples});
+  }
+  // 渲染：分兩段，先每張訂單細節，再每人加總
+  const orderHtml=orderRows.map(o=>{
+    if(o._note) return `<tr><td>${o.order_no}</td><td>${o.customer_name}</td><td>${o.product_name||'—'}</td><td colspan="4" style="color:var(--red)">${o._note}</td></tr>`;
+    const distLines=o._distribution.map(d=>`${d.name}${d.isFinal?'⭐':''} ${d.samples}件→${fmt(d.total)}`).join('｜');
+    return `<tr><td>${o.order_no}</td><td>${o.customer_name}</td><td>${o.product_name||'—'}</td><td>${rdFormulaLabel(o.formula_type)||'—'}</td><td class="td-right">${o._totalSamples}</td><td class="td-right">${fmt(o._orderTotal)}</td><td style="font-size:11px">${distLines}</td></tr>`;
+  }).join('');
+  const empArr=Object.values(empAcc).sort((a,b)=>b.total-a.total);
+  const empHtml=empArr.map(e=>{
+    const itemsLine=e.items.map(i=>`${i.order_no}: ${i.samples}件 = ${fmt(i.total)}`).join('<br>');
+    return `<tr><td><strong>${e.name}</strong><br><span style="font-size:11px;color:var(--ink-faint)">${e.role_title}</span></td><td style="font-size:11px">${itemsLine}</td><td class="td-right"><strong style="color:var(--gold);font-size:16px">${fmt(e.total)}</strong></td></tr>`;
+  }).join('');
+  document.getElementById('rd-auto-result').style.display='block';
+  document.getElementById('rd-auto-result').innerHTML=`
+    <h4 style="margin:12px 0 8px;font-size:14px">📦 本季訂單明細</h4>
+    <div style="overflow-x:auto"><table><thead><tr><th>訂單編號</th><th>客戶</th><th>品名</th><th>劑型</th><th class="td-right">總件數</th><th class="td-right">訂單獎金</th><th>分配</th></tr></thead><tbody>${orderHtml||'<tr><td colspan="7" style="text-align:center;color:var(--ink-faint)">無資料</td></tr>'}</tbody></table></div>
+    <h4 style="margin:16px 0 8px;font-size:14px">👤 每位研發加總（本季）</h4>
+    <div style="overflow-x:auto"><table><thead><tr><th>姓名</th><th>各訂單明細</th><th class="td-right">本季總獎金</th></tr></thead><tbody>${empHtml||'<tr><td colspan="3" style="text-align:center;color:var(--ink-faint)">無資料</td></tr>'}</tbody></table></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-gold manager-only" onclick='saveRdAllFromOrders(${JSON.stringify(empArr).replace(/'/g,"&#39;")})'>💾 一鍵儲存所有研發獎金</button>
+      <span style="font-size:11px;color:var(--ink-faint);align-self:center">儲存後會以 record_type=quarterly 寫入獎金紀錄；同人同季會被覆蓋</span>
+    </div>
+  `;
+}
+
+async function saveRdAllFromOrders(empArr){
+  if(!Array.isArray(empArr)||!empArr.length){showToast('沒有可儲存的紀錄');return;}
+  if(!confirm(`確定要儲存 ${empArr.length} 位研發本季獎金嗎？同人同季紀錄會被覆蓋。`))return;
+  let ok=0, fail=0;
+  for(const e of empArr){
+    const emp=employees.find(x=>x.id===e.id);
+    if(!emp){fail++;continue;}
+    const pr=probationRatio(emp);
+    const finalBonus=Math.round(e.total*pr.ratio);
+    const detail=`自動帶入｜${e.items.length} 張訂單｜${e.items.map(i=>`${i.order_no}(${i.samples}件)`).join(', ')}${pr.note}`;
+    const r=await saveRecord({dept:'研發部', name:e.name, bonus:finalBonus, role_title:e.role_title, detail, record_type:'quarterly'});
+    if(r) ok++; else fail++;
+  }
+  showToast(`✓ 儲存完成：成功 ${ok} 筆${fail?'，失敗 '+fail+' 筆':''}`);
+  // 重新整理團隊彙整
+  if(typeof calcRdTeam==='function') await calcRdTeam();
+}
+// ===== 自動算研發部獎金 END =====
+
 function calcCollab(){
   const type=document.getElementById('collab-type').value;
   const info=rdTypes[type];
@@ -2394,13 +2626,13 @@ function calcCollab(){
   });
   const totalSamples=persons.reduce((s,p)=>s+p.samples,0);
   const results=persons.map(p=>{
-    const base=totalSamples>0?Math.round(totalBonus*.5*(p.samples/totalSamples)):0;
-    const extra=p.isWinner?Math.round(totalBonus*.5):0;
+    const base=totalSamples>0?Math.round(totalBonus*.4*(p.samples/totalSamples)):0;
+    const extra=p.isWinner?Math.round(totalBonus*.6):0;
     return{...p,base,extra,total:base+extra};
   });
   show('collab-result');
   document.getElementById('collab-result-content').innerHTML=`<p style="margin-bottom:10px"><strong>案件總獎金：${fmt(totalBonus)}</strong>（${info.name}）</p>
-    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎50%</th><th class="td-right">成交50%</th><th class="td-right">合計</th></tr></thead>
+    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎40%</th><th class="td-right">成交60%</th><th class="td-right">合計</th></tr></thead>
     <tbody>${results.map(r=>`<tr><td>${r.name}${r.isWinner?' <span class="badge badge-gold">確認者</span>':''}</td><td class="td-right">${r.samples}</td><td class="td-right">${fmt(r.base)}</td><td class="td-right">${r.extra?fmt(r.extra):'—'}</td><td class="td-right"><strong>${fmt(r.total)}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 
