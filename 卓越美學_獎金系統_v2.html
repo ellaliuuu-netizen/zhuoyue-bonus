@@ -2480,7 +2480,8 @@ async function saveRd() {
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(total)}`);
 }
 async function calcRdTeam() {
-  const {data}=await sb.from('bonus_records').select('*').eq('dept','研發部').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
+  // 只算 quarterly（成交獎金）池子，排除 team_bonus 自己（避免顯示時池子膨脹、與儲存值不一致）
+  const {data}=await sb.from('bonus_records').select('*').eq('dept','研發部').eq('year',appSettings.year).eq('quarter',appSettings.quarter).eq('record_type','quarterly');
   const el=document.getElementById('rd-team-content');
   if (!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">尚未儲存研發人員資料</div></div>';return;}
   const allBase=data.reduce((s,r)=>s+r.bonus,0);
