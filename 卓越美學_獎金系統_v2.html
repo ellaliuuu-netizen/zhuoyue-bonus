@@ -1209,7 +1209,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
-        <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp"><option value="">請選擇</option></select></div>
+        <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp" onchange="updateAssistedForVisibility()"><option value="">請選擇</option></select></div>
+        <div class="form-group" id="rds-assisted-for-wrap" style="display:none;grid-column:span 2">
+          <label class="form-label" style="color:#a68a3a">🤝 協助的研發 *（研發助理協助打樣時必填）</label>
+          <select class="form-select" id="rds-assisted-for"><option value="">請選擇</option></select>
+          <div style="font-size:11px;color:var(--ink-faint);margin-top:4px">研發助理打樣不算個人獎金；本筆紀錄會歸到「協助對象」名下，由 ELLA 建訂單時帶入</div>
+        </div>
         <div class="form-group">
           <label class="form-label">劑型 * <button type="button" class="btn btn-outline btn-sm" onclick="openModal('rdFormulaGuideModal')" style="margin-left:6px;padding:2px 8px;font-size:11px">📖 對照表</button></label>
           <select class="form-select" id="rds-formula">
@@ -1235,7 +1240,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
       </div>
       <div class="form-group" id="rds-reason-wrap" style="display:none">
-        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（2 天以上需填寫，會送 ELLA 經理審核）</label>
+        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（3 天以上需填寫，會送 ELLA 經理審核）</label>
         <textarea class="form-input" id="rds-reason" rows="2" placeholder="如：出差、連假、客戶緊急…"></textarea>
       </div>
       <div class="form-group" id="rds-edit-reason-wrap" style="display:none">
@@ -2509,7 +2514,9 @@ async function loadRdSamples(){
     if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
     if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
     const editBadge=s.edit_reason?`<div style="font-size:11px;color:#a68a3a">📝 修改: ${s.edit_reason}</div>`:'';
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
+    const assistedForName=s.assisted_for_employee_id?(employees.find(e=>e.id===s.assisted_for_employee_id)?.name||''):'';
+    const empCell=assistedForName?`${s.employees?.name||'-'}<div style="font-size:11px;color:#a68a3a">🤝 協助：${assistedForName}</div>`:(s.employees?.name||'-');
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -2530,9 +2537,30 @@ function openRdSampleModal(){
   document.getElementById('rds-edit-reason').value='';
   document.getElementById('rds-edit-reason-wrap').style.display='none';
   document.getElementById('rds-customers-chips').innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';
+  document.getElementById('rds-assisted-for').value='';
+  document.getElementById('rds-assisted-for-wrap').style.display='none';
   updateRdsDelayInfo();
   document.getElementById('rds-date').onchange=updateRdsDelayInfo;
   openModal('newRdSampleModal');
+}
+
+// 偵測打樣人是否為研發助理 → 顯示/隱藏「協助對象」欄位
+function updateAssistedForVisibility(){
+  const empId=document.getElementById('rds-emp').value;
+  const emp=employees.find(e=>e.id===empId);
+  const wrap=document.getElementById('rds-assisted-for-wrap');
+  const sel=document.getElementById('rds-assisted-for');
+  if(emp && emp.role_level==='assistant'){
+    // 填入可被「協助」的對象 = 研發部在職且非助理
+    const candidates=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
+    const currentVal=sel.value;
+    sel.innerHTML='<option value="">請選擇協助對象</option>'+candidates.map(e=>`<option value="${e.id}">${e.name}（${e.role_title}）</option>`).join('');
+    if(currentVal)sel.value=currentVal;
+    wrap.style.display='block';
+  }else{
+    wrap.style.display='none';
+    sel.value='';
+  }
 }
 
 async function openEditRdSampleModal(id){
@@ -2554,6 +2582,11 @@ async function openEditRdSampleModal(id){
   document.getElementById('rds-edit-reason-wrap').style.display='block';
   rdsSelectedCustomers=(s.rd_sample_customers||[]).map(rc=>rc.customer_id);
   renderRdsCustomerChips();
+  // 先顯示協助對象欄位（若是助理），再填入既有值
+  updateAssistedForVisibility();
+  if(s.assisted_for_employee_id){
+    document.getElementById('rds-assisted-for').value=s.assisted_for_employee_id;
+  }
   updateRdsDelayInfo();
   document.getElementById('rds-date').onchange=updateRdsDelayInfo;
   openModal('newRdSampleModal');
@@ -2576,10 +2609,10 @@ function updateRdsDelayInfo(){
   if(delay<0){info.style.display='block';info.innerHTML='⚠ 未來日期，請改正';info.style.color='var(--red)';reasonWrap.style.display='none';return;}
   // 修改既有 row 永遠放行；UI 只顯示參考資訊不擋
   if(currentEditId){info.style.display='block';info.innerHTML=`✏️ 修改模式：延遲 ${delay} 天可直接送審`;info.style.color='#5d8aa8';reasonWrap.style.display='none';return;}
-  if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，將自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(delay===1){info.style.display='block';info.innerHTML='🟡 隔天補登，將送 ELLA 經理審核（無需寫原因）';info.style.color='#a68a3a';reasonWrap.style.display='none';}
+  if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay<=2){info.style.display='block';info.innerHTML=`🟢 延遲 ${delay} 天，自動通過（無需原因、無需審核）`;info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（原因選填）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
-  else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+  else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因送 ELLA 審核`;info.style.color='var(--red)';reasonWrap.style.display='block';}
   else{info.style.display='block';info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
 }
 
@@ -2622,10 +2655,21 @@ async function saveRdSample(){
   if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
   const delay=Math.floor((new Date()-new Date(date))/86400000);
   if(delay<0){showToast('打樣日期不能是未來');return;}
-  // 7 天/2 天原因限制僅對「新增模式 + 非補登放寬」生效；修改既有 row 永遠放行
+  // 7 天/3 天原因限制僅對「新增模式 + 非補登放寬」生效；修改既有 row 永遠放行
   if(!currentEditId && !RDS_BACKFILL_RELAXED){
     if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
-    if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因');return;}
+    if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因');return;}
+  }
+
+  // 助理驗證：若打樣人是研發助理 → 必填協助對象
+  const assistedFor=document.getElementById('rds-assisted-for').value||null;
+  const selectedEmp=employees.find(e=>e.id===empId);
+  if(selectedEmp?.role_level==='assistant' && !assistedFor){
+    showToast('研發助理打樣必須指定協助對象');return;
+  }
+  if(assistedFor){
+    const assEmp=employees.find(e=>e.id===assistedFor);
+    if(assEmp?.role_level==='assistant'){showToast('協助對象不能是另一位助理');return;}
   }
 
   if(currentEditId){
@@ -2635,6 +2679,7 @@ async function saveRdSample(){
       sample_date:date,employee_id:empId,formula_type:formula,
       version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
       approval_reason:reason||null,
+      assisted_for_employee_id:assistedFor,
       approval_status:'pending_review',
       approved_by:null,approved_at:null,rejection_note:null,
       edit_reason:editReason,last_edited_at:new Date().toISOString()
@@ -2658,7 +2703,8 @@ async function saveRdSample(){
   const {data:s,error}=await sb.from('rd_samples').insert({
     sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
     version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
-    approval_reason:reason||null,created_by:user.user.id
+    approval_reason:reason||null,created_by:user.user.id,
+    assisted_for_employee_id:assistedFor
   }).select('id').single();
   if(error){showToast('儲存失敗：'+error.message);return;}
   // 寫客戶對應
