@@ -2497,7 +2497,7 @@ async function loadRdSamples(){
   const [y,m]=ym.split('-').map(Number);
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
-  let q=sb.from('rd_samples').select('*, employees(name, role_title), rd_sample_customers(rd_customers(id, short_name))')
+  let q=sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name, role_title), rd_sample_customers(rd_customers(id, short_name))')
     .gte('sample_date',start).lt('sample_date',nm).order('sample_date',{ascending:false});
   if(empId)q=q.eq('employee_id',empId);
   const {data,error}=await q;
@@ -2842,7 +2842,7 @@ async function deleteRdSample(id){
 }
 
 async function loadPendingReviews(){
-  const {data}=await sb.from('rd_samples').select('*, employees(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false});
+  const {data}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false});
   const el=document.getElementById('rds-pending-content');
   const cnt=document.getElementById('rds-pending-count');
   if(cnt)cnt.textContent=`${data?.length||0} 筆`;
@@ -2916,7 +2916,7 @@ async function loadOverdueLogs(){
   // 本月課長補登明細：delay_days >= 1 的當月紀錄
   const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const start=ym+'-01';
-  const {data}=await sb.from('rd_samples').select('*, employees(name)').gte('logged_at',start).gt('delay_days',0).order('logged_at',{ascending:false});
+  const {data}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').gte('logged_at',start).gt('delay_days',0).order('logged_at',{ascending:false});
   const el=document.getElementById('rds-overdue-content');
   const cnt=document.getElementById('rds-overdue-count');
   if(cnt)cnt.textContent=`${data?.length||0} 筆延遲`;
