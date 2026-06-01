@@ -697,10 +697,10 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="rd-calc-sec">
           <div class="card" style="border-color:var(--gold)">
             <div class="card-header">
-              <div class="card-title">📊 從本季訂單自動算研發部全員獎金（40% 件數比例 + 60% 最後確樣加成）</div>
+              <div class="card-title">📊 從本季訂單自動算研發部全員獎金（50% 件數比例 + 50% 最後確樣加成）</div>
               <button class="btn btn-gold btn-sm" onclick="calcRdAllFromOrders()">▶ 一鍵試算</button>
             </div>
-            <div class="info-box" style="font-size:12px">會自動撈本季每張訂單的研發貢獻紀錄（含件數 + 最後確樣 flag），套 40/60 拆分公式，列出每位研發的總獎金。試算結果可以一鍵儲存到獎金紀錄。</div>
+            <div class="info-box" style="font-size:12px">會自動撈本季每張訂單的研發貢獻紀錄（含件數 + 最後確樣 flag），套 50/50 拆分公式（依 v8 規則：基礎 50% 按件數比例 + 成交加成 50% 由最終確樣者獨得），列出每位研發的總獎金。試算結果可以一鍵儲存到獎金紀錄。</div>
             <div id="rd-auto-result" style="display:none"></div>
           </div>
           <div class="card">
@@ -742,7 +742,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="rd-collab-sec" style="display:none">
           <div class="card">
             <div class="card-header"><div class="card-title">多人協作獎金分配</div></div>
-            <div class="info-box">基礎分（40%）按打樣次數比例，成交加成（60%）由最終確認成交者獨得</div>
+            <div class="info-box">基礎分（50%）按打樣次數比例，成交加成（50%）由最終確認成交者獨得</div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">案件劑型</label>
                 <select class="form-select" id="collab-type">
@@ -1130,7 +1130,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       </div>
       <div class="form-group">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <label class="form-label" style="margin:0">負責研發（可多選；勾「最後確樣」那位獨得成交獎金 60% 加成）</label>
+          <label class="form-label" style="margin:0">負責研發（可多選；勾「最後確樣」那位獨得成交獎金 50% 加成）</label>
           <button type="button" class="btn btn-outline btn-sm" onclick="openRdFromSamplesModal()">🔍 從打樣紀錄帶研發</button>
         </div>
         <div id="o-rd-chips" class="emp-select-grid"></div>
@@ -1223,7 +1223,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-body">
       <div class="info-box" style="margin-bottom:12px">
         <strong>抓取條件：</strong>品名跟訂單品項相似（寬鬆比對）+ 打樣日近 6 個月內 + 已通過審核<br>
-        <strong>勾選後：</strong>系統自動算每位研發的打樣件數、助理打樣自動歸給協助對象；最後勾選一位「最後確樣」獨得 60% 加成
+        <strong>勾選後：</strong>系統自動算每位研發的打樣件數、助理打樣自動歸給協助對象；最後勾選一位「最後確樣」獨得 50% 加成
       </div>
       <div id="rd-from-samples-list">
         <div class="empty-state"><div class="empty-icon">⏳</div><div>載入中…</div></div>
@@ -2081,7 +2081,7 @@ function confirmRdFromSamples(){
   const lines=Object.entries(counts).map(([id,cnt])=>{
     const emp=employees.find(e=>e.id===id);
     const isFinal=id===finalEmpId;
-    return `<div>${emp?.name||'?'}：${cnt} 件${isFinal?' <span style="color:var(--gold)">⭐ 最後確樣（+60% 加成）</span>':''}</div>`;
+    return `<div>${emp?.name||'?'}：${cnt} 件${isFinal?' <span style="color:var(--gold)">⭐ 最後確樣（+50% 加成）</span>':''}</div>`;
   });
   dist.innerHTML=`<strong>從打樣帶入的研發分布：</strong>${lines.join('')}`;
   dist.style.display='block';
@@ -2552,14 +2552,14 @@ async function calcRdAllFromOrders(){
     if(totalSamples===0){orderRows.push({...o, _note:'⚠ 件數全為 0'});continue;}
     const eb=Math.min(rdTypes[o.formula_type]?.base||0, rdMaxBase);
     const orderTotal=Math.round(aValue*eb*totalSamples);
-    const baseShare40=Math.round(orderTotal*0.4);
-    const finalShare60=Math.round(orderTotal*0.6);
+    const baseShare50=Math.round(orderTotal*0.5);
+    const finalShare50=Math.round(orderTotal*0.5);
     const finalConfirmer=rdStaff.find(r=>r.is_final_confirmer);
     const distribution=[];
     rdStaff.forEach(r=>{
       const eid=r.employee_id;
-      const base=Math.round(baseShare40*(r.sample_count/totalSamples));
-      const extra=(finalConfirmer && r.employee_id===finalConfirmer.employee_id)?finalShare60:0;
+      const base=Math.round(baseShare50*(r.sample_count/totalSamples));
+      const extra=(finalConfirmer && r.employee_id===finalConfirmer.employee_id)?finalShare50:0;
       const total=base+extra;
       distribution.push({name:r.employees.name, samples:r.sample_count, base, extra, total, isFinal:r.is_final_confirmer});
       if(!empAcc[eid]){
@@ -2626,13 +2626,13 @@ function calcCollab(){
   });
   const totalSamples=persons.reduce((s,p)=>s+p.samples,0);
   const results=persons.map(p=>{
-    const base=totalSamples>0?Math.round(totalBonus*.4*(p.samples/totalSamples)):0;
-    const extra=p.isWinner?Math.round(totalBonus*.6):0;
+    const base=totalSamples>0?Math.round(totalBonus*.5*(p.samples/totalSamples)):0;
+    const extra=p.isWinner?Math.round(totalBonus*.5):0;
     return{...p,base,extra,total:base+extra};
   });
   show('collab-result');
   document.getElementById('collab-result-content').innerHTML=`<p style="margin-bottom:10px"><strong>案件總獎金：${fmt(totalBonus)}</strong>（${info.name}）</p>
-    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎40%</th><th class="td-right">成交60%</th><th class="td-right">合計</th></tr></thead>
+    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎50%</th><th class="td-right">成交50%</th><th class="td-right">合計</th></tr></thead>
     <tbody>${results.map(r=>`<tr><td>${r.name}${r.isWinner?' <span class="badge badge-gold">確認者</span>':''}</td><td class="td-right">${r.samples}</td><td class="td-right">${fmt(r.base)}</td><td class="td-right">${r.extra?fmt(r.extra):'—'}</td><td class="td-right"><strong>${fmt(r.total)}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 
