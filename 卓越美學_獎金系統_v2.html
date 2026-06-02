@@ -1628,12 +1628,23 @@ function renderEmployeeList() {
   const el = document.getElementById('employees-list');
   if (!el) return;
   if (!employees.length) { el.innerHTML = '<div style="color:var(--ink-faint);font-size:13px">尚無員工資料</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
+  const today = new Date();
+  const probationBadge = (emp) => {
+    if (!emp.probation_end_date) return '<span style="color:var(--ink-faint);font-size:11px">—</span>';
+    const pEnd = new Date(emp.probation_end_date);
+    if (today > pEnd) {
+      return `<span class="badge badge-green" title="已通過試用期">✅ 已正式</span><div style="font-size:10px;color:var(--ink-faint);margin-top:2px">${emp.probation_end_date} 過</div>`;
+    }
+    const daysLeft = Math.ceil((pEnd - today) / 86400000);
+    return `<span class="badge" style="background:#fff4e0;color:#a86b1a" title="試用期至 ${emp.probation_end_date}，獎金按比例派發">⏳ 試用中</span><div style="font-size:10px;color:#a86b1a;margin-top:2px">至 ${emp.probation_end_date}<br>剩 ${daysLeft} 天</div>`;
+  };
+  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th class="td-center">試用期</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
     <tbody>${employees.map(e => `<tr>
       <td style="font-weight:500">${e.name}</td>
       <td><span class="badge badge-${deptColor(e.dept)}">${e.dept}</span></td>
       <td>${e.role_title}</td>
       <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'離職/停薪'}</span></td>
+      <td class="td-center">${probationBadge(e)}</td>
       <td style="font-size:12px;color:var(--ink-faint)">${e.note||''}</td>
       <td class="td-center manager-only" style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button> <button class="btn btn-danger btn-sm" onclick="hardDeleteEmployee('${e.id}')" title="僅限誤填可用；有歷史紀錄會被擋下">永久刪除</button></td>
     </tr>`).join('')}</tbody></table>`;
