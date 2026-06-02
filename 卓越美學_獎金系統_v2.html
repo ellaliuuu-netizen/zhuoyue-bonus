@@ -2701,7 +2701,7 @@ async function loadRdSamplingStats(){
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const {data,error}=await sb.from('rd_samples')
-    .select('employee_id, approval_status, employees(name)')
+    .select('employee_id, approval_status, employees!rd_samples_employee_id_fkey(name)')
     .gte('sample_date',start).lt('sample_date',nm);
   const el=document.getElementById('rds-stats-content');
   const lbl=document.getElementById('rds-stats-month-label');
