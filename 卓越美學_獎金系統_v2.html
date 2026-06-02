@@ -1246,10 +1246,15 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
         <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp" onchange="updateAssistedForVisibility()"><option value="">請選擇</option></select></div>
-        <div class="form-group" id="rds-assisted-for-wrap" style="display:none;grid-column:span 2">
-          <label class="form-label" style="color:#a68a3a">🤝 協助的研發 *（研發助理協助打樣時必填）</label>
-          <select class="form-select" id="rds-assisted-for"><option value="">請選擇</option></select>
-          <div style="font-size:11px;color:var(--ink-faint);margin-top:4px">研發助理打樣不算個人獎金；本筆紀錄會歸到「協助對象」名下，由 ELLA 建訂單時帶入</div>
+        <div class="form-group" id="rds-assisted-for-wrap" style="grid-column:span 2">
+          <label class="form-label" style="color:#a68a3a"><span id="rds-assisted-for-label">🧪 配方擬定者（選填；不填則歸打樣者）</span></label>
+          <select class="form-select" id="rds-assisted-for"><option value="">（選填）留空 = 同打樣者</option></select>
+          <div style="font-size:11px;color:var(--ink-faint);margin-top:4px;line-height:1.5">
+            <strong>打樣獎金</strong>歸<strong>打樣者</strong>；<strong>成交獎金</strong>歸<strong>配方擬定者</strong>。<br>
+            • 若打樣者 = 配方擬定者 → 此欄留空（系統視為同打樣者）<br>
+            • 若打樣者是<strong>研發助理</strong> → 此欄必填（助理沒打樣獎金，配方歸該研發）<br>
+            • 若打樣者是研發 A，但配方是研發 B 擬的 → 此欄填 B（成交獎金歸 B）
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">劑型 * <button type="button" class="btn btn-outline btn-sm" onclick="openModal('rdFormulaGuideModal')" style="margin-left:6px;padding:2px 8px;font-size:11px">📖 對照表</button></label>
@@ -2036,23 +2041,36 @@ async function openRdFromSamplesModal(){
   // 渲染表格 + checkbox + radio for final confirmer
   document.getElementById('rd-from-samples-list').innerHTML=`
     <table>
-      <thead><tr><th style="width:40px">勾選</th><th style="width:60px">最後確樣</th><th>樣品編號</th><th>品名</th><th>研發</th><th>劑型</th><th>打樣日</th></tr></thead>
+      <thead><tr><th style="width:40px">勾選</th><th style="width:60px">最後確樣</th><th>樣品編號</th><th>品名</th><th>打樣者</th><th>配方擬定者</th><th>劑型</th><th>打樣日</th></tr></thead>
       <tbody>${matches.map(s=>{
-        const assistedName=s.assisted_for_employee_id?(employees.find(e=>e.id===s.assisted_for_employee_id)?.name||''):'';
-        const empCell=assistedName?`${s.employees?.name||'-'}<br><span style="font-size:11px;color:#a68a3a">🤝 協助 ${assistedName}</span>`:(s.employees?.name||'-');
-        const isAssistant=s.employees?.role_level==='assistant';
+        const conceptOwnerId = s.assisted_for_employee_id;
+        const conceptOwnerName = conceptOwnerId ? (employees.find(e=>e.id===conceptOwnerId)?.name||'') : '';
+        const isAssistant = s.employees?.role_level==='assistant';
+        const samplerCell = isAssistant
+          ? `${s.employees?.name||'-'} <span style="font-size:10px;color:var(--ink-faint)">(助理)</span>`
+          : (s.employees?.name||'-');
+        const conceptCell = conceptOwnerName
+          ? `<span style="color:#a68a3a;font-weight:500">${conceptOwnerName}</span>`
+          : `<span style="color:var(--ink-faint)">= 打樣者</span>`;
+        // concept owner 在此筆是誰，將決定 50% 加成歸誰
         return `<tr>
-          <td><input type="checkbox" class="rd-sample-check" data-sample-id="${s.id}" data-emp-id="${s.employee_id}" data-assisted-for="${s.assisted_for_employee_id||''}" data-is-assistant="${isAssistant}"></td>
-          <td><input type="radio" name="rd-final" class="rd-sample-final" data-sample-id="${s.id}" ${isAssistant?'disabled title="助理不能當最後確樣"':''}></td>
+          <td><input type="checkbox" class="rd-sample-check" data-sample-id="${s.id}" data-emp-id="${s.employee_id}" data-assisted-for="${conceptOwnerId||''}" data-is-assistant="${isAssistant}"></td>
+          <td><input type="radio" name="rd-final" class="rd-sample-final" data-sample-id="${s.id}" title="此筆 50% 加成將歸給：${conceptOwnerName||s.employees?.name||'-'}"></td>
           <td><strong>${s.sample_code}</strong></td>
           <td>${s.item_name||'—'}</td>
-          <td>${empCell}</td>
+          <td>${samplerCell}</td>
+          <td>${conceptCell}</td>
           <td>${rdFormulaLabel(s.formula_type)}</td>
           <td>${s.sample_date}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>
-    <div style="font-size:11px;color:var(--ink-faint);margin-top:8px">提示：勾選後系統自動算每位研發的件數；助理打樣自動歸給協助對象；最後確樣那位獨得 60% 加成</div>
+    <div style="font-size:11px;color:var(--ink-faint);margin-top:8px;line-height:1.5">
+      <strong>歸戶規則：</strong>勾選後系統按「配方擬定者」算件數（不是打樣者）。<br>
+      • 配方擬定者欄顯示「= 打樣者」→ 件數歸打樣者本人<br>
+      • 配方擬定者欄有具名 → 件數歸該位（含助理打樣自動歸給協助對象、研發互助打樣歸給配方擬定者）<br>
+      • 「最後確樣」radio 勾哪筆 → 該筆的配方擬定者獨得 50% 加成
+    </div>
   `;
 }
 
@@ -2061,20 +2079,19 @@ function confirmRdFromSamples(){
   if(!checked.length){showToast('請至少勾一筆打樣紀錄');return;}
   const finalRadio=document.querySelector('.rd-sample-final:checked');
   if(!finalRadio){showToast('請指定一筆「最後確樣」');return;}
-  // 算每位研發的件數（助理 → 歸到協助對象）
+  // 算每位「配方擬定者」的件數：concept owner = assisted_for_employee_id || 打樣者本人
+  // 不分助理還是研發 —— 只要該筆紀錄有 concept owner 就歸給他、沒有就歸打樣者
   const counts={}; // empId -> count
   let finalEmpId=null;
   checked.forEach(cb=>{
-    const isAssistant=cb.dataset.isAssistant==='true';
-    const targetId=isAssistant?cb.dataset.assistedFor:cb.dataset.empId;
-    if(!targetId) return;
-    counts[targetId]=(counts[targetId]||0)+1;
+    const conceptOwner = cb.dataset.assistedFor || cb.dataset.empId;
+    if(!conceptOwner) return;
+    counts[conceptOwner]=(counts[conceptOwner]||0)+1;
     if(cb.dataset.sampleId===finalRadio.dataset.sampleId){
-      const isAss=cb.dataset.isAssistant==='true';
-      finalEmpId=isAss?cb.dataset.assistedFor:cb.dataset.empId;
+      finalEmpId=conceptOwner;
     }
   });
-  if(!Object.keys(counts).length){showToast('沒有可歸戶的研發（勾的都是助理但沒填協助對象？）');return;}
+  if(!Object.keys(counts).length){showToast('沒有可歸戶的研發');return;}
   // 寫回訂單 modal：清掉舊 chip 狀態 → 啟用對應 chip + 設件數 + 最後確樣
   const chipContainer=document.getElementById('o-rd-chips');
   chipContainer.querySelectorAll('.emp-chip').forEach(c=>{
@@ -2742,7 +2759,7 @@ async function loadRdSamples(){
   const [y,m]=ym.split('-').map(Number);
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
-  let q=sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name, role_title), rd_sample_customers(rd_customers(id, short_name))')
+  let q=sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name, role_title, role_level), rd_sample_customers(rd_customers(id, short_name))')
     .gte('sample_date',start).lt('sample_date',nm).order('sample_date',{ascending:false});
   if(empId)q=q.eq('employee_id',empId);
   const {data,error}=await q;
@@ -2759,8 +2776,20 @@ async function loadRdSamples(){
     if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
     if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
     const editBadge=s.edit_reason?`<div style="font-size:11px;color:#a68a3a">📝 修改: ${s.edit_reason}</div>`:'';
-    const assistedForName=s.assisted_for_employee_id?(employees.find(e=>e.id===s.assisted_for_employee_id)?.name||''):'';
-    const empCell=assistedForName?`${s.employees?.name||'-'}<div style="font-size:11px;color:#a68a3a">🤝 協助：${assistedForName}</div>`:(s.employees?.name||'-');
+    const conceptOwnerId = s.assisted_for_employee_id;
+    const conceptOwnerName = conceptOwnerId ? (employees.find(e=>e.id===conceptOwnerId)?.name||'') : '';
+    const isAssistantSampler = s.employees?.role_level === 'assistant';
+    let empCell;
+    if (isAssistantSampler && conceptOwnerName) {
+      // 助理打樣 + 配方歸研發
+      empCell = `${s.employees?.name||'-'} <span style="font-size:10px;color:var(--ink-faint)">(助理)</span><div style="font-size:11px;color:#a68a3a">🤝 配方：${conceptOwnerName}</div>`;
+    } else if (!isAssistantSampler && conceptOwnerName && conceptOwnerId !== s.employee_id) {
+      // 研發打樣 + 配方歸另一位研發
+      empCell = `${s.employees?.name||'-'}<div style="font-size:11px;color:#5d8aa8">🧪 配方：${conceptOwnerName}</div>`;
+    } else {
+      // 打樣者 = 配方擬定者（或無填）
+      empCell = s.employees?.name||'-';
+    }
     return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
@@ -2783,28 +2812,32 @@ function openRdSampleModal(){
   document.getElementById('rds-edit-reason-wrap').style.display='none';
   document.getElementById('rds-customers-chips').innerHTML='<span style="color:var(--ink-faint);font-size:13px">尚未選擇客戶</span>';
   document.getElementById('rds-assisted-for').value='';
-  document.getElementById('rds-assisted-for-wrap').style.display='none';
+  updateAssistedForVisibility();
   updateRdsDelayInfo();
   document.getElementById('rds-date').onchange=updateRdsDelayInfo;
   openModal('newRdSampleModal');
 }
 
-// 偵測打樣人是否為研發助理 → 顯示/隱藏「協助對象」欄位
+// 配方擬定者：永遠顯示，依打樣者調整 label / 選項 / 必填提示
 function updateAssistedForVisibility(){
   const empId=document.getElementById('rds-emp').value;
   const emp=employees.find(e=>e.id===empId);
-  const wrap=document.getElementById('rds-assisted-for-wrap');
   const sel=document.getElementById('rds-assisted-for');
-  if(emp && emp.role_level==='assistant'){
-    // 填入可被「協助」的對象 = 研發部在職且非助理
-    const candidates=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
-    const currentVal=sel.value;
-    sel.innerHTML='<option value="">請選擇協助對象</option>'+candidates.map(e=>`<option value="${e.id}">${e.name}（${e.role_title}）</option>`).join('');
-    if(currentVal)sel.value=currentVal;
-    wrap.style.display='block';
-  }else{
-    wrap.style.display='none';
-    sel.value='';
+  const labelSpan=document.getElementById('rds-assisted-for-label');
+  if(!emp){
+    sel.innerHTML='<option value="">請先選打樣者</option>';
+    if(labelSpan)labelSpan.textContent='🧪 配方擬定者（選填；不填則歸打樣者）';
+    return;
+  }
+  const isAssistant=emp.role_level==='assistant';
+  // 配方擬定者候選 = 在職研發部非助理（排除打樣者本人若是研發 → 也排除避免「自己擬給自己」自我選擇，但留著沒事，靠空白代表）
+  const candidates=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
+  const currentVal=sel.value;
+  const placeholderText=isAssistant?'⚠ 必填：請選擇配方擬定者':'（選填）留空 = 同打樣者';
+  sel.innerHTML=`<option value="">${placeholderText}</option>`+candidates.map(e=>`<option value="${e.id}">${e.name}（${e.role_title}）</option>`).join('');
+  if(currentVal)sel.value=currentVal;
+  if(labelSpan){
+    labelSpan.textContent=isAssistant?'🤝 配方擬定者 ✱ 必填（助理打樣不算個人獎金）':'🧪 配方擬定者（選填；不填則歸打樣者）';
   }
 }
 
@@ -2906,15 +2939,15 @@ async function saveRdSample(){
     if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因');return;}
   }
 
-  // 助理驗證：若打樣人是研發助理 → 必填協助對象
+  // 配方擬定者驗證
   const assistedFor=document.getElementById('rds-assisted-for').value||null;
   const selectedEmp=employees.find(e=>e.id===empId);
   if(selectedEmp?.role_level==='assistant' && !assistedFor){
-    showToast('研發助理打樣必須指定協助對象');return;
+    showToast('研發助理打樣必須指定配方擬定者（成交獎金歸戶人）');return;
   }
   if(assistedFor){
     const assEmp=employees.find(e=>e.id===assistedFor);
-    if(assEmp?.role_level==='assistant'){showToast('協助對象不能是另一位助理');return;}
+    if(assEmp?.role_level==='assistant'){showToast('配方擬定者必須是研發人員，不能是助理');return;}
   }
 
   if(currentEditId){
