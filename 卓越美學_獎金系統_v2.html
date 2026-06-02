@@ -1591,7 +1591,8 @@ function populateEmpSelects() {
 
   fillSelect('sales-emp-sel', salesEmps);
   fillSelect('sales-q-emp-sel', salesEmps);
-  fillSelect('rd-emp-sel', employees.filter(e => e.dept === '研發部' && e.is_active));
+  // 個人試算 dropdown 排除助理（助理沒個人成交獎金，走團隊 5% 池）
+  fillSelect('rd-emp-sel', employees.filter(e => e.dept === '研發部' && e.is_active && e.role_level !== 'assistant'));
   fillSelect('plan-emp-sel', planEmps);
   fillSelect('pur-emp-sel', purEmps);
   fillSelect('special-emp-sel', allActiveEmps.map(e=>({...e, name:`${e.name}（${e.dept}）`})));
@@ -1600,7 +1601,8 @@ function populateEmpSelects() {
   // RD chips for order modal
   const rdChips = document.getElementById('o-rd-chips');
   if (rdChips) {
-    rdChips.innerHTML = employees.filter(e => e.dept === '研發部' && e.is_active).map(e =>
+    // 訂單研發 chip 排除助理（助理不算成交獎金，避免誤勾把助理寫進 order_rd_staff）
+    rdChips.innerHTML = employees.filter(e => e.dept === '研發部' && e.is_active && e.role_level !== 'assistant').map(e =>
       `<div class="emp-chip" data-id="${e.id}" onclick="toggleChip(this)">${e.name}</div>`
     ).join('');
   }
