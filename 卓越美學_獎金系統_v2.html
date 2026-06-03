@@ -3346,43 +3346,72 @@ function calcPurScore(){
   const total=Math.round((weighted/5)*100);
   document.getElementById('pur-score-tot').textContent=total; return total;
 }
+
+// v2 件數獎金：階梯逐件累加（100/150/200/250）
+function purTieredShipBonus(ships){
+  if(ships<20) return {total:0, breakdown:'未達 20 件門檻'};
+  const rates = [[20,100],[35,150],[50,200],[Infinity,250]];
+  let total=0, prev=0, parts=[];
+  for(const [maxCount,rate] of rates){
+    const inThisTier = Math.max(0, Math.min(ships, maxCount) - prev);
+    if(inThisTier>0){
+      const sub = inThisTier*rate;
+      total += sub;
+      const label = maxCount===Infinity ? `第 51 件起 ${inThisTier} 件 × ${rate}` : `第 ${prev+1}-${Math.min(ships,maxCount)} 件 × ${rate}`;
+      parts.push(`${label} = ${sub.toLocaleString()}`);
+    }
+    prev = maxCount;
+    if(ships<=maxCount) break;
+  }
+  return {total, breakdown:parts.join(' ＋ ')};
+}
+
+// v2 評分加成：百分制區間
+function purScoreBonus(score){
+  if(score<60) return {bonus:0, label:'普通'};
+  if(score<75) return {bonus:1000, label:'良好'};
+  if(score<85) return {bonus:2000, label:'優秀'};
+  return {bonus:3000, label:'非常優秀'};
+}
+
 function calcPurchase(){
   const empId=document.getElementById('pur-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const concurrent=document.getElementById('pur-concurrent').value==='yes';
-  let shipBonus=0;
-  if(ships>=50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
-  const score=calcPurScore();
-  let scoreBonus=0;
-  if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
+  const ship = purTieredShipBonus(ships);
+  const score = calcPurScore();
+  const scoreObj = purScoreBonus(score);
   const supplement=concurrent?appSettings.purSupplement:0;
-  const base=shipBonus+scoreBonus+supplement;
+  const base=ship.total+scoreObj.bonus+supplement;
   const pr=emp?probationRatio(emp):{ratio:1,note:''};
   const total=Math.round(base*pr.ratio);
   show('pur-result');
   document.getElementById('pur-total').textContent=fmt(total);
-  let html=`<div class="res-item"><span class="res-item-dot"></span>件數：${fmt(shipBonus)}</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)}（${score}分）</div>${supplement?`<div class="res-item"><span class="res-item-dot"></span>兼任補貼：${fmt(supplement)}</div>`:''}`;
+  let html=`<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(ship.total)}</strong>${ships>=20?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ship.breakdown+'</span>':''}</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(scoreObj.bonus)}</strong>（${scoreObj.label} ／ 加權總分 ${score}/100）</div>`;
+  if(supplement)html+=`<div class="res-item"><span class="res-item-dot"></span><strong>兼任生管補貼：${fmt(supplement)}</strong></div>`;
+  html+=`<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>直接加總：${fmt(ship.total)} ＋ ${fmt(scoreObj.bonus)}${supplement?' ＋ '+fmt(supplement):''} = <strong>${fmt(base)}</strong></div>`;
   if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
   document.getElementById('pur-breakdown').innerHTML=html;
 }
+
 async function savePurchase(){
   const empId=document.getElementById('pur-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇採購人員');return;}
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const concurrent=document.getElementById('pur-concurrent').value==='yes';
-  let shipBonus=0;
-  if(ships>=50)shipBonus=8000;else if(ships>=35)shipBonus=5000;else if(ships>=20)shipBonus=3000;
-  const score=calcPurScore();
-  let scoreBonus=0;
-  if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
+  const ship = purTieredShipBonus(ships);
+  const score = calcPurScore();
+  const scoreObj = purScoreBonus(score);
   const supplement=concurrent?appSettings.purSupplement:0;
-  const base=shipBonus+scoreBonus+supplement;
+  const base=ship.total+scoreObj.bonus+supplement;
   const pr=probationRatio(emp);
   const bonus=Math.round(base*pr.ratio);
-  const ok=await saveRecord({dept:'採購部',name:emp.name,bonus,detail:`出貨${ships}件｜評分${score}分${concurrent?'｜兼任補貼':''}${pr.note}`,record_type:'quarterly'});
-  if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
+  const detail=`出貨 ${ships} 件（${fmt(ship.total)}）＋ 評分 ${scoreObj.label}（${score}/100，${fmt(scoreObj.bonus)}）${concurrent?'＋ 兼任補貼 '+fmt(supplement):''}${pr.note}`;
+  const ok=await saveRecord({dept:'採購部',name:emp.name,bonus,detail,record_type:'quarterly'});
+  if (ok) showToast(pr.ratio<1?`⚠️ ${emp.name} 依比例 ${(pr.ratio*100).toFixed(1)}%，${fmt(bonus)}`:`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
 }
 
 // PRODUCTION
