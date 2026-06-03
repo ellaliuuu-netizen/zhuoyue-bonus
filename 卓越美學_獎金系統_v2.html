@@ -921,7 +921,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- PRODUCTION -->
       <div class="page" id="page-production">
         <div class="section-title" style="color:var(--red)">生管部獎金計算</div>
-        <div class="section-desc">季獎金 = 基礎獎金（準時率）＋ 評分加成</div>
+        <div class="section-desc">季獎金 = 出貨件數獎金 ＋ 準時率獎金 ＋ 評分加成（依 v2 文件三項獨立計算、直接加總）</div>
         <div class="warn-box" style="font-size:13px;padding:14px 18px">
           <strong>⚠ 本制度尚未啟用</strong><br>
           依據《生管部獎金規範書》：此制度於「自有 ISO 工廠落地（2026/08）」後才實施。當前由採購部施詠心兼任生管工作，獎金列計於採購部。本頁僅供模擬試算，儲存後標記為 <code>preview</code>。
@@ -931,15 +931,16 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="prod-name" placeholder="例：陳生管" /></div>
+            <div class="form-group"><label class="form-label">當季出貨件數</label><input class="form-input" type="number" id="prod-shipments" placeholder="例：35" min="0" /></div>
             <div class="form-group"><label class="form-label">當季出貨準時率（%）</label><input class="form-input" type="number" id="prod-ontime" placeholder="例：90" min="0" max="100" step="0.1" oninput="updateProdBar()" /></div>
           </div>
           <div id="prod-bar-wrap" style="margin-bottom:14px"></div>
           <hr class="divider">
-          <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--red)">評分項目</div>
-          <div class="score-group"><div class="score-title">排程準確性</div><div class="score-desc">1分：常需臨時調整 ｜ 5分：排程穩定</div><div class="score-stars" id="prod-s1"></div></div>
-          <div class="score-group"><div class="score-title">跨部門協調</div><div class="score-desc">1分：被動等待 ｜ 5分：主動協調順暢</div><div class="score-stars" id="prod-s2"></div></div>
-          <div class="score-group"><div class="score-title">異常處理速度</div><div class="score-desc">1分：慢且需指示 ｜ 5分：快速主動</div><div class="score-stars" id="prod-s3"></div></div>
-          <div class="score-group"><div class="score-title">出貨文件準確性</div><div class="score-desc">1分：常出錯 ｜ 5分：從不出錯</div><div class="score-stars" id="prod-s4"></div></div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--red)">評分項目（v2 文件建議使用 1/3/5 三級）</div>
+          <div class="score-group"><div class="score-title">排程準確性</div><div class="score-desc">1分：經常需臨時調整 ｜ 3分：偶爾調整 ｜ 5分：排程穩定</div><div class="score-stars" id="prod-s1"></div></div>
+          <div class="score-group"><div class="score-title">跨部門協調</div><div class="score-desc">1分：被動等待 ｜ 3分：偶爾主動 ｜ 5分：主動協調順暢</div><div class="score-stars" id="prod-s2"></div></div>
+          <div class="score-group"><div class="score-title">異常處理速度</div><div class="score-desc">1分：慢且需指示 ｜ 3分：普通 ｜ 5分：快速主動解決</div><div class="score-stars" id="prod-s3"></div></div>
+          <div class="score-group"><div class="score-title">出貨文件準確性</div><div class="score-desc">1分：經常出錯 ｜ 3分：偶爾出錯 ｜ 5分：從不出錯</div><div class="score-stars" id="prod-s4"></div></div>
           <div style="text-align:right;font-size:12px;color:var(--ink-faint);margin-top:5px">總分：<strong id="prod-score-tot" style="color:var(--red);font-size:15px">0</strong> / 100</div>
           <div id="prod-result" style="display:none" class="result-highlight">
             <div class="res-label">季獎金合計</div><div class="res-value" id="prod-total">—</div>
@@ -3426,33 +3427,74 @@ function calcProdScore(){
   const total=Math.round((scores.reduce((a,b)=>a+b,0)/20)*100);
   document.getElementById('prod-score-tot').textContent=total; return total;
 }
+
+// v2 件數獎金：階梯逐件累加（80/120/160/200，門檻 20）
+function prodTieredShipBonus(ships){
+  if(ships<20) return {total:0, breakdown:'未達 20 件門檻'};
+  const rates = [[20,80],[35,120],[50,160],[Infinity,200]];
+  let total=0, prev=0, parts=[];
+  for(const [maxCount,rate] of rates){
+    const inThisTier = Math.max(0, Math.min(ships, maxCount) - prev);
+    if(inThisTier>0){
+      const sub = inThisTier*rate;
+      total += sub;
+      const label = maxCount===Infinity ? `第 51 件起 ${inThisTier} 件 × ${rate}` : `第 ${prev+1}-${Math.min(ships,maxCount)} 件 × ${rate}`;
+      parts.push(`${label} = ${sub.toLocaleString()}`);
+    }
+    prev = maxCount;
+    if(ships<=maxCount) break;
+  }
+  return {total, breakdown:parts.join(' ＋ ')};
+}
+
+// v2 準時率獎金：公式 2,000 + (率-70)×200，100% 再 +2,000
+function prodOnTimeBonus(rate){
+  if(rate<70) return {bonus:0, breakdown:'未達 70% 門檻'};
+  const base = Math.round(2000 + (rate-70)*200);
+  const fullBonus = rate>=100 ? 2000 : 0;
+  const total = base + fullBonus;
+  const parts = [`基礎 2,000 + (${rate}% − 70) × 200 = ${base.toLocaleString()}`];
+  if(fullBonus) parts.push(`全達獎金 +2,000`);
+  return {bonus:total, breakdown:parts.join('；')};
+}
+
+function prodScoreBonus(score){
+  if(score<60) return {bonus:0, label:'普通'};
+  if(score<75) return {bonus:1000, label:'良好'};
+  if(score<85) return {bonus:2000, label:'優秀'};
+  return {bonus:3000, label:'非常優秀'};
+}
+
 function calcProduction(){
+  const ships=parseInt(document.getElementById('prod-shipments').value)||0;
   const ontime=parseFloat(document.getElementById('prod-ontime').value)||0;
-  let baseBonus=0,rl='';
-  if(ontime>=95){baseBonus=8000;rl='95%以上';}
-  else if(ontime>=85){baseBonus=5000;rl='85–95%';}
-  else if(ontime>=70){baseBonus=3000;rl='70–85%';}
-  else rl='未達70%';
-  const score=calcProdScore();
-  let scoreBonus=0;
-  if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
-  const total=baseBonus+scoreBonus;
+  const ship = prodTieredShipBonus(ships);
+  const ot = prodOnTimeBonus(ontime);
+  const score = calcProdScore();
+  const scoreObj = prodScoreBonus(score);
+  const total = ship.total + ot.bonus + scoreObj.bonus;
   show('prod-result');
   document.getElementById('prod-total').textContent=fmt(total);
-  document.getElementById('prod-breakdown').innerHTML=`<div class="res-item"><span class="res-item-dot"></span>基礎：${fmt(baseBonus)}（${rl}）</div><div class="res-item"><span class="res-item-dot"></span>評分：${fmt(scoreBonus)}（${score}分）</div>`;
+  let html = `<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(ship.total)}</strong>${ships>=20?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ship.breakdown+'</span>':''}</div>`;
+  html += `<div class="res-item"><span class="res-item-dot"></span><strong>準時率獎金：${fmt(ot.bonus)}</strong>${ontime>=70?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ot.breakdown+'</span>':''}</div>`;
+  html += `<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(scoreObj.bonus)}</strong>（${scoreObj.label} ／ 總分 ${score}/100）</div>`;
+  html += `<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>直接加總：${fmt(ship.total)} ＋ ${fmt(ot.bonus)} ＋ ${fmt(scoreObj.bonus)} = <strong>${fmt(total)}</strong></div>`;
+  document.getElementById('prod-breakdown').innerHTML=html;
 }
+
 async function saveProduction(){
   const name=document.getElementById('prod-name').value.trim();
   if(!name){showToast('請輸入姓名');return;}
+  const ships=parseInt(document.getElementById('prod-shipments').value)||0;
   const ontime=parseFloat(document.getElementById('prod-ontime').value)||0;
-  let baseBonus=0;
-  if(ontime>=95)baseBonus=8000;else if(ontime>=85)baseBonus=5000;else if(ontime>=70)baseBonus=3000;
-  const score=calcProdScore();
-  let scoreBonus=0;
-  if(score>=85)scoreBonus=3000;else if(score>=75)scoreBonus=2000;else if(score>=60)scoreBonus=1000;
-  const bonus=baseBonus+scoreBonus;
-  const ok=await saveRecord({dept:'生管部',name,bonus,detail:`[未啟用試算] 準時率${ontime}%｜評分${score}分`,record_type:'preview'});
-  if (ok) showToast(`✓ 已儲存 ${name} 模擬試算 ${fmt(bonus)}（不列入撥發）`);
+  const ship = prodTieredShipBonus(ships);
+  const ot = prodOnTimeBonus(ontime);
+  const score = calcProdScore();
+  const scoreObj = prodScoreBonus(score);
+  const bonus = ship.total + ot.bonus + scoreObj.bonus;
+  const detail = `[未啟用試算] 出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${ontime}%（${fmt(ot.bonus)}）＋ 評分 ${scoreObj.label} ${score}/100（${fmt(scoreObj.bonus)}）`;
+  const ok=await saveRecord({dept:'生管部',name,bonus,detail,record_type:'preview'});
+  if (ok) showToast(`✓ 已儲存 ${name} 模擬試算 ${fmt(bonus)}（不列入撥發，自有 ISO 工廠落地後啟用）`);
 }
 
 // HISTORY
