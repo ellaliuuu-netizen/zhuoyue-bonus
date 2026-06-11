@@ -1406,6 +1406,96 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
+<!-- 確樣登打（rd_manager / manager）— 研發成交獎金三段式 -->
+<div class="modal-overlay" id="confirmSampleModal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header"><div class="modal-title">🎯 確樣登打</div><button class="modal-close" onclick="closeModal('confirmSampleModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="info-box" style="font-size:12px;margin-bottom:12px">確樣＝把這筆打樣掛上<strong>正式產品編號</strong>並認定成交歸屬。出貨時系統靠正式編號自動對應、算三段（主責50%/打樣30%/確樣20%）。獎金實際發放仍需經 ELLA 覆核。</div>
+      <div id="cf-sample-info" class="info-box" style="font-size:13px;background:var(--surface);margin-bottom:12px"></div>
+
+      <div class="form-group" id="cf-customer-wrap">
+        <label class="form-label">客戶（這筆樣品給誰）*</label>
+        <select class="form-select" id="cf-customer" onchange="onConfirmCustomerChange()"></select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">正式產品編號（確樣編號）*</label>
+        <select class="form-select" id="cf-product" onchange="onConfirmProductChange()"><option value="">請選擇正式編號</option></select>
+        <div id="cf-owner-info" style="font-size:12px;margin-top:6px"></div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:1"><label class="form-label">確樣日 *</label><input class="form-input" type="date" id="cf-date" /></div>
+        <div class="form-group" style="flex:1"><label class="form-label">確樣人 *（誰確誰領 20%）</label><select class="form-select" id="cf-confirmer"></select></div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div class="form-group" style="flex:1">
+          <label class="form-label">劑型（池子大小）</label>
+          <select class="form-select" id="cf-formula-override" onchange="updateConfirmPool()">
+            <option value="">用正式編號劑型</option>
+            <option value="liquid">液劑 0.3</option>
+            <option value="essence">精華液/凝膠/面膜 0.4</option>
+            <option value="emulsion_ow">乳劑(水包油) 0.8</option>
+            <option value="emulsion_wo">乳劑(油包水) 1.0</option>
+            <option value="special">特殊劑型 1.2</option>
+          </select>
+          <div id="cf-formula-applied" style="font-size:11px;color:var(--ink-faint);margin-top:4px"></div>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cf-oem" onchange="updateConfirmPool()" /> 代工廠配方（基數0.3·每件900·窗口領100%）</label>
+        </div>
+      </div>
+
+      <div id="cf-pool-preview" class="info-box" style="font-size:13px;background:#f3ede0;margin-bottom:12px"></div>
+
+      <div class="form-group">
+        <label class="form-label">主責變動程度（影響主責 50% 怎麼分）</label>
+        <select class="form-select" id="cf-change-level" onchange="onConfirmChangeLevel()">
+          <option value="minor">輕微改動 — 原主責拿滿 50%</option>
+          <option value="medium_light">中度偏輕 — 原主責 40% + 協作 10%</option>
+          <option value="medium_heavy">中度偏重 — 原主責 35% + 協作 15%</option>
+          <option value="co_dev">接近共同開發 — 原主責 25% + 協作 25%</option>
+          <option value="major">大幅改動 — 重新認定主責</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" style="font-size:13px">改了哪幾項核心架構（判定依據；劑型一改即大幅）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:13px">
+          <label style="cursor:pointer"><input type="checkbox" class="cf-arch" value="劑型" onchange="onConfirmArchChange()" /> 劑型</label>
+          <label style="cursor:pointer"><input type="checkbox" class="cf-arch" value="乳化" onchange="onConfirmArchChange()" /> 乳化/分散</label>
+          <label style="cursor:pointer"><input type="checkbox" class="cf-arch" value="油相粉體" onchange="onConfirmArchChange()" /> 油相/粉體</label>
+          <label style="cursor:pointer"><input type="checkbox" class="cf-arch" value="膠體流變" onchange="onConfirmArchChange()" /> 膠體/流變</label>
+          <label style="cursor:pointer"><input type="checkbox" class="cf-arch" value="核心膚感" onchange="onConfirmArchChange()" /> 核心膚感</label>
+        </div>
+        <div id="cf-arch-hint" style="font-size:11px;color:#a68a3a;margin-top:4px"></div>
+      </div>
+
+      <div id="cf-split-section" style="display:none;border-left:3px solid #c99a2e;padding-left:12px;margin-bottom:12px">
+        <div id="cf-owner-override-wrap" class="form-group" style="display:none">
+          <label class="form-label" style="color:#b3541e">大幅改動：主責改認定給（接手重建者拿滿 50%）</label>
+          <select class="form-select" id="cf-owner-override"><option value="">不換主責（原主責共分）</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:13px">協作者拆分（分主責 50% 段；原主責不用列在此）</label>
+          <div id="cf-split-rows"></div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addSplitRow()" style="margin-top:6px">＋ 加協作者</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:13px;color:#b3541e">變動/拆分原因 ✱（留底，覆核時標紅審）</label>
+          <textarea class="form-input" id="cf-split-reason" rows="2" placeholder="例：改乳化系統+核心膚感共 2 項，趙協作建立水感方向"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('confirmSampleModal')">取消</button>
+      <button class="btn btn-gold" onclick="saveConfirm()">儲存確樣</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1847,7 +1937,7 @@ async function toggleShipmentRefund(shipmentId, isRefunded){
   await loadShipments();
 }
 async function loadProducts() {
-  const { data } = await sb.from('products').select('product_code, product_name, formula_type').order('product_code');
+  const { data } = await sb.from('products').select('product_code, product_name, formula_type, primary_owner_employee_id').order('product_code');
   products = data || [];
   const dl = document.getElementById('o-product-codes');
   if (dl) dl.innerHTML = products.map(p => `<option value="${p.product_code}">${p.product_name}</option>`).join('');
@@ -2762,7 +2852,7 @@ async function loadRdSamples(){
   const [y,m]=ym.split('-').map(Number);
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
-  let q=sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name, role_title, role_level), rd_sample_customers(rd_customers(id, short_name))')
+  let q=sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name, role_title, role_level), rd_sample_customers(id, customer_id, official_product_code, confirm_status, rd_customers(id, short_name))')
     .gte('sample_date',start).lt('sample_date',nm).order('sample_date',{ascending:false});
   if(empId)q=q.eq('employee_id',empId);
   const {data,error}=await q;
@@ -2770,11 +2860,22 @@ async function loadRdSamples(){
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
   el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
-    const custs=(s.rd_sample_customers||[]).map(rc=>rc.rd_customers?.short_name).filter(Boolean).join('、')||'—';
+    const scRows=s.rd_sample_customers||[];
+    const custs=scRows.length?scRows.map(rc=>{
+      const nm=rc.rd_customers?.short_name||'(未命名客戶)';
+      return rc.confirm_status==='confirmed'
+        ? `<span style="color:#2e7d52">✅ ${nm}</span><div style="font-size:10px;color:#2e7d52">${rc.official_product_code||''}</div>`
+        : nm;
+    }).join('、'):'—';
     const isMgr=currentRole==='manager';
+    const canConfirm=currentRole==='manager'||currentRole==='rd_manager';
     const isMine=currentUser && s.created_by===currentUser.id;
     const isPendingEdit=s.approval_status==='pending_review' && s.edit_reason;
     const actions=[];
+    if(canConfirm && scRows.length){
+      const allDone=scRows.every(rc=>rc.confirm_status==='confirmed');
+      actions.push(`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${s.id}')">${allDone?'🎯 確樣已登':'🎯 確樣'}</button>`);
+    }
     if(isMgr||isMine) actions.push(`<button class="btn btn-outline btn-sm" onclick="openEditRdSampleModal('${s.id}')">✏️ 修改</button>`);
     if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
     if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
@@ -3619,6 +3720,147 @@ function show(id){const el=document.getElementById(id);if(el)el.style.display='b
 function fmt(n){return(n||0).toLocaleString('zh-TW')+' 元';}
 function fmtNum(n){return(n||0).toLocaleString('zh-TW');}
 function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'teal',生管部:'red'}[d]||'gold';}
+// ===== 確樣登打（研發成交獎金三段式 stage 1）=====
+let cfState={sampleId:null, sample:null, scRows:[], activeScId:null};
+const FORMULA_BASE={liquid:0.3,essence:0.4,emulsion_ow:0.8,emulsion_wo:1.0,special:1.2};
+
+async function openConfirmModal(sampleId){
+  const {data:s,error}=await sb.from('rd_samples')
+    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
+    .eq('id',sampleId).single();
+  if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
+  cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
+  if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
+  document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
+  const custSel=document.getElementById('cf-customer');
+  custSel.innerHTML=cfState.scRows.map(rc=>`<option value="${rc.id}">${rc.rd_customers?.short_name||'(未命名客戶)'}${rc.confirm_status==='confirmed'?' ✅已確樣':''}</option>`).join('');
+  document.getElementById('cf-product').innerHTML='<option value="">請選擇正式編號</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
+  const rdActive=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  document.getElementById('cf-confirmer').innerHTML='<option value="">請選擇</option>'+rdActive.map(e=>`<option value="${e.id}">${e.name}（${e.role_title}）</option>`).join('');
+  document.getElementById('cf-owner-override').innerHTML='<option value="">不換主責（原主責共分）</option>'+rdActive.map(e=>`<option value="${e.id}">${e.name}（${e.role_title}）</option>`).join('');
+  custSel.value=cfState.scRows[0].id;
+  onConfirmCustomerChange();
+  openModal('confirmSampleModal');
+}
+
+function onConfirmCustomerChange(){
+  const scId=document.getElementById('cf-customer').value;
+  cfState.activeScId=scId;
+  const rc=cfState.scRows.find(r=>r.id===scId)||{};
+  document.getElementById('cf-product').value=rc.official_product_code||'';
+  document.getElementById('cf-date').value=rc.confirmed_at||new Date().toISOString().slice(0,10);
+  let confId=rc.confirmed_by||'';
+  if(!confId){const me=employees.find(e=>e.name===currentUserName&&e.dept==='研發部'&&e.is_active);confId=me?me.id:'';}
+  document.getElementById('cf-confirmer').value=confId;
+  document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
+  document.getElementById('cf-oem').checked=!!rc.is_oem;
+  document.getElementById('cf-change-level').value=rc.change_level||'minor';
+  const arch=rc.changed_architectures||[];
+  document.querySelectorAll('.cf-arch').forEach(cb=>cb.checked=arch.includes(cb.value));
+  document.getElementById('cf-split-reason').value=rc.split_reason||'';
+  document.getElementById('cf-owner-override').value=rc.owner_override_employee_id||'';
+  document.getElementById('cf-split-rows').innerHTML='';
+  (rc.rd_deal_owner_splits||[]).filter(d=>d.role==='collaborator').forEach(d=>addSplitRow(d.employee_id,d.pct));
+  onConfirmProductChange();
+  onConfirmChangeLevel();
+  onConfirmArchChange();
+}
+
+function onConfirmProductChange(){
+  const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+  const info=document.getElementById('cf-owner-info');
+  if(!p){info.innerHTML='';updateConfirmPool();return;}
+  const owner=employees.find(e=>e.id===p.primary_owner_employee_id);
+  if(owner && owner.is_active===false){
+    info.innerHTML=`<span style="color:#b3541e">⚠️ 原主責為離職（${owner.name}）→ 成交時主責段折半、另一半不發；若接手人重建配方，請選「大幅改動」並指定新主責</span>`;
+  } else if(owner){
+    info.innerHTML=`<span style="color:var(--ink-faint)">原主責：${owner.name}</span>`;
+  } else {
+    info.innerHTML=`<span style="color:#b3541e">⚠️ 此正式編號未設原主責，建議先到產品主檔補</span>`;
+  }
+  updateConfirmPool();
+}
+
+function updateConfirmPool(){
+  const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+  const override=document.getElementById('cf-formula-override').value;
+  const oem=document.getElementById('cf-oem').checked;
+  const ft=override||p?.formula_type||cfState.sample?.formula_type;
+  document.getElementById('cf-formula-applied').textContent=ft?`套用劑型：${rdFormulaLabel(ft)}（基數 ${FORMULA_BASE[ft]??'?'}）${override?' · 已手動覆寫 ⚠':''}`:'';
+  const A=appSettings.aValue||3000;
+  const prev=document.getElementById('cf-pool-preview');
+  if(oem){prev.innerHTML='代工配方：基數 0.3、每件 900，對接窗口領 <strong>100%</strong>，不走三段拆分。';return;}
+  const base=FORMULA_BASE[ft];
+  if(!base){prev.innerHTML='選正式編號後顯示預估池子';return;}
+  const pool=A*base;
+  prev.innerHTML=`預估池子 ＝ A值 ${A} × 基數 ${base} ＝ <strong>${pool.toLocaleString()}</strong>　→　主責 ${(pool*0.5).toLocaleString()}／打樣 ${(pool*0.3).toLocaleString()}／確樣 ${(pool*0.2).toLocaleString()}（一筆成交算一次，不乘件數）`;
+}
+
+function onConfirmChangeLevel(){
+  const lv=document.getElementById('cf-change-level').value;
+  document.getElementById('cf-split-section').style.display=lv==='minor'?'none':'block';
+  document.getElementById('cf-owner-override-wrap').style.display=lv==='major'?'block':'none';
+}
+
+function onConfirmArchChange(){
+  const checked=[...document.querySelectorAll('.cf-arch:checked')].map(c=>c.value);
+  const n=checked.length, hasFormula=checked.includes('劑型');
+  let suggest=hasFormula?'大幅（劑型已改）':(n>=3?'大幅':(n===2?'中度':'輕微'));
+  document.getElementById('cf-arch-hint').textContent=`已勾 ${n} 項 → 判定建議：${suggest}（主判看項數；劑型一改即大幅）`;
+}
+
+function addSplitRow(empId='', pct=''){
+  const rdActive=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  const div=document.createElement('div');
+  div.className='cf-split-row';
+  div.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center';
+  div.innerHTML=`<select class="form-select cf-split-emp" style="flex:2"><option value="">協作者</option>${rdActive.map(e=>`<option value="${e.id}"${e.id===empId?' selected':''}>${e.name}</option>`).join('')}</select>`+
+    `<input class="form-input cf-split-pct" type="number" min="0" max="100" placeholder="% 占主責段" style="flex:1" value="${pct}" />`+
+    `<button type="button" class="btn btn-outline btn-sm" onclick="this.parentNode.remove()">✕</button>`;
+  document.getElementById('cf-split-rows').appendChild(div);
+}
+
+async function saveConfirm(){
+  const scId=cfState.activeScId;
+  if(!scId){showToast('請選擇客戶');return;}
+  const code=document.getElementById('cf-product').value;
+  if(!code){showToast('請選擇正式產品編號');return;}
+  const confirmer=document.getElementById('cf-confirmer').value;
+  if(!confirmer){showToast('請選擇確樣人');return;}
+  const date=document.getElementById('cf-date').value;
+  if(!date){showToast('請填確樣日');return;}
+  const lv=document.getElementById('cf-change-level').value;
+  const arch=[...document.querySelectorAll('.cf-arch:checked')].map(c=>c.value);
+  const reason=document.getElementById('cf-split-reason').value.trim();
+  if(lv!=='minor' && !reason){showToast('非輕微改動：變動/拆分原因必填（留底）');return;}
+  const splitRows=[...document.querySelectorAll('.cf-split-row')].map(r=>({
+    employee_id:r.querySelector('.cf-split-emp').value,
+    pct:parseFloat(r.querySelector('.cf-split-pct').value)
+  })).filter(x=>x.employee_id && !isNaN(x.pct));
+  const upd={
+    official_product_code:code, confirm_status:'confirmed', confirmed_at:date, confirmed_by:confirmer,
+    formula_type_override:document.getElementById('cf-formula-override').value||null,
+    is_oem:document.getElementById('cf-oem').checked,
+    change_level:lv, changed_architectures:arch.length?arch:null,
+    owner_override_employee_id:lv==='major'?(document.getElementById('cf-owner-override').value||null):null,
+    split_reason:lv==='minor'?null:reason
+  };
+  const {error}=await sb.from('rd_sample_customers').update(upd).eq('id',scId);
+  if(error){
+    if((error.message||'').includes('uq_official_product_code')) showToast('此正式編號已被其他確樣使用（一個編號只能確樣一次）');
+    else showToast('儲存失敗：'+error.message);
+    return;
+  }
+  await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId);
+  if(lv!=='minor' && splitRows.length){
+    const {error:e2}=await sb.from('rd_deal_owner_splits').insert(splitRows.map(x=>({sample_customer_id:scId, employee_id:x.employee_id, pct:x.pct, role:'collaborator'})));
+    if(e2){showToast('確樣已存，但協作拆分寫入失敗：'+e2.message);return;}
+  }
+  showToast('✅ 確樣已儲存');
+  closeModal('confirmSampleModal');
+  loadRdSamples();
+}
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 function openModal(id){
   document.getElementById(id).classList.add('open');
