@@ -506,6 +506,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
+    <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
     <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
@@ -624,6 +625,21 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <tbody id="shipments-tbody"><tr><td colspan="8" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
+      </div>
+
+      <!-- SALES IMPORT 銷貨匯入 -->
+      <div class="page" id="page-sales-import">
+        <div class="section-title" style="color:#7a5c3d">📥 銷貨明細匯入</div>
+        <div class="section-desc">匯入會計部每月銷貨 CSV → 自動對應正式編號 → 餵研發成交認列＋部門件數＋業務金額。對不上的品名列出來給你點一次、之後記住。</div>
+        <div class="card" style="border-color:#7a5c3d">
+          <div class="card-header"><div class="card-title">① 選檔</div></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="si-file" accept=".csv" onchange="parseSalesCSV()" />
+            <input class="form-input" id="si-batch" placeholder="批次標籤（例 2026-06）" style="width:auto" />
+            <span id="si-fileinfo" style="font-size:12px;color:var(--ink-faint)"></span>
+          </div>
+        </div>
+        <div id="si-preview"></div>
       </div>
 
       <!-- SALES -->
@@ -3968,6 +3984,119 @@ async function releaseDeal(scId){
   }
   showToast('✅ 已放行給財務');
   loadDealBonuses();
+}
+
+// ===== 銷貨 CSV 匯入（地基）=====
+let _salesAliases={};   // alias_norm -> code
+let _siRows=[];
+
+function normName(s){
+  if(!s) return '';
+  let x=String(s).trim().replace(/\s+/g,'');
+  x=x.replace(/[（(][^)）]*[)）]/g,'');                       // 去括號內容
+  x=x.replace(/\d+\s*(ML|ml|CC|cc|g|G|公克|片|盒|入|瓶|罐|支|組|包)/g,''); // 去規格尾
+  x=x.replace(/[_＿\-－·•・]/g,'');
+  return x.toLowerCase();
+}
+async function loadSalesAliases(){
+  const {data}=await sb.from('product_aliases').select('alias_norm, product_code');
+  _salesAliases={}; (data||[]).forEach(a=>{_salesAliases[a.alias_norm]=a.product_code;});
+}
+function matchProduct(rawName){
+  const norm=normName(rawName);
+  if(_salesAliases[norm]) return {code:_salesAliases[norm], how:'alias', auto:true};
+  for(const p of products){ if(normName(p.product_name)===norm) return {code:p.product_code, how:'exact', auto:true}; }
+  let best=null;
+  for(const p of products){
+    const pn=normName(p.product_name); if(!pn) continue;
+    if(norm.includes(pn)||pn.includes(norm)){
+      const score=Math.min(pn.length,norm.length)/Math.max(pn.length,norm.length);
+      if(!best||score>best.score) best={code:p.product_code, score};
+    }
+  }
+  if(best&&best.score>=0.6) return {code:best.code, how:'fuzzy', auto:false};
+  return {code:'', how:'none', auto:false};
+}
+function parseCSVText(text){
+  const rows=[]; let i=0, field='', row=[], inQ=false;
+  text=text.replace(/^﻿/,'');
+  while(i<text.length){
+    const c=text[i];
+    if(inQ){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; } else field+=c; }
+    else{
+      if(c==='"') inQ=true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; if(field!==''||row.length){row.push(field);rows.push(row);row=[];field='';} }
+      else field+=c;
+    }
+    i++;
+  }
+  if(field!==''||row.length){row.push(field);rows.push(row);}
+  return rows;
+}
+async function parseSalesCSV(){
+  const f=document.getElementById('si-file').files[0]; if(!f) return;
+  document.getElementById('si-fileinfo').textContent=`${f.name}（${(f.size/1024).toFixed(1)} KB）`;
+  if(!document.getElementById('si-batch').value){
+    const m=f.name.match(/(\d{2,4})\s*[年._-]?\s*(\d{1,2})\s*月/);
+    document.getElementById('si-batch').value=m?`${m[1]}-${String(m[2]).padStart(2,'0')}`:f.name.replace(/\.csv$/i,'');
+  }
+  await loadSalesAliases();
+  const rows=parseCSVText(await f.text());
+  if(!rows.length){showToast('CSV 解析不到內容');return;}
+  const header=rows[0].map(h=>h.trim());
+  const idx=n=>header.findIndex(h=>h===n);
+  const col={no:idx('訂單編號'),cust:idx('客戶名稱'),item:idx('品項名稱'),nr:idx('新品或舊品追加'),qty:idx('數量'),price:idx('單價'),amt:idx('訂單金額'),sp:idx('業務人員'),sd:idx('實際出貨日'),note:idx('備註')};
+  _siRows=rows.slice(1).filter(r=>r.length>1&&(r[col.item]||'').trim()).map(r=>{
+    const itemName=(r[col.item]||'').trim();
+    const m=matchProduct(itemName);
+    const noteVal=col.note>=0?(r[col.note]||''):'';
+    const inv=(noteVal.match(/發票號碼\s*([A-Za-z0-9]+)/)||[])[1]||'';
+    return {order_no:(r[col.no]||'').trim(), customer:(r[col.cust]||'').trim(), item:itemName,
+      code:m.code, how:m.how, auto:m.auto, nr:(r[col.nr]||'').trim(),
+      qty:parseInt((r[col.qty]||'0').replace(/[, ]/g,''))||0,
+      price:parseFloat((r[col.price]||'0').replace(/[, ]/g,''))||0,
+      amt:parseFloat((r[col.amt]||'0').replace(/[, ]/g,''))||0,
+      sp:(r[col.sp]||'').trim(), sd:(r[col.sd]||'').trim(), inv, note:noteVal};
+  });
+  renderSalesPreview();
+}
+function renderSalesPreview(){
+  const el=document.getElementById('si-preview');
+  const total=_siRows.length, auto=_siRows.filter(r=>r.auto&&r.code).length, need=_siRows.filter(r=>!r.auto||!r.code).length;
+  const prodOpts='<option value="">— 未對應 —</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
+  let html=`<div class="card"><div class="card-header"><div class="card-title">② 對應預覽</div><button class="btn btn-gold btn-sm" onclick="confirmSalesImport()">確認匯入 ${total} 筆</button></div>`;
+  html+=`<div class="info-box" style="font-size:13px;background:#f3ede0">共 ${total} 筆｜✅ 自動對上 ${auto}｜⚠️ 需你確認 ${need}（紅框那格挑對的，挑過會記住）</div>`;
+  html+=`<table><thead><tr><th>訂單</th><th>客戶</th><th>CSV 品名</th><th>對應正式編號</th><th>新舊品</th><th class="td-right">數量</th><th>出貨日</th></tr></thead><tbody>`;
+  _siRows.forEach((r,i)=>{
+    const needC=!r.auto||!r.code;
+    const opts=prodOpts.replace(`value="${r.code}"`,`value="${r.code}" selected`);
+    const sel=`<select onchange="_siRows[${i}].code=this.value;_siRows[${i}].how='manual'" style="font-size:12px;padding:2px;${needC?'border:1.5px solid #b3541e;background:#fbeee6':''}">${opts}</select>`;
+    const badge=(r.how==='exact'||r.how==='alias')?'✅':(r.how==='fuzzy'?'🟠':(r.code?'':'⚠'));
+    html+=`<tr><td style="font-size:11px">${r.order_no}</td><td style="font-size:12px">${r.customer}</td><td style="font-size:12px">${r.item}</td><td>${badge} ${sel}</td><td style="font-size:12px">${r.nr}</td><td class="td-right">${r.qty.toLocaleString()}</td><td style="font-size:11px">${r.sd}</td></tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  el.innerHTML=html;
+}
+async function confirmSalesImport(){
+  if(!_siRows.length){showToast('沒有資料');return;}
+  const batch=document.getElementById('si-batch').value||'未命名批次';
+  const unmatched=_siRows.filter(r=>!r.code).length;
+  if(unmatched>0 && !confirm(`還有 ${unmatched} 筆沒對應到編號，會以「未對應」存入（之後可補）。仍要匯入？`)) return;
+  const aliasRows=[]; const seen={};
+  _siRows.forEach(r=>{ if(r.how==='manual'&&r.code){ const n=normName(r.item); if(!seen[n]){seen[n]=1;aliasRows.push({alias_norm:n, alias_raw:r.item, product_code:r.code});} } });
+  if(aliasRows.length){ const {error:ae}=await sb.from('product_aliases').upsert(aliasRows,{onConflict:'alias_norm'}); if(ae)console.warn('alias upsert',ae); }
+  const rows=_siRows.map(r=>{
+    const mo=r.sd?(new Date(r.sd)).getMonth()+1:null, y=r.sd?(new Date(r.sd)).getFullYear():null;
+    const q=mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null;
+    return {import_batch:batch, source_order_no:r.order_no, customer_name:r.customer, item_name_raw:r.item,
+      product_code:r.code||null, new_or_repeat:r.nr, qty:r.qty, unit_price:r.price, amount:r.amt,
+      sales_person:r.sp, ship_date:r.sd||null, invoice_no:r.inv||null, note:r.note||null, year:y, quarter:q, month:mo};
+  });
+  const {error}=await sb.from('sales_records').insert(rows);
+  if(error){showToast('匯入失敗：'+error.message);return;}
+  showToast(`✅ 匯入 ${rows.length} 筆銷貨${aliasRows.length?`，記住 ${aliasRows.length} 筆新品名`:''}`);
+  _siRows=[]; document.getElementById('si-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">已匯入。下次同名字會自動對應。</div></div>';
 }
 
 // ===== 成交獎金報表（B④ stage 4）=====
