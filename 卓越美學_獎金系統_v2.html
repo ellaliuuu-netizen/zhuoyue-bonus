@@ -694,6 +694,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="inner-tab" onclick="switchInner(this,'rd-team-sec')">團隊彙整</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-collab-sec')">多人協作分配</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-deal-sec');loadDealBonuses()">🎯 成交獎金（三段）</div>
+          <div class="inner-tab" onclick="switchInner(this,'rd-report-sec');loadDealReports()">📊 成交報表</div>
         </div>
         <div id="rd-calc-sec">
           <div class="card" style="border-color:var(--gold)">
@@ -774,6 +775,27 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             </div>
             <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（經理）可見。</div>
             <div id="rd-deal-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div></div>
+          </div>
+        </div>
+        <div id="rd-report-sec" style="display:none">
+          <div class="card" style="border-color:var(--blue)">
+            <div class="card-header">
+              <div class="card-title">📊 研發成交獎金報表</div>
+              <div>
+                <select id="rpt-status" onchange="loadDealReports()" class="form-select" style="width:auto;display:inline-block;margin-right:8px">
+                  <option value="released">已放行（核可發放）</option>
+                  <option value="all">含待覆核（全部）</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="exportDealReportCSV()">匯出 CSV</button>
+              </div>
+            </div>
+            <div class="info-box" style="font-size:12px">本季（<span id="rpt-period"></span>）研發成交獎金。上＝研發部總表（你跟財務對帳）；下＝個人明細（選人看他領到的）。</div>
+            <div id="rpt-summary"></div>
+            <hr class="divider">
+            <div style="margin-bottom:8px"><label class="form-label" style="display:inline;margin-right:6px">個人明細</label>
+              <select id="rpt-person" onchange="renderPersonalDetail()" class="form-select" style="width:auto;display:inline-block"></select>
+            </div>
+            <div id="rpt-personal"></div>
           </div>
         </div>
       </div>
@@ -3946,6 +3968,64 @@ async function releaseDeal(scId){
   }
   showToast('✅ 已放行給財務');
   loadDealBonuses();
+}
+
+// ===== 成交獎金報表（B④ stage 4）=====
+let _dealRptData=[];
+async function loadDealReports(){
+  const sumEl=document.getElementById('rpt-summary'); if(!sumEl)return;
+  const pe=document.getElementById('rpt-period'); if(pe)pe.textContent=`${appSettings.year} ${appSettings.quarter}`;
+  const status=document.getElementById('rpt-status')?.value||'released';
+  let q=sb.from('rd_deal_bonuses')
+    .select('*, employees(name, dept), rd_sample_customers(rd_customers(short_name))')
+    .eq('year',appSettings.year).eq('quarter',appSettings.quarter);
+  if(status==='released') q=q.eq('status','released');
+  const {data,error}=await q;
+  if(error){sumEl.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  _dealRptData=data||[];
+  const segs=['primary','sampling','confirm','collaborator','oem'];
+  const segL={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工'};
+  const byEmp={};
+  _dealRptData.forEach(r=>{
+    if(!r.employee_id) return;                 // 未指定接手人的孤兒段不計個人
+    const e=byEmp[r.employee_id]=byEmp[r.employee_id]||{name:r.employees?.name||'(未知)', total:0, primary:0,sampling:0,confirm:0,collaborator:0,oem:0};
+    e[r.segment]=(e[r.segment]||0)+Number(r.amount); e.total+=Number(r.amount);
+  });
+  const rows=Object.values(byEmp).sort((a,b)=>b.total-a.total);
+  if(!rows.length){
+    sumEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">本季尚無${status==='released'?'已放行':''}成交獎金</div></div>`;
+  }else{
+    const tot=s=>rows.reduce((x,r)=>x+r[s],0);
+    const grand=rows.reduce((x,r)=>x+r.total,0);
+    sumEl.innerHTML=`<table><thead><tr><th>研發</th>${segs.map(s=>`<th class="td-right">${segL[s]}</th>`).join('')}<th class="td-right">合計</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.name}</td>${segs.map(s=>`<td class="td-right">${r[s]?r[s].toLocaleString():'—'}</td>`).join('')}<td class="td-right" style="font-weight:600">${r.total.toLocaleString()}</td></tr>`).join('')}<tr style="border-top:2px solid var(--ink-faint);font-weight:600"><td>合計</td>${segs.map(s=>`<td class="td-right">${tot(s).toLocaleString()}</td>`).join('')}<td class="td-right">${grand.toLocaleString()}</td></tr></tbody></table>`;
+  }
+  const psel=document.getElementById('rpt-person');
+  if(psel){
+    const people=[...new Map(_dealRptData.filter(r=>r.employee_id).map(r=>[r.employee_id, r.employees?.name])).entries()];
+    psel.innerHTML='<option value="">選研發看個人明細…</option>'+people.map(([id,nm])=>`<option value="${id}">${nm}</option>`).join('');
+  }
+  const pd=document.getElementById('rpt-personal'); if(pd)pd.innerHTML='';
+}
+
+function renderPersonalDetail(){
+  const id=document.getElementById('rpt-person')?.value;
+  const el=document.getElementById('rpt-personal'); if(!el)return;
+  if(!id){el.innerHTML='';return;}
+  const segL={primary:'主責 50%',sampling:'打樣 30%',confirm:'確樣 20%',collaborator:'協作',oem:'代工 100%'};
+  const rows=_dealRptData.filter(r=>r.employee_id===id);
+  const total=rows.reduce((s,r)=>s+Number(r.amount),0);
+  const name=rows[0]?.employees?.name||'';
+  el.innerHTML=`<div class="card"><div class="card-header"><div class="card-title" style="font-size:14px">👤 ${name} 個人成交獎金明細</div><div style="font-weight:600">合計 ${total.toLocaleString()}</div></div><table><thead><tr><th>產品</th><th>客戶</th><th>段別</th><th class="td-right">金額</th><th>認列日</th></tr></thead><tbody>${rows.map(r=>{const p=products.find(x=>x.product_code===r.official_product_code);return `<tr><td>${r.official_product_code} · ${p?.product_name||''}</td><td>${r.rd_sample_customers?.rd_customers?.short_name||''}</td><td>${segL[r.segment]||r.segment}${r.is_orphan_halved?' 🩹折半':''}</td><td class="td-right">${Number(r.amount).toLocaleString()}</td><td style="font-size:11px;color:var(--ink-faint)">${r.recognized_at?new Date(r.recognized_at).toLocaleDateString('zh-TW'):''}</td></tr>`;}).join('')}</tbody></table><div class="info-box" style="font-size:11px;margin-top:8px">只列實際領到的段；孤兒折半的「另一半」本就不發、不在此。</div></div>`;
+}
+
+function exportDealReportCSV(){
+  if(!_dealRptData.length){showToast('沒有資料可匯出');return;}
+  const segL={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工'};
+  const header=['研發','正式編號','品名','客戶','段別','金額','狀態','認列日'];
+  const lines=_dealRptData.filter(r=>r.employee_id).map(r=>{const p=products.find(x=>x.product_code===r.official_product_code);return [r.employees?.name||'', r.official_product_code||'', p?.product_name||'', r.rd_sample_customers?.rd_customers?.short_name||'', segL[r.segment]||r.segment, r.amount, r.status, r.recognized_at?new Date(r.recognized_at).toLocaleDateString('zh-TW'):''];});
+  const csv=[header,...lines].map(row=>row.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`研發成交獎金_${appSettings.year}${appSettings.quarter}.csv`; a.click();
 }
 
 // ===== 確樣登打（研發成交獎金三段式 stage 1）=====
