@@ -3852,32 +3852,100 @@ async function scanRecognizeDeals(){
   loadDealBonuses();
 }
 
-// 待覆核清單（依正式編號分組）
+// ===== 成交獎金覆核表單（B③ stage 3）=====
+// 紅字判定 v0.1（規格 6.1）：🔴必看 / 🟠抽查 / 🟡彙總
+function dealFlags(rows, sc, cum){
+  const flags=[];
+  const mgrIds=employees.filter(e=>e.dept==='研發部'&&e.role_level==='manager').map(e=>e.id);
+  const cb=sc?.confirmed_by;
+  const recips=rows.map(r=>r.employee_id).filter(Boolean);
+  if(cb&&mgrIds.includes(cb)&&rows.some(r=>r.employee_id===cb&&(r.segment==='primary'||r.segment==='sampling')))
+    flags.push({lv:'high',t:'課長自確自利（確樣人＝課長且同案領主責/打樣）'});
+  if(sc?.change_level==='major') flags.push({lv:'high',t:'主責被重新認定（大幅改動換主責）'});
+  if(rows.some(r=>r.is_orphan_halved)) flags.push({lv:'high',t:'離職孤兒段折半（需指定接手人）'});
+  const p=products.find(x=>x.product_code===rows[0].official_product_code);
+  const ft=sc?.formula_type_override||p?.formula_type||sc?.rd_samples?.formula_type;
+  if(FORMULA_BASE[ft]>=0.8&&cb&&mgrIds.includes(cb)) flags.push({lv:'mid',t:`高基數劑型(${FORMULA_BASE[ft]})＋課長確樣`});
+  if(['medium_light','medium_heavy','co_dev'].includes(sc?.change_level)) flags.push({lv:'mid',t:'主責中度拆分（協作分主責段）'});
+  if(sc?.is_oem) flags.push({lv:'mid',t:'代工配方 窗口領100%（確認窗口是誰）'});
+  const over=[...new Set(recips.filter(id=>cum[id]>20000).map(id=>employees.find(e=>e.id===id)?.name))].filter(Boolean);
+  if(over.length) flags.push({lv:'low',t:`本季累計超 2 萬：${over.join('、')}`});
+  return flags;
+}
+
 async function loadDealBonuses(){
   const el=document.getElementById('rd-deal-content'); if(!el)return;
   const {data,error}=await sb.from('rd_deal_bonuses')
-    .select('*, rd_sample_customers(rd_customers(short_name)), employees(name)')
+    .select('*, employees(name), rd_sample_customers(change_level, confirmed_by, formula_type_override, is_oem, rd_customers(short_name), rd_samples(formula_type))')
     .eq('status','pending_review').order('recognized_at',{ascending:false});
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
-  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>';return;}
+  const {data:agg}=await sb.from('rd_deal_bonuses').select('employee_id, amount').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
+  const cum={}; (agg||[]).forEach(r=>{if(r.employee_id)cum[r.employee_id]=(cum[r.employee_id]||0)+Number(r.amount);});
+  const {data:notShipped}=await sb.from('rd_sample_customers')
+    .select('official_product_code, confirmed_at, rd_customers(short_name)')
+    .eq('confirm_status','confirmed').is('recognized_at',null);
+  const rdActive=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  const assignOpts='<option value="">指定接手人…</option>'+rdActive.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   const segLabel={primary:'主責 50%',sampling:'打樣 30%',confirm:'確樣 20%',collaborator:'協作',oem:'代工 100%'};
-  const groups={};
-  data.forEach(r=>{(groups[r.official_product_code]=groups[r.official_product_code]||[]).push(r);});
-  let total=0, body='';
-  Object.entries(groups).forEach(([code,rows])=>{
-    const cust=rows[0].rd_sample_customers?.rd_customers?.short_name||'';
-    const prod=products.find(p=>p.product_code===code);
-    const sub=rows.reduce((s,r)=>s+Number(r.amount),0); total+=sub;
-    body+=`<div class="card" style="margin-bottom:10px"><div class="card-header"><div class="card-title" style="font-size:14px">${code} · ${prod?.product_name||''}　<span style="color:var(--ink-faint);font-weight:400">客戶 ${cust}</span></div><div style="font-weight:600">小計 ${sub.toLocaleString()}</div></div>`;
-    body+=`<table><thead><tr><th>段別</th><th>領取人</th><th class="td-right">金額</th><th>說明</th></tr></thead><tbody>`;
-    rows.forEach(r=>{
-      const who=r.employee_id?(r.employees?.name||''):`<span style="color:#b3541e">⚠ 待指定接手人</span>`;
-      const flag=r.is_orphan_halved?' <span style="color:#b3541e">🩹折半</span>':'';
-      body+=`<tr><td>${segLabel[r.segment]||r.segment}</td><td>${who}${flag}</td><td class="td-right">${Number(r.amount).toLocaleString()}</td><td style="font-size:11px;color:var(--ink-faint)">${r.note||''}${r.pending_reason?`<br><span style="color:#b3541e">${r.pending_reason}</span>`:''}</td></tr>`;
+  const fColor={high:'#b3541e',mid:'#c99a2e',low:'#7a8a3a'}, fIcon={high:'🔴',mid:'🟠',low:'🟡'};
+  let body='';
+  if(data&&data.length){
+    const groups={};
+    data.forEach(r=>{(groups[r.sample_customer_id]=groups[r.sample_customer_id]||[]).push(r);});
+    let total=0;
+    Object.values(groups).forEach(rows=>{
+      const sc=rows[0].rd_sample_customers||{};
+      const code=rows[0].official_product_code, scId=rows[0].sample_customer_id;
+      const cust=sc.rd_customers?.short_name||'';
+      const prod=products.find(p=>p.product_code===code);
+      const sub=rows.reduce((s,r)=>s+Number(r.amount),0); total+=sub;
+      const flags=dealFlags(rows, sc, cum);
+      const flagHtml=flags.map(f=>`<span style="display:inline-block;font-size:11px;color:${fColor[f.lv]};border:1px solid ${fColor[f.lv]};border-radius:4px;padding:1px 6px;margin:2px 4px 2px 0">${fIcon[f.lv]} ${f.t}</span>`).join('');
+      body+=`<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title" style="font-size:14px">${code} · ${prod?.product_name||''}　<span style="color:var(--ink-faint);font-weight:400">客戶 ${cust}</span></div><div style="font-weight:600">小計 ${sub.toLocaleString()}</div></div>`;
+      if(flagHtml) body+=`<div style="margin-bottom:8px">${flagHtml}</div>`;
+      body+=`<table><thead><tr><th>段別</th><th>領取人</th><th class="td-right" style="width:120px">金額（可改）</th><th>說明</th></tr></thead><tbody>`;
+      rows.forEach(r=>{
+        const whoCell=r.employee_id
+          ? `${r.employees?.name||''}${r.is_orphan_halved?' <span style="color:#b3541e">🩹折半</span>':''}`
+          : `<select class="form-select" id="assign-${r.id}" style="font-size:12px;padding:2px;width:auto;display:inline-block">${assignOpts}</select> <span style="color:#b3541e">🩹折半</span>`;
+        body+=`<tr><td>${segLabel[r.segment]||r.segment}</td><td>${whoCell}</td><td class="td-right"><input type="number" id="amt-${r.id}" value="${Number(r.amount)}" style="width:100px;text-align:right;padding:2px" /></td><td style="font-size:11px;color:var(--ink-faint)">${r.note||''}${r.pending_reason?`<br><span style="color:#b3541e">${r.pending_reason}</span>`:''}</td></tr>`;
+      });
+      body+=`</tbody></table><div style="text-align:right;margin-top:8px"><button class="btn btn-gold btn-sm" onclick="releaseDeal('${scId}')">✅ 確認放行給財務</button></div></div>`;
     });
-    body+=`</tbody></table></div>`;
-  });
-  el.innerHTML=`<div class="info-box" style="font-size:13px;background:#f3ede0;margin-bottom:10px">共 ${data.length} 筆待覆核，合計 <strong>${total.toLocaleString()}</strong>　（B③ 會加紅字審查＋放行；本階段先確認算得對）</div>`+body;
+    body=`<div class="info-box" style="font-size:13px;background:#f3ede0;margin-bottom:10px">共 ${data.length} 段待覆核，合計 <strong>${total.toLocaleString()}</strong>。先盯 🔴 紅字；可直接改金額、指定孤兒段接手人，按「放行」才轉財務。</div>`+body;
+  }else{
+    body=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>`;
+  }
+  if(notShipped&&notShipped.length){
+    body+=`<div class="card" style="margin-top:14px;border-color:var(--ink-faint)"><div class="card-header"><div class="card-title" style="font-size:13px">📋 已確樣、但還沒出貨認列（${notShipped.length}）</div></div><div class="info-box" style="font-size:12px">課長確樣了、但客戶還沒出貨，所以還沒算獎金。給你看全貌，避免「確了卻漏發」。</div><table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th></tr></thead><tbody>${notShipped.map(n=>{const p=products.find(x=>x.product_code===n.official_product_code);return `<tr><td>${n.official_product_code||'—'}</td><td>${p?.product_name||''}</td><td>${n.rd_customers?.short_name||''}</td><td>${n.confirmed_at||''}</td></tr>`;}).join('')}</tbody></table></div>`;
+  }
+  el.innerHTML=body;
+}
+
+// 放行：把這筆成交的所有段轉 released（財務才看得到）；孤兒段須先指定接手人
+async function releaseDeal(scId){
+  const {data:lines,error:e0}=await sb.from('rd_deal_bonuses').select('id, employee_id').eq('sample_customer_id',scId).eq('status','pending_review');
+  if(e0||!lines||!lines.length){showToast('沒有待放行的明細');return;}
+  const updates=[];
+  for(const ln of lines){
+    const upd={id:ln.id, status:'released'};
+    const amtEl=document.getElementById('amt-'+ln.id);
+    if(amtEl) upd.amount=parseFloat(amtEl.value)||0;
+    if(!ln.employee_id){
+      const aEl=document.getElementById('assign-'+ln.id);
+      const aid=aEl?aEl.value:'';
+      if(!aid){showToast('有「待指定接手人」未填，請先指定再放行');return;}
+      upd.employee_id=aid; upd.pending_reason=null;
+    }
+    updates.push(upd);
+  }
+  for(const u of updates){
+    const {id,...rest}=u;
+    const {error}=await sb.from('rd_deal_bonuses').update(rest).eq('id',id);
+    if(error){showToast('放行失敗：'+error.message);return;}
+  }
+  showToast('✅ 已放行給財務');
+  loadDealBonuses();
 }
 
 // ===== 確樣登打（研發成交獎金三段式 stage 1）=====
