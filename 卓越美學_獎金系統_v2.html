@@ -3875,18 +3875,53 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
   return count;
 }
 
-// 手動重掃（補登/測試用）：每張訂單用最早出貨當「第一次出貨」；認列具冪等（已認列跳過）
-async function scanRecognizeDeals(){
-  showToast('掃描中…');
-  const {data:ships}=await sb.from('shipments').select('id, order_id, ship_date').order('ship_date');
-  if(!ships||!ships.length){showToast('沒有出貨紀錄可掃描');return;}
-  const firstByOrder={};
-  ships.forEach(s=>{if(!firstByOrder[s.order_id])firstByOrder[s.order_id]=s;});
-  let total=0;
-  for(const s of Object.values(firstByOrder)){
-    try{total+=await recognizeRdDeals(s.order_id, s.id, s.ship_date);}catch(e){console.warn(e);}
+// 研發認列（吃銷貨明細 sales_records）：新品 + 同編號累計達 500 罐 → 算三段寫待覆核；認列具冪等
+async function recognizeFromSales(){
+  const {data:sales}=await sb.from('sales_records')
+    .select('product_code, customer_name, qty, ship_date')
+    .eq('new_or_repeat','新品').not('product_code','is',null);
+  if(!sales||!sales.length) return 0;
+  const byCode={};
+  sales.forEach(s=>{(byCode[s.product_code]=byCode[s.product_code]||[]).push(s);});
+  let count=0;
+  for(const code of Object.keys(byCode)){
+    const rows=byCode[code];
+    const totalQty=rows.reduce((s,r)=>s+(r.qty||0),0);
+    if(totalQty<500) continue;                                  // 尾數不計
+    const {data:scs}=await sb.from('rd_sample_customers')
+      .select('*, rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(role_level)), rd_deal_owner_splits(employee_id,pct,role)')
+      .eq('official_product_code', code).eq('confirm_status','confirmed').is('recognized_at',null);
+    if(!scs||!scs.length) continue;
+    const shipDate=rows.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
+    const cust=rows[0].customer_name||'';
+    for(const sc of scs){
+      const segs=computeDealSegments(sc);
+      const d=shipDate?new Date(shipDate):new Date();
+      const month=d.getMonth()+1, y=d.getFullYear(), q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
+      const now=new Date().toISOString();
+      const drows=segs.map(seg=>({
+        sample_customer_id:sc.id, official_product_code:sc.official_product_code,
+        order_id:null, order_item_id:null, shipment_id:null,
+        segment:seg.segment, employee_id:seg.employee_id||null, amount:seg.amount,
+        is_orphan_halved:!!seg.is_orphan_halved, pending_reason:seg.pending_reason||null,
+        status:'pending_review', recognized_at:now, year:y, quarter:q, month,
+        note:(seg.note||'')+`｜來源:銷貨${shipDate||''} 客戶${cust} 共${totalQty}罐`
+      }));
+      const {error}=await sb.from('rd_deal_bonuses').insert(drows);
+      if(error){console.warn('deal insert',error);continue;}
+      await sb.from('rd_sample_customers').update({recognized_at:now}).eq('id',sc.id);
+      count++;
+    }
   }
-  showToast(`掃描完成：新認列 ${total} 筆`);
+  return count;
+}
+
+// 手動重掃（成交獎金分頁按鈕）：掃銷貨明細認列；冪等（已認列跳過）
+async function scanRecognizeDeals(){
+  showToast('掃描銷貨中…');
+  let total=0;
+  try{ total=await recognizeFromSales(); }catch(e){console.warn(e);}
+  showToast(`掃描完成：新認列 ${total} 筆成交`);
   loadDealBonuses();
 }
 
@@ -4095,7 +4130,8 @@ async function confirmSalesImport(){
   });
   const {error}=await sb.from('sales_records').insert(rows);
   if(error){showToast('匯入失敗：'+error.message);return;}
-  showToast(`✅ 匯入 ${rows.length} 筆銷貨${aliasRows.length?`，記住 ${aliasRows.length} 筆新品名`:''}`);
+  let dealN=0; try{ dealN=await recognizeFromSales(); }catch(e){console.warn('recognizeFromSales',e);}
+  showToast(`✅ 匯入 ${rows.length} 筆銷貨${aliasRows.length?`，記住 ${aliasRows.length} 筆新品名`:''}${dealN?`，認列 ${dealN} 筆研發成交（待覆核）`:''}`);
   _siRows=[]; document.getElementById('si-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">已匯入。下次同名字會自動對應。</div></div>';
 }
 
