@@ -897,7 +897,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="form-group"><label class="form-label">企劃人員</label><select class="form-select" id="plan-emp-sel"><option value="">請選擇</option></select></div>
             <div class="form-group"><label class="form-label">職稱</label><div id="plan-role-display" style="padding:9px 0;font-size:13px;color:var(--ink-faint)">選擇人員後自動顯示</div><input type="hidden" id="plan-role" value="同仁" /></div>
           </div>
-          <div class="form-group"><label class="form-label">公司當季總出貨件數</label><input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" /></div>
+          <div class="form-group"><label class="form-label">公司當季總出貨件數</label>
+            <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('plan-shipments','plan-ship-note')">🔄 帶入本季銷貨件數</button></div>
+            <div id="plan-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           <div id="plan-staff-scores">
             <hr class="divider">
             <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--purple)">評分項目（每項 1–5 分，共 5 項，總分 5–25）</div>
@@ -939,7 +941,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🛒 採購部試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">採購人員</label><select class="form-select" id="pur-emp-sel"><option value="">請選擇</option></select></div>
-            <div class="form-group"><label class="form-label">公司當季總出貨件數</label><input class="form-input" type="number" id="pur-shipments" placeholder="0" min="0" /></div>
+            <div class="form-group"><label class="form-label">公司當季總出貨件數</label>
+              <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="pur-shipments" placeholder="0" min="0" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('pur-shipments','pur-ship-note')">🔄 帶入本季銷貨件數</button></div>
+              <div id="pur-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           </div>
           <div class="form-group">
             <label class="form-label">是否仍兼任生管工作？</label>
@@ -980,7 +984,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="prod-name" placeholder="例：陳生管" /></div>
-            <div class="form-group"><label class="form-label">當季出貨件數</label><input class="form-input" type="number" id="prod-shipments" placeholder="例：35" min="0" /></div>
+            <div class="form-group"><label class="form-label">當季出貨件數</label>
+              <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="prod-shipments" placeholder="例：35" min="0" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('prod-shipments','prod-ship-note')">🔄 帶入本季銷貨件數</button></div>
+              <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
             <div class="form-group"><label class="form-label">當季出貨準時率（%）</label><input class="form-input" type="number" id="prod-ontime" placeholder="例：90" min="0" max="100" step="0.1" oninput="updateProdBar()" /></div>
           </div>
           <div id="prod-bar-wrap" style="margin-bottom:14px"></div>
@@ -4019,6 +4025,21 @@ async function releaseDeal(scId){
   }
   showToast('✅ 已放行給財務');
   loadDealBonuses();
+}
+
+// ===== 部門出貨件數（吃銷貨明細）=====
+// 件＝品項：本季有幾個不同產品編號出貨就幾件（零頭/分批同編號併一件；排除「其他」/未對應）
+async function salesShipItemCount(){
+  const {data}=await sb.from('sales_records').select('product_code, new_or_repeat')
+    .eq('year',appSettings.year).eq('quarter',appSettings.quarter)
+    .not('product_code','is',null).neq('new_or_repeat','其他');
+  return new Set((data||[]).map(r=>r.product_code)).size;
+}
+async function fillDeptShipCount(inputId, noteId){
+  const n=await salesShipItemCount();
+  const el=document.getElementById(inputId); if(el) el.value=n;
+  const note=document.getElementById(noteId); if(note) note.textContent=`本季銷貨共 ${n} 個品項出貨（自動帶入，可手改）`;
+  showToast(`本季銷貨件數 ${n}`);
 }
 
 // ===== 銷貨 CSV 匯入（地基）=====
