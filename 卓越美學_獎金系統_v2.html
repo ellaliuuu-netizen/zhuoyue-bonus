@@ -913,8 +913,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="form-group"><label class="form-label">企劃人員</label><select class="form-select" id="plan-emp-sel"><option value="">請選擇</option></select></div>
             <div class="form-group"><label class="form-label">職稱</label><div id="plan-role-display" style="padding:9px 0;font-size:13px;color:var(--ink-faint)">選擇人員後自動顯示</div><input type="hidden" id="plan-role" value="同仁" /></div>
           </div>
-          <div class="form-group"><label class="form-label">公司當季總出貨件數</label>
-            <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('plan-shipments','plan-ship-note')">🔄 帶入本季銷貨件數</button></div>
+          <div class="form-group"><label class="form-label">公司當季總出貨件數（系統自動帶，可手改）</label>
+            <input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" />
             <div id="plan-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           <div id="plan-staff-scores">
             <hr class="divider">
@@ -957,8 +957,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🛒 採購部試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">採購人員</label><select class="form-select" id="pur-emp-sel"><option value="">請選擇</option></select></div>
-            <div class="form-group"><label class="form-label">公司當季總出貨件數</label>
-              <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="pur-shipments" placeholder="0" min="0" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('pur-shipments','pur-ship-note')">🔄 帶入本季銷貨件數</button></div>
+            <div class="form-group"><label class="form-label">公司當季總出貨件數（系統自動帶，可手改）</label>
+              <input class="form-input" type="number" id="pur-shipments" placeholder="0" min="0" />
               <div id="pur-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           </div>
           <div class="form-group">
@@ -1000,8 +1000,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="prod-name" placeholder="例：陳生管" /></div>
-            <div class="form-group"><label class="form-label">當季出貨件數</label>
-              <div style="display:flex;gap:8px;align-items:center"><input class="form-input" type="number" id="prod-shipments" placeholder="例：35" min="0" /><button type="button" class="btn btn-outline btn-sm" onclick="fillDeptShipCount('prod-shipments','prod-ship-note')">🔄 帶入本季銷貨件數</button></div>
+            <div class="form-group"><label class="form-label">當季出貨件數（系統自動帶，可手改）</label>
+              <input class="form-input" type="number" id="prod-shipments" placeholder="0" min="0" />
               <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
             <div class="form-group"><label class="form-label">當季出貨準時率（%）</label><input class="form-input" type="number" id="prod-ontime" placeholder="例：90" min="0" max="100" step="0.1" oninput="updateProdBar()" /></div>
           </div>
@@ -3734,6 +3734,9 @@ function switchPage(page){
   if(page==='settings')renderEmployeeList();
   if(page==='rd-sampling')initRdSamplingPage();
   if(page==='sales')populateSalesMonthSel();
+  if(page==='planning')fillDeptAutoCount('plan-shipments','plan-ship-note');
+  if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
+  if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
 }
 function setSidebarActive(el){document.querySelectorAll('.sidebar-card').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
 function switchInner(el,id){
@@ -4112,23 +4115,61 @@ async function confirmOrderImport(){
   });
   const {error}=await sb.from('order_lines').insert(rows);
   if(error){showToast('匯入失敗：'+error.message);return;}
+  try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
   showToast(`✅ 匯入 ${rows.length} 列訂單品項`);
   _oiRows=[]; document.getElementById('oi-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">訂單已匯入。接著匯銷貨就會自動算件數。</div></div>';
 }
 
-// ===== 部門出貨件數（吃銷貨明細）=====
-// 件＝品項：本季有幾個不同產品編號出貨就幾件（零頭/分批同編號併一件；排除「其他」/未對應）
-async function salesShipItemCount(){
-  const {data}=await sb.from('sales_records').select('product_code, new_or_repeat')
-    .eq('year',appSettings.year).eq('quarter',appSettings.quarter)
-    .not('product_code','is',null).neq('new_or_repeat','其他');
-  return new Set((data||[]).map(r=>r.product_code)).size;
+// ===== 部門出貨件數（訂單↔銷貨配對版）=====
+// 件＝訂單品項：銷貨累計出到該訂單品項下單量80%→記1件，結算在跨過80%那一季
+function custMatch(a,b){ if(!a||!b)return false; const x=String(a).replace(/\s/g,''),y=String(b).replace(/\s/g,''); return x.includes(y)||y.includes(x); }
+
+let _orderAmbiguous=[];
+// 把銷貨配對到訂單品項、累計、達80%結算（冪等，每次重算）
+async function matchSalesToOrders(){
+  const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw');
+  const {data:sales}=await sb.from('sales_records').select('id, order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat').not('product_code','is',null).neq('new_or_repeat','其他');
+  const matched={}; _orderAmbiguous=[];
+  for(const s of (sales||[])){
+    let cand=(ols||[]).filter(o=>o.order_no&&s.order_no&&o.order_no===s.order_no&&o.product_code===s.product_code);   // 1 訂單編號+code
+    if(cand.length===0) cand=(ols||[]).filter(o=>o.product_code===s.product_code&&custMatch(o.customer_name,s.customer_name)); // 2 code+客戶
+    if(cand.length===1){ (matched[cand[0].id]=matched[cand[0].id]||[]).push(s); }
+    else if(cand.length>1){ _orderAmbiguous.push({...s, reason:'多張訂單符合('+cand.map(c=>c.order_no).join('/')+')'}); }
+    else { _orderAmbiguous.push({...s, reason:'找不到對應訂單'}); }
+  }
+  for(const o of (ols||[])){
+    const ss=(matched[o.id]||[]).slice().sort((a,b)=>(a.ship_date||'').localeCompare(b.ship_date||''));
+    const total=ss.reduce((x,r)=>x+(r.qty||0),0);
+    let settleDate=null, cum=0;
+    for(const r of ss){ cum+=(r.qty||0); if(o.order_qty>0 && cum>=o.order_qty*0.8){ settleDate=r.ship_date; break; } }
+    const upd={shipped_qty:total};
+    if(settleDate){ const d=new Date(settleDate), mo=d.getMonth()+1;
+      upd.bonus_settled_at=d.toISOString(); upd.bonus_settled_year=d.getFullYear();
+      upd.bonus_settled_quarter=mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'; upd.bonus_settled_month=mo;
+    } else { upd.bonus_settled_at=null; upd.bonus_settled_year=null; upd.bonus_settled_quarter=null; upd.bonus_settled_month=null; }
+    await sb.from('order_lines').update(upd).eq('id',o.id);
+  }
+  return _orderAmbiguous;
 }
-async function fillDeptShipCount(inputId, noteId){
-  const n=await salesShipItemCount();
+async function deptSettledCount(){
+  const {data}=await sb.from('order_lines').select('id')
+    .eq('bonus_settled_year',appSettings.year).eq('bonus_settled_quarter',appSettings.quarter);
+  return (data||[]).length;
+}
+// 進部門頁自動帶件數（先重算配對→數結算品項→填入；對不到的列出來）
+async function fillDeptAutoCount(inputId, noteId){
+  await matchSalesToOrders();
+  const n=await deptSettledCount();
   const el=document.getElementById(inputId); if(el) el.value=n;
-  const note=document.getElementById(noteId); if(note) note.textContent=`本季銷貨共 ${n} 個品項出貨（自動帶入，可手改）`;
-  showToast(`本季銷貨件數 ${n}`);
+  const note=document.getElementById(noteId);
+  if(note){
+    let h=`✅ 本季自動件數 <strong>${n}</strong>（訂單品項出貨達 80% 的數量，系統自動算）`;
+    if(_orderAmbiguous.length){
+      h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${_orderAmbiguous.length} 筆銷貨對不到訂單（可能少算，請補訂單或確認）：<br>`+
+        _orderAmbiguous.slice(0,12).map(s=>`・${s.product_code||''} ${s.customer_name||''} ${(s.qty||0).toLocaleString()}罐 — ${s.reason}`).join('<br>')+`</div>`;
+    }
+    note.innerHTML=h;
+  }
 }
 
 // ===== 銷貨 CSV 匯入（地基）=====
@@ -4241,6 +4282,7 @@ async function confirmSalesImport(){
   const {error}=await sb.from('sales_records').insert(rows);
   if(error){showToast('匯入失敗：'+error.message);return;}
   let dealN=0; try{ dealN=await recognizeFromSales(); }catch(e){console.warn('recognizeFromSales',e);}
+  try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
   showToast(`✅ 匯入 ${rows.length} 筆銷貨${aliasRows.length?`，記住 ${aliasRows.length} 筆新品名`:''}${dealN?`，認列 ${dealN} 筆研發成交（待覆核）`:''}`);
   _siRows=[]; document.getElementById('si-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">已匯入。下次同名字會自動對應。</div></div>';
 }
