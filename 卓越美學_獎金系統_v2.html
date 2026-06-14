@@ -4128,10 +4128,10 @@ let _orderAmbiguous=[];
 // 把銷貨配對到訂單品項、累計、達80%結算（冪等，每次重算）
 async function matchSalesToOrders(){
   const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw');
-  const {data:sales}=await sb.from('sales_records').select('id, order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat').not('product_code','is',null).neq('new_or_repeat','其他');
+  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat').not('product_code','is',null).neq('new_or_repeat','其他');
   const matched={}; _orderAmbiguous=[];
   for(const s of (sales||[])){
-    let cand=(ols||[]).filter(o=>o.order_no&&s.order_no&&o.order_no===s.order_no&&o.product_code===s.product_code);   // 1 訂單編號+code
+    let cand=(ols||[]).filter(o=>o.order_no&&s.source_order_no&&o.order_no===s.source_order_no&&o.product_code===s.product_code);   // 1 訂單編號+code
     if(cand.length===0) cand=(ols||[]).filter(o=>o.product_code===s.product_code&&custMatch(o.customer_name,s.customer_name)); // 2 code+客戶
     if(cand.length===1){ (matched[cand[0].id]=matched[cand[0].id]||[]).push(s); }
     else if(cand.length>1){ _orderAmbiguous.push({...s, reason:'多張訂單符合('+cand.map(c=>c.order_no).join('/')+')'}); }
