@@ -506,6 +506,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
+    <div class="nav-tab manager-only" onclick="switchPage('order-import')" id="tab-order-import"><span class="tab-dot" style="background:#8a6d3b"></span>訂單匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
@@ -640,6 +641,21 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
         </div>
         <div id="si-preview"></div>
+      </div>
+
+      <!-- ORDER IMPORT 訂單匯入 -->
+      <div class="page" id="page-order-import">
+        <div class="section-title" style="color:#8a6d3b">📋 訂單匯入</div>
+        <div class="section-desc">匯入訂單 CSV（下單時）→ 記每張訂單每個品項的下單量。之後銷貨累計出到下單量 80% → 自動算 1 件給部門。先匯訂單、再匯銷貨。</div>
+        <div class="card" style="border-color:#8a6d3b">
+          <div class="card-header"><div class="card-title">① 選訂單 CSV</div></div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="oi-file" accept=".csv" onchange="parseOrderCSV()" />
+            <input class="form-input" id="oi-batch" placeholder="批次標籤（例 2026-06訂單）" style="width:auto" />
+            <span id="oi-fileinfo" style="font-size:12px;color:var(--ink-faint)"></span>
+          </div>
+        </div>
+        <div id="oi-preview"></div>
       </div>
 
       <!-- SALES -->
@@ -4025,6 +4041,79 @@ async function releaseDeal(scId){
   }
   showToast('✅ 已放行給財務');
   loadDealBonuses();
+}
+
+// ===== 訂單 CSV 匯入 =====
+let _oiRows=[];
+async function parseOrderCSV(){
+  const f=document.getElementById('oi-file').files[0]; if(!f) return;
+  document.getElementById('oi-fileinfo').textContent=`${f.name}（${(f.size/1024).toFixed(1)} KB）`;
+  if(!document.getElementById('oi-batch').value){
+    const m=f.name.match(/(\d{2,4})\s*[年._-]?\s*(\d{1,2})\s*月/);
+    document.getElementById('oi-batch').value=m?`${m[1]}-${String(m[2]).padStart(2,'0')}訂單`:f.name.replace(/\.csv$/i,'');
+  }
+  await loadSalesAliases();
+  const rows=parseCSVText(await f.text());
+  if(!rows.length){showToast('CSV 解析不到內容');return;}
+  const header=rows[0].map(h=>h.trim());
+  const idx=n=>header.findIndex(h=>h===n);
+  const col={no:idx('訂單編號'),sd:idx('簽回日期'),cust:idx('客戶名稱'),code:idx('產品編號'),item:idx('品項名稱'),nr:idx('新品或舊品追加'),qty:idx('下單數量'),price:idx('單價'),amt:idx('訂單金額'),sp:idx('業務人員'),esd:idx('預計出貨日'),note:idx('備註')};
+  if(col.qty<0) col.qty=idx('數量');
+  _oiRows=rows.slice(1).filter(r=>r.length>1 && (r[col.item]||(col.code>=0?r[col.code]:'')||'').trim()).map(r=>{
+    const rawCode=col.code>=0?(r[col.code]||'').trim():'';
+    const itemName=(r[col.item]||'').trim();
+    let code='', how='';
+    if(rawCode && products.some(p=>p.product_code===rawCode)){ code=rawCode; how='code'; }
+    else if(rawCode){ code=rawCode; how='code-unknown'; }
+    else { const m=matchProduct(itemName); code=m.code; how=m.how; }
+    return {order_no:(r[col.no]||'').trim(), sd:(r[col.sd]||'').trim(), customer:(r[col.cust]||'').trim(),
+      code, how, item:itemName, nr:(r[col.nr]||'').trim(),
+      qty:parseInt((r[col.qty]||'0').replace(/[, ]/g,''))||0,
+      price:parseFloat((r[col.price]||'0').replace(/[, ]/g,''))||0,
+      amt:parseFloat((r[col.amt]||'0').replace(/[, ]/g,''))||0,
+      sp:(r[col.sp]||'').trim(), esd:(r[col.esd]||'').trim(), note:col.note>=0?(r[col.note]||''):''};
+  });
+  renderOrderPreview();
+}
+function renderOrderPreview(){
+  const el=document.getElementById('oi-preview');
+  const total=_oiRows.length;
+  const ok=_oiRows.filter(r=>r.code&&(r.how==='code'||r.how==='exact'||r.how==='alias')).length;
+  const need=_oiRows.filter(r=>!r.code||r.how==='fuzzy'||r.how==='code-unknown').length;
+  const prodOpts='<option value="">— 未對應 —</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
+  let html=`<div class="card"><div class="card-header"><div class="card-title">② 對應預覽</div><button class="btn btn-gold btn-sm" onclick="confirmOrderImport()">確認匯入 ${total} 列</button></div>`;
+  html+=`<div class="info-box" style="font-size:13px;background:#f3ede0">共 ${total} 列（訂單品項）｜✅ 對上 ${ok}｜⚠️ 需確認 ${need}</div>`;
+  html+=`<table><thead><tr><th>訂單編號</th><th>客戶</th><th>品名</th><th>對應正式編號</th><th>新舊品</th><th class="td-right">下單量</th></tr></thead><tbody>`;
+  _oiRows.forEach((r,i)=>{
+    const needC=!r.code||r.how==='fuzzy'||r.how==='code-unknown';
+    const opts=prodOpts.replace(`value="${r.code}"`,`value="${r.code}" selected`);
+    const sel=`<select onchange="_oiRows[${i}].code=this.value;_oiRows[${i}].how='manual'" style="font-size:12px;padding:2px;${needC?'border:1.5px solid #b3541e;background:#fbeee6':''}">${opts}</select>`;
+    const badge=(r.how==='code'||r.how==='exact'||r.how==='alias')?'✅':(r.how==='fuzzy'?'🟠':(r.how==='code-unknown'?'⚠編號主檔沒有':(r.code?'':'⚠')));
+    html+=`<tr><td style="font-size:11px">${r.order_no}</td><td style="font-size:12px">${r.customer}</td><td style="font-size:12px">${r.item}</td><td>${badge} ${sel}</td><td style="font-size:12px">${r.nr}</td><td class="td-right">${r.qty.toLocaleString()}</td></tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  el.innerHTML=html;
+}
+async function confirmOrderImport(){
+  if(!_oiRows.length){showToast('沒有資料');return;}
+  const batch=document.getElementById('oi-batch').value||'未命名訂單批次';
+  const unmatched=_oiRows.filter(r=>!r.code).length;
+  if(unmatched>0 && !confirm(`還有 ${unmatched} 列沒對應到編號，會以未對應存入。仍要匯入？`)) return;
+  const aliasRows=[]; const seen={};
+  _oiRows.forEach(r=>{ if(r.how==='manual'&&r.code&&r.item){ const n=normName(r.item); if(!seen[n]){seen[n]=1;aliasRows.push({alias_norm:n,alias_raw:r.item,product_code:r.code});} } });
+  if(aliasRows.length){ await sb.from('product_aliases').upsert(aliasRows,{onConflict:'alias_norm'}); }
+  const rows=_oiRows.map(r=>{
+    const d=r.sd?new Date(r.sd):null, y=d?d.getFullYear():null, mo=d?d.getMonth()+1:null;
+    const q=mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null;
+    return {import_batch:batch, order_no:r.order_no, sign_date:r.sd||null, customer_name:r.customer,
+      product_code:r.code||null, item_name_raw:r.item, new_or_repeat:r.nr, order_qty:r.qty,
+      unit_price:r.price, amount:r.amt, sales_person:r.sp, expected_ship_date:r.esd||null,
+      note:r.note||null, year:y, quarter:q, month:mo};
+  });
+  const {error}=await sb.from('order_lines').insert(rows);
+  if(error){showToast('匯入失敗：'+error.message);return;}
+  showToast(`✅ 匯入 ${rows.length} 列訂單品項`);
+  _oiRows=[]; document.getElementById('oi-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">訂單已匯入。接著匯銷貨就會自動算件數。</div></div>';
 }
 
 // ===== 部門出貨件數（吃銷貨明細）=====
