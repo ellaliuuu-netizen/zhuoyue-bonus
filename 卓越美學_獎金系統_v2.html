@@ -677,7 +677,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-primary manager-only" onclick="settleSalesMonth()">執行結算</button>
               </div>
             </div>
-            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（首次訂單且已記錄回款）→ ×1,500 (2) 該月「出貨金額」（出貨件數×單價，扣退貨）→ 5 段階梯比例</div>
+            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（首次訂單且已記錄回款）→ ×1,500 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
             <div id="sales-m-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
@@ -2569,14 +2569,14 @@ async function settleSalesMonth(){
   // 政策 B：全公司首次成交 — 客戶第一次出現就只算一次新客，後續換業務不再算
   const {data:priorOrders}=await sb.from('orders').select('customer_name').lt('order_date',start);
   const priorCustomers=new Set((priorOrders||[]).map(o=>o.customer_name));
-  const {data:shipsInMonth}=await sb.from('shipments').select('order_id,ship_qty,is_refunded')
-    .gte('ship_date',start).lt('ship_date',nm);
-  const orderIds=[...new Set((shipsInMonth||[]).map(s=>s.order_id))];
-  let omap={};
-  if(orderIds.length){
-    const {data:ords}=await sb.from('orders').select('id,unit_price,sales_id,is_refunded').in('id',orderIds);
-    (ords||[]).forEach(o=>{omap[o.id]=o;});
-  }
+  // 出貨金額：改吃會計銷貨明細 sales_records（按業務員名對應員工），取代舊 shipments
+  const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount').eq('year',y).eq('month',m);
+  const salesAliasMap={};
+  employees.filter(e=>e.dept==='業務部').forEach(e=>{
+    if(e.name)salesAliasMap[e.name.trim()]=e.id;
+    if(e.csv_sales_alias)salesAliasMap[e.csv_sales_alias.trim()]=e.id;
+  });
+  const unmatchedSales={};
   // 當月新客戶集合（避免同月內同客戶被多筆訂單算重複）
   const monthNewCustomers=new Set();
   const ncByEmp={}; const amtByEmp={};
@@ -2589,10 +2589,11 @@ async function settleSalesMonth(){
     if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
     ncByEmp[o.sales_id].add(o.customer_name);
   });
-  (shipsInMonth||[]).forEach(s=>{
-    if(s.is_refunded)return;
-    const o=omap[s.order_id]; if(!o||o.is_refunded||!o.sales_id)return;
-    amtByEmp[o.sales_id]=(amtByEmp[o.sales_id]||0)+(o.unit_price||0)*s.ship_qty;
+  (salesRecs||[]).forEach(r=>{
+    const key=(r.sales_person||'').trim();
+    const empId=salesAliasMap[key];
+    if(empId)amtByEmp[empId]=(amtByEmp[empId]||0)+Number(r.amount||0);
+    else if(key)unmatchedSales[key]=(unmatchedSales[key]||0)+Number(r.amount||0);
   });
   const ncUnit=appSettings.newClientBonus||1500;
   let results=[];
@@ -2624,6 +2625,10 @@ async function settleSalesMonth(){
     results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
   }
   document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
+  const unEntries=Object.entries(unmatchedSales);
+  if(unEntries.length){
+    document.getElementById('sales-m-content').innerHTML+=`<div class="info-box" style="margin-top:10px;border:1px solid #b3541e;color:#b3541e;font-size:12px">⚠ 銷貨明細有 ${unEntries.length} 個業務名對不到員工，金額未計入：${unEntries.map(([k,v])=>`${k}（${fmtNum(Math.round(v))}）`).join('、')}。請到「設定→員工」補該員工的銷貨別名後重算。</div>`;
+  }
   showToast(`✓ ${ym} 業務月結算完成`);
 }
 async function settleSalesQuarter(){
