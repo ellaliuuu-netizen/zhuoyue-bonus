@@ -1485,6 +1485,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="info-box" style="font-size:12px;margin-bottom:12px">確樣＝把這筆打樣掛上<strong>正式產品編號</strong>並認定成交歸屬。出貨時系統靠正式編號自動對應、算三段（主責50%/打樣30%/確樣20%）。獎金實際發放仍需經 ELLA 覆核。</div>
       <div id="cf-sample-info" class="info-box" style="font-size:13px;background:var(--surface);margin-bottom:12px"></div>
 
+      <div id="cf-rebind-zone" style="display:none;border:1px solid #c99a2e;background:#fbf6ea;border-radius:6px;padding:10px;margin-bottom:12px">
+        <div style="font-size:13px;color:#8a6d1e;margin-bottom:8px">⚠ 此客戶已確樣為 <strong id="cf-rebind-code"></strong>。<span id="cf-rebind-mode-txt"></span>，要修正請用：</div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="openRebind('rebind')">🔁 <span class="cf-rebind-verb"></span>改綁到別筆打樣</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="openRebind('cancel')">↩ <span class="cf-rebind-verb"></span>取消此確樣</button>
+      </div>
+
       <div class="form-group" id="cf-customer-wrap">
         <label class="form-label">客戶（這筆樣品給誰）*</label>
         <select class="form-select" id="cf-customer" onchange="onConfirmCustomerChange()"></select>
@@ -1562,7 +1568,43 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('confirmSampleModal')">取消</button>
-      <button class="btn btn-gold" onclick="saveConfirm()">儲存確樣</button>
+      <button class="btn btn-gold" id="cf-save-btn" onclick="saveConfirm()">儲存確樣</button>
+    </div>
+  </div>
+</div>
+
+<!-- 通用確認卡片（B：確樣送出前再核對一次）-->
+<div class="modal-overlay" id="genConfirmModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><div class="modal-title" id="gc-title">確認</div><button class="modal-close" onclick="gcDone(false)">✕</button></div>
+    <div class="modal-body"><div id="gc-body" style="font-size:13px;line-height:1.7"></div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="gcDone(false)">返回修改</button>
+      <button class="btn btn-gold" id="gc-ok" onclick="gcDone(true)">確認無誤</button>
+    </div>
+  </div>
+</div>
+
+<!-- 改綁／取消確樣（D：課長申請 / 經理直改）-->
+<div class="modal-overlay" id="rebindModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header"><div class="modal-title" id="rb-title">🔁 改綁確樣</div><button class="modal-close" onclick="closeModal('rebindModal')">✕</button></div>
+    <div class="modal-body">
+      <div id="rb-current" class="info-box" style="font-size:13px;background:var(--surface);margin-bottom:12px"></div>
+      <div class="form-group" id="rb-target-wrap">
+        <label class="form-label">改綁到正確的打樣 *</label>
+        <select class="form-select" id="rb-target"><option value="">載入中…</option></select>
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:4px">選正確的「打樣編號 · 打樣日 · 品名 — 客戶」；正式編號會搬過去，確樣人／變動程度／協作拆分沿用原確樣。</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="rb-reason-label">原因 *（留底）</label>
+        <textarea class="form-input" id="rb-reason" rows="2" placeholder="例：原綁到 5/22 打樣，實際確樣的是 5/29 那筆"></textarea>
+      </div>
+      <div id="rb-note" class="info-box" style="font-size:12px;background:#fbf6ea"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('rebindModal')">取消</button>
+      <button class="btn btn-gold" id="rb-submit" onclick="submitRebind()">送出</button>
     </div>
   </div>
 </div>
@@ -2935,6 +2977,7 @@ async function loadRdSamples(){
   const el=document.getElementById('rds-list-content');
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
+  const nameCount={}; data.forEach(x=>{const n=(x.item_name||'').trim();if(n)nameCount[n]=(nameCount[n]||0)+1;});
   el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const scRows=s.rd_sample_customers||[];
     const custs=scRows.length?scRows.map(rc=>{
@@ -2970,7 +3013,8 @@ async function loadRdSamples(){
       // 打樣者 = 配方擬定者（或無填）
       empCell = s.employees?.name||'-';
     }
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
+    const dupWarn=(s.item_name&&nameCount[s.item_name.trim()]>1)?`<div style="font-size:10px;color:#b3541e">⚠ 同品名 ${nameCount[s.item_name.trim()]} 筆，認打樣日</div>`:'';
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}${dupWarn}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -3877,7 +3921,7 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
     if(s.qty<500) continue;                       // 首批<500＝尾數不計
     const {data:scs}=await sb.from('rd_sample_customers')
       .select('*, rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(role_level)), rd_deal_owner_splits(employee_id,pct,role)')
-      .eq('official_product_code', s.code).eq('confirm_status','confirmed').is('recognized_at',null);
+      .eq('official_product_code', s.code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
     for(const sc of scs){
       const segs=computeDealSegments(sc);
@@ -3915,7 +3959,7 @@ async function recognizeFromSales(){
     if(totalQty<500) continue;                                  // 尾數不計
     const {data:scs}=await sb.from('rd_sample_customers')
       .select('*, rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(role_level)), rd_deal_owner_splits(employee_id,pct,role)')
-      .eq('official_product_code', code).eq('confirm_status','confirmed').is('recognized_at',null);
+      .eq('official_product_code', code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
     const shipDate=rows.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
     const cust=rows[0].customer_name||'';
@@ -3981,7 +4025,7 @@ async function loadDealBonuses(){
   const cum={}; (agg||[]).forEach(r=>{if(r.employee_id)cum[r.employee_id]=(cum[r.employee_id]||0)+Number(r.amount);});
   const {data:notShipped}=await sb.from('rd_sample_customers')
     .select('official_product_code, confirmed_at, rd_customers(short_name)')
-    .eq('confirm_status','confirmed').is('recognized_at',null);
+    .eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
   const rdActive=employees.filter(e=>e.dept==='研發部'&&e.is_active);
   const assignOpts='<option value="">指定接手人…</option>'+rdActive.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   const segLabel={primary:'主責 50%',sampling:'打樣 30%',confirm:'確樣 20%',collaborator:'協作',oem:'代工 100%'};
@@ -4017,7 +4061,51 @@ async function loadDealBonuses(){
   if(notShipped&&notShipped.length){
     body+=`<div class="card" style="margin-top:14px;border-color:var(--ink-faint)"><div class="card-header"><div class="card-title" style="font-size:13px">📋 已確樣、但還沒出貨認列（${notShipped.length}）</div></div><div class="info-box" style="font-size:12px">課長確樣了、但客戶還沒出貨，所以還沒算獎金。給你看全貌，避免「確了卻漏發」。</div><table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th></tr></thead><tbody>${notShipped.map(n=>{const p=products.find(x=>x.product_code===n.official_product_code);return `<tr><td>${n.official_product_code||'—'}</td><td>${p?.product_name||''}</td><td>${n.rd_customers?.short_name||''}</td><td>${n.confirmed_at||''}</td></tr>`;}).join('')}</tbody></table></div>`;
   }
+  // D：待審改綁／取消申請（置頂；核准前該確樣已凍結發獎）
+  const {data:reqs}=await sb.from('rd_confirm_change_requests')
+    .select('*, src:rd_sample_customers!rd_confirm_change_requests_sample_customer_id_fkey(official_product_code, rd_customers(short_name), rd_samples(sample_code,sample_date,item_name)), tgt:rd_sample_customers!rd_confirm_change_requests_target_sample_customer_id_fkey(rd_customers(short_name), rd_samples(sample_code,sample_date,item_name))')
+    .eq('status','pending').order('requested_at');
+  if(reqs&&reqs.length){
+    let r='';
+    reqs.forEach(q=>{
+      const src=q.src||{}, tgt=q.tgt||{};
+      const reqName=employees.find(e=>e.id===q.requested_by)?.name||'?';
+      const actTxt=q.action==='rebind'?'🔁 改綁':'↩ 取消確樣';
+      const srcTxt=`${src.rd_samples?.sample_code||''} · ${src.rd_samples?.sample_date||''} · ${src.rd_samples?.item_name||''} — ${src.rd_customers?.short_name||''}`;
+      const tgtTxt=q.action==='rebind'?`<div style="font-size:13px">改綁到 → <strong>${tgt.rd_samples?.sample_code||''}</strong> · <span style="color:#b3541e">${tgt.rd_samples?.sample_date||''}</span> · ${tgt.rd_samples?.item_name||''} — ${tgt.rd_customers?.short_name||''}</div>`:'';
+      r+=`<div class="card" style="margin-bottom:10px;border-color:#c99a2e"><div class="card-header"><div class="card-title" style="font-size:14px">${actTxt}　<strong>${q.official_product_code||''}</strong></div><div style="font-size:12px;color:var(--ink-faint)">課長 ${reqName} 提</div></div>`+
+        `<div style="font-size:13px">原綁打樣：${srcTxt}</div>${tgtTxt}`+
+        `<div style="font-size:12px;color:#8a6d1e;margin:6px 0">原因：${q.reason||'—'}</div>`+
+        `<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input class="form-input" id="rvnote-${q.id}" placeholder="審核備註（選填）" style="flex:1;font-size:12px;padding:4px" /><button class="btn btn-gold btn-sm" onclick="approveRequest('${q.id}')">✅ 核准</button><button class="btn btn-outline btn-sm" onclick="rejectRequest('${q.id}')">❌ 駁回</button></div></div>`;
+    });
+    body=`<div class="card" style="margin-bottom:14px;border-color:#c99a2e;background:#fbf6ea"><div class="card-title" style="font-size:14px;margin-bottom:8px">📨 待審改綁／取消申請（${reqs.length}）— 核准前該確樣已凍結發獎</div>${r}</div>`+body;
+  }
   el.innerHTML=body;
+}
+
+// D：核准 → 執行搬移/還原並標記；駁回 → 解鎖、確樣維持原狀
+async function approveRequest(reqId){
+  const {data:q,error}=await sb.from('rd_confirm_change_requests').select('*').eq('id',reqId).single();
+  if(error||!q){showToast('讀取申請失敗');return;}
+  const note=document.getElementById('rvnote-'+reqId)?.value?.trim()||null;
+  try{
+    if(q.action==='rebind') await executeRebind(q.sample_customer_id, q.target_sample_customer_id);
+    else await executeCancel(q.sample_customer_id);
+  }catch(e){showToast('執行失敗：'+(e.message||e));return;}
+  const meEmp=employees.find(e=>e.name===currentUserName);
+  await sb.from('rd_confirm_change_requests').update({status:'approved', reviewed_by:meEmp?.id||null, reviewed_at:new Date().toISOString(), review_note:note}).eq('id',reqId);
+  showToast('✅ 已核准並執行');
+  loadDealBonuses();
+}
+async function rejectRequest(reqId){
+  const {data:q,error}=await sb.from('rd_confirm_change_requests').select('*').eq('id',reqId).single();
+  if(error||!q){showToast('讀取申請失敗');return;}
+  const note=document.getElementById('rvnote-'+reqId)?.value?.trim()||null;
+  await sb.from('rd_sample_customers').update({change_lock:false}).eq('id',q.sample_customer_id);
+  const meEmp=employees.find(e=>e.name===currentUserName);
+  await sb.from('rd_confirm_change_requests').update({status:'rejected', reviewed_by:meEmp?.id||null, reviewed_at:new Date().toISOString(), review_note:note}).eq('id',reqId);
+  showToast('已駁回，確樣維持原狀、解除凍結');
+  loadDealBonuses();
 }
 
 // 放行：把這筆成交的所有段轉 released（財務才看得到）；孤兒段須先指定接手人
@@ -4356,7 +4444,7 @@ async function openConfirmModal(sampleId){
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
   if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
-  document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
+  document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜<span style="color:#b3541e;font-weight:600">打樣日 ${s.sample_date}</span>｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
   const custSel=document.getElementById('cf-customer');
   custSel.innerHTML=cfState.scRows.map(rc=>`<option value="${rc.id}">${rc.rd_customers?.short_name||'(未命名客戶)'}${rc.confirm_status==='confirmed'?' ✅已確樣':''}</option>`).join('');
   document.getElementById('cf-product').innerHTML='<option value="">請選擇正式編號</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
@@ -4386,6 +4474,16 @@ function onConfirmCustomerChange(){
   document.getElementById('cf-owner-override').value=rc.owner_override_employee_id||'';
   document.getElementById('cf-split-rows').innerHTML='';
   (rc.rd_deal_owner_splits||[]).filter(d=>d.role==='collaborator').forEach(d=>addSplitRow(d.employee_id,d.pct));
+  // 已確樣客戶 → 顯示改綁/取消入口；課長對已確樣不可直接存（須走申請）
+  const isConfirmed=rc.confirm_status==='confirmed', isMgr=currentRole==='manager';
+  const zone=document.getElementById('cf-rebind-zone');
+  zone.style.display=isConfirmed?'block':'none';
+  if(isConfirmed){
+    document.getElementById('cf-rebind-code').textContent=rc.official_product_code||'';
+    document.querySelectorAll('.cf-rebind-verb').forEach(sp=>sp.textContent=isMgr?'':'申請');
+    document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是經理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
+  }
+  document.getElementById('cf-save-btn').style.display=(isConfirmed&&!isMgr)?'none':'';
   onConfirmProductChange();
   onConfirmChangeLevel();
   onConfirmArchChange();
@@ -4470,6 +4568,20 @@ async function saveConfirm(){
     owner_override_employee_id:lv==='major'?(document.getElementById('cf-owner-override').value||null):null,
     split_reason:lv==='minor'?null:reason
   };
+  // B：送出前再核對一次（凸顯打樣編號＋打樣日，防綁錯打樣）
+  const s=cfState.sample, prod=products.find(p=>p.product_code===code), confName=employees.find(e=>e.id===confirmer)?.name||'';
+  const A=appSettings.aValue||3000, ft=upd.formula_type_override||prod?.formula_type||s.formula_type, base=FORMULA_BASE[ft];
+  const lvTxt={minor:'輕微（原主責滿50%）',medium_light:'中度偏輕',medium_heavy:'中度偏重',co_dev:'近共同開發',major:'大幅換主責'}[lv]||lv;
+  const poolTxt=upd.is_oem?'代工：窗口領 100%（每件900）':(base?`池子 ${(A*base).toLocaleString()} → 主 ${(A*base*0.5).toLocaleString()}／打 ${(A*base*0.3).toLocaleString()}／確 ${(A*base*0.2).toLocaleString()}`:'—');
+  const okCard=await confirmCard('確認確樣內容',
+    `<div style="border:1px solid #c99a2e;background:#fbf6ea;border-radius:6px;padding:10px;margin-bottom:10px">`+
+    `打樣：<strong>${s.sample_code}</strong>${s.version?' '+s.version:''}<br>`+
+    `<span style="color:#b3541e;font-weight:600;font-size:15px">打樣日 ${s.sample_date}</span><br>`+
+    `品名：${s.item_name||'—'}</div>`+
+    `正式編號：<strong>${code}</strong> · ${prod?.product_name||''}<br>`+
+    `確樣人：<strong>${confName}</strong>　變動：${lvTxt}<br>${poolTxt}`,
+    '確認無誤、儲存');
+  if(!okCard) return;
   const {error}=await sb.from('rd_sample_customers').update(upd).eq('id',scId);
   if(error){
     if((error.message||'').includes('uq_official_product_code')) showToast('此正式編號已被其他確樣使用（一個編號只能確樣一次）');
@@ -4484,6 +4596,109 @@ async function saveConfirm(){
   showToast('✅ 確樣已儲存');
   closeModal('confirmSampleModal');
   loadRdSamples();
+}
+
+// ===== 通用確認卡片（Promise）=====
+let gcResolve=null;
+function confirmCard(title, bodyHtml, okText='確認'){
+  return new Promise(res=>{
+    gcResolve=res;
+    document.getElementById('gc-title').textContent=title;
+    document.getElementById('gc-body').innerHTML=bodyHtml;
+    document.getElementById('gc-ok').textContent=okText;
+    openModal('genConfirmModal');
+  });
+}
+function gcDone(v){closeModal('genConfirmModal');const r=gcResolve;gcResolve=null;if(r)r(v);}
+
+// ===== 改綁／取消確樣（D）：經理直改、課長提申請 =====
+let rbState=null;
+async function openRebind(action){
+  const scId=cfState.activeScId;
+  const rc=cfState.scRows.find(r=>r.id===scId);
+  if(!rc||rc.confirm_status!=='confirmed'){showToast('此客戶尚未確樣');return;}
+  const s=cfState.sample, isMgr=currentRole==='manager';
+  rbState={action, sourceScId:scId, officialCode:rc.official_product_code};
+  document.getElementById('rb-title').textContent=action==='rebind'?(isMgr?'🔁 改綁確樣（直接生效）':'🔁 申請改綁確樣'):(isMgr?'↩ 取消確樣（直接生效）':'↩ 申請取消確樣');
+  document.getElementById('rb-current').innerHTML=`目前：正式編號 <strong>${rc.official_product_code||''}</strong><br>綁定打樣 <strong>${s.sample_code}</strong>｜<span style="color:#b3541e">打樣日 ${s.sample_date}</span>｜${s.item_name||''}`;
+  const tw=document.getElementById('rb-target-wrap');
+  document.getElementById('rb-reason-label').textContent=isMgr?'原因（留底，可留空）':'原因 *（留底，必填）';
+  document.getElementById('rb-reason').value='';
+  if(action==='rebind'){
+    tw.style.display='block';
+    const sel=document.getElementById('rb-target'); sel.innerHTML='<option value="">載入中…</option>';
+    const {data:cands}=await sb.from('rd_sample_customers')
+      .select('id, confirm_status, rd_customers(short_name), rd_samples(sample_code,sample_date,item_name)')
+      .neq('confirm_status','confirmed');
+    const opts=(cands||[]).filter(c=>c.id!==scId&&c.rd_samples)
+      .sort((a,b)=>(b.rd_samples.sample_date||'').localeCompare(a.rd_samples.sample_date||''))
+      .map(c=>`<option value="${c.id}">${c.rd_samples.sample_code} · ${c.rd_samples.sample_date} · ${c.rd_samples.item_name||''} — ${c.rd_customers?.short_name||'(未命名客戶)'}</option>`).join('');
+    sel.innerHTML='<option value="">請選擇正確的打樣</option>'+opts;
+    document.getElementById('rb-note').innerHTML='正式編號將從目前打樣搬到所選打樣，原打樣還原為未確樣。';
+  }else{
+    tw.style.display='none';
+    document.getElementById('rb-note').innerHTML='取消後此確樣還原為未確樣、正式編號釋出，可重新對正確打樣確樣。';
+  }
+  document.getElementById('rb-submit').textContent=isMgr?'確認執行':'送出申請';
+  openModal('rebindModal');
+}
+
+async function submitRebind(){
+  if(!rbState)return;
+  const isMgr=currentRole==='manager';
+  const reason=document.getElementById('rb-reason').value.trim();
+  let targetId=null;
+  if(rbState.action==='rebind'){
+    targetId=document.getElementById('rb-target').value;
+    if(!targetId){showToast('請選擇要改綁到的打樣');return;}
+  }
+  if(!isMgr && !reason){showToast('請填原因（留底）');return;}
+  if(isMgr){
+    const ok=await confirmCard(rbState.action==='rebind'?'確認改綁':'確認取消確樣',
+      rbState.action==='rebind'?'正式編號將立即搬到所選打樣，原打樣還原未確樣。確定？':'此確樣將立即還原為未確樣。確定？','確認執行');
+    if(!ok)return;
+    try{
+      if(rbState.action==='rebind') await executeRebind(rbState.sourceScId, targetId);
+      else await executeCancel(rbState.sourceScId);
+    }catch(e){showToast('執行失敗：'+(e.message||e));return;}
+    showToast(rbState.action==='rebind'?'✅ 已改綁':'✅ 已取消確樣');
+  }else{
+    const meEmp=employees.find(e=>e.name===currentUserName);
+    const {error}=await sb.from('rd_confirm_change_requests').insert({
+      sample_customer_id:rbState.sourceScId, action:rbState.action,
+      target_sample_customer_id:targetId, official_product_code:rbState.officialCode,
+      reason, requested_by:meEmp?.id||null, status:'pending'});
+    if(error){showToast('申請失敗：'+error.message);return;}
+    const {error:e2}=await sb.from('rd_sample_customers').update({change_lock:true}).eq('id',rbState.sourceScId);
+    if(e2)showToast('申請已建立，但鎖定失敗：'+e2.message);
+    else showToast('✅ 已送出申請，待 ELLA 審核（此確樣已凍結發獎）');
+  }
+  rbState=null;
+  closeModal('rebindModal'); closeModal('confirmSampleModal');
+  loadRdSamples();
+}
+
+// 搬移：把正式編號＋確樣屬性從來源 sc 搬到目標 sc（先還原來源釋放唯一編號，再設目標）
+async function executeRebind(sourceScId, targetScId){
+  const {data:src,error:e0}=await sb.from('rd_sample_customers').select('*').eq('id',sourceScId).single();
+  if(e0||!src)throw new Error('讀取來源失敗');
+  const carry={official_product_code:src.official_product_code, confirmed_at:src.confirmed_at, confirmed_by:src.confirmed_by,
+    formula_type_override:src.formula_type_override, is_oem:src.is_oem, change_level:src.change_level,
+    changed_architectures:src.changed_architectures, owner_override_employee_id:src.owner_override_employee_id, split_reason:src.split_reason};
+  const {error:e1}=await sb.from('rd_sample_customers').update({official_product_code:null, confirm_status:'none', confirmed_at:null, confirmed_by:null,
+    formula_type_override:null, is_oem:false, change_level:null, changed_architectures:null, owner_override_employee_id:null, split_reason:null, change_lock:false}).eq('id',sourceScId);
+  if(e1)throw new Error(e1.message);
+  const {error:e2}=await sb.from('rd_sample_customers').update({...carry, confirm_status:'confirmed', change_lock:false}).eq('id',targetScId);
+  if(e2)throw new Error(e2.message);
+  await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',targetScId);
+  await sb.from('rd_deal_owner_splits').update({sample_customer_id:targetScId}).eq('sample_customer_id',sourceScId);
+}
+
+async function executeCancel(scId){
+  const {error}=await sb.from('rd_sample_customers').update({official_product_code:null, confirm_status:'none', confirmed_at:null, confirmed_by:null,
+    formula_type_override:null, is_oem:false, change_level:null, changed_architectures:null, owner_override_employee_id:null, split_reason:null, change_lock:false}).eq('id',scId);
+  if(error)throw new Error(error.message);
+  await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId);
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
