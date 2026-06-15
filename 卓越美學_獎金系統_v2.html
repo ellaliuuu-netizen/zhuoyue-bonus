@@ -4343,9 +4343,19 @@ async function parseSalesCSV(){
 function renderSalesPreview(){
   const el=document.getElementById('si-preview');
   const total=_siRows.length, auto=_siRows.filter(r=>r.auto&&r.code).length, need=_siRows.filter(r=>!r.auto||!r.code).length;
+  // ② 匯入前體檢
+  const _salesNames=new Set(); employees.filter(e=>e.dept==='業務部').forEach(e=>{if(e.name)_salesNames.add(e.name.trim()); if(e.csv_sales_alias)_salesNames.add(e.csv_sales_alias.trim());});
+  const _chk=[];
+  if(need) _chk.push(`${need} 筆品名未對應正式編號（下方紅框挑選）`);
+  const _badSales=[...new Set(_siRows.map(r=>r.sp).filter(sp=>sp&&!_salesNames.has(sp)))];
+  if(_badSales.length) _chk.push(`業務員對不到員工：${_badSales.join('、')}（業務金額不計入，請先到設定補別名）`);
+  const _noDate=_siRows.filter(r=>!r.sd).length; if(_noDate) _chk.push(`${_noDate} 筆缺出貨日（無法歸入月份）`);
+  const _badAmt=_siRows.filter(r=>!(r.amt>0)).length; if(_badAmt) _chk.push(`${_badAmt} 筆金額為 0 或異常`);
   const prodOpts='<option value="">— 未對應 —</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
   let html=`<div class="card"><div class="card-header"><div class="card-title">② 對應預覽</div><button class="btn btn-gold btn-sm" onclick="confirmSalesImport()">確認匯入 ${total} 筆</button></div>`;
   html+=`<div class="info-box" style="font-size:13px;background:#f3ede0">共 ${total} 筆｜✅ 自動對上 ${auto}｜⚠️ 需你確認 ${need}（紅框那格挑對的，挑過會記住）</div>`;
+  if(_chk.length) html+=`<div class="info-box" style="font-size:13px;border:1px solid #b3541e;color:#b3541e;background:#fbeee6">🩺 匯入前體檢，建議先處理：<ul style="margin:6px 0 0 18px">${_chk.map(c=>`<li>${c}</li>`).join('')}</ul></div>`;
+  else html+=`<div class="info-box" style="font-size:13px;border:1px solid #2e7d52;color:#2e7d52;background:#eef6ef">🩺 體檢通過：品名、業務員、出貨日、金額都正常，可安心匯入。</div>`;
   html+=`<table><thead><tr><th>訂單</th><th>客戶</th><th>CSV 品名</th><th>對應正式編號</th><th>新舊品</th><th class="td-right">數量</th><th>出貨日</th></tr></thead><tbody>`;
   _siRows.forEach((r,i)=>{
     const needC=!r.auto||!r.code;
@@ -4378,6 +4388,17 @@ async function confirmSalesImport(){
   try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
   showToast(`✅ 匯入 ${rows.length} 筆銷貨${aliasRows.length?`，記住 ${aliasRows.length} 筆新品名`:''}${dealN?`，認列 ${dealN} 筆研發成交（待覆核）`:''}`);
   _siRows=[]; document.getElementById('si-preview').innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">已匯入。下次同名字會自動對應。</div></div>';
+  // ① 匯入後月結摘要
+  const _mr=rows.find(x=>x.month); const _ym=_mr?`${_mr.year}-${String(_mr.month).padStart(2,'0')}`:'當月';
+  const _badSp=[...new Set(rows.map(r=>r.sales_person).filter(sp=>{const s=new Set();employees.filter(e=>e.dept==='業務部').forEach(e=>{if(e.name)s.add(e.name.trim());if(e.csv_sales_alias)s.add(e.csv_sales_alias.trim());});return sp&&!s.has(sp.trim());}))];
+  await confirmCard('✅ 銷貨匯入完成',
+    `已匯入 <strong>${rows.length}</strong> 筆銷貨（${_ym}）。<br><br>`+
+    `🧪 研發成交：自動認列 <strong>${dealN}</strong> 筆（待你到「研發部 → 成交獎金」覆核放行）<br>`+
+    `📦 部門件數：已配對更新（企劃／採購／生管）<br>`+
+    `💰 業務金額：請到「業務部 → 執行月結」結算 ${_ym}<br>`+
+    (_badSp.length?`<br><span style="color:#b3541e">⚠ 業務名對不到員工、金額未計入：${_badSp.join('、')}</span>`:'')+
+    `<br><br><span style="color:var(--ink-faint)">下一步：① 研發覆核成交獎金 ② 業務部執行月結 ③ 看對帳</span>`,
+    '知道了');
 }
 
 // ===== 成交獎金報表（B④ stage 4）=====
