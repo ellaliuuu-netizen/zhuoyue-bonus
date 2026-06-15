@@ -515,6 +515,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab rdmgr-hide" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生管部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('history')" id="tab-history"><span class="tab-dot" style="background:#888"></span>獎金紀錄</div>
+    <div class="nav-tab manager-only" onclick="switchPage('reconcile')" id="tab-reconcile"><span class="tab-dot" style="background:#8a6d1e"></span>月結對帳</div>
     <div class="nav-tab manager-only" onclick="switchPage('settings')" id="tab-settings"><span class="tab-dot" style="background:#555"></span>設定</div>
   </nav>
 
@@ -1038,6 +1039,16 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       </div>
 
       <!-- SETTINGS -->
+      <div class="page" id="page-reconcile">
+        <div class="section-title">📋 月結對帳</div>
+        <div class="section-desc">一頁看本月各部門「已結算獎金 + 待辦 + 異常」，對帳用。正式金額以各部門結算頁為準。</div>
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+          <div class="form-group" style="margin:0"><label class="form-label">月份</label><select class="form-select" id="rec-month" onchange="renderReconcile()" style="max-width:160px"></select></div>
+          <button class="btn btn-outline btn-sm" onclick="renderReconcile()">重新整理</button>
+        </div>
+        <div id="reconcile-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">選月份載入</div></div></div>
+      </div>
+
       <div class="page" id="page-settings">
         <div class="section-title">⚙️ 設定</div>
         <div class="section-desc">調整獎金參數與員工資料</div>
@@ -3786,6 +3797,48 @@ function switchPage(page){
   if(page==='planning')fillDeptAutoCount('plan-shipments','plan-ship-note');
   if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
+  if(page==='reconcile')loadReconcile();
+}
+async function loadReconcile(){
+  const sel=document.getElementById('rec-month');
+  if(sel && !sel.options.length){
+    const now=new Date(); let opts='';
+    for(let i=6;i>=-1;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);const ym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;opts+=`<option value="${ym}">${ym}</option>`;}
+    sel.innerHTML=opts; sel.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  await renderReconcile();
+}
+async function renderReconcile(){
+  const sel=document.getElementById('rec-month'); const ym=sel?.value; if(!ym)return;
+  const [y,m]=ym.split('-').map(Number);
+  const el=document.getElementById('reconcile-content'); el.innerHTML='<div class="empty-state">載入中…</div>';
+  const [salesM, deals, rdM, pendReq, notRec] = await Promise.all([
+    sb.from('sales_monthly_settlement').select('*, employees(name)').eq('year',y).eq('month',m),
+    sb.from('rd_deal_bonuses').select('amount,status').eq('year',y).eq('month',m),
+    sb.from('rd_monthly_settlement').select('*, employees(name)').eq('year',y).eq('month',m),
+    sb.from('rd_confirm_change_requests').select('id').eq('status','pending'),
+    sb.from('rd_sample_customers').select('id').eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null),
+  ]);
+  const sM=salesM.data||[], dl=deals.data||[], rM=rdM.data||[];
+  const salesTotal=sM.reduce((s,r)=>s+Number(r.total_bonus||0),0);
+  const dealRel=dl.filter(d=>d.status==='released').reduce((s,d)=>s+Number(d.amount),0);
+  const dealPend=dl.filter(d=>d.status==='pending_review').reduce((s,d)=>s+Number(d.amount),0);
+  const pendDealN=dl.filter(d=>d.status==='pending_review').length;
+  const rdTotal=rM.reduce((s,r)=>s+Number(r.total_bonus||0),0);
+  const grand=salesTotal+dealRel+rdTotal;
+  let h='';
+  h+=`<div class="card" style="margin-bottom:12px;border-color:#c99a2e;background:#fbf6ea"><div class="card-title" style="font-size:14px;margin-bottom:6px">📌 本月待辦</div><div style="font-size:13px;line-height:1.9">• 研發成交待覆核：<strong>${pendDealN}</strong> 段（${fmt(dealPend)}）<br>• 待審改綁／取消申請：<strong>${(pendReq.data||[]).length}</strong> 件<br>• 已確樣未出貨認列：<strong>${(notRec.data||[]).length}</strong> 筆</div></div>`;
+  h+=`<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:14px">💰 業務部月結（${ym}）　合計 ${fmt(salesTotal)}</div>`;
+  if(sM.length) h+=`<table><thead><tr><th>業務</th><th class="td-right">出貨金額</th><th class="td-right">新客獎金</th><th class="td-right">出貨獎金</th><th class="td-right">實發</th></tr></thead><tbody>${sM.map(r=>`<tr><td>${r.employees?.name||''}</td><td class="td-right">${fmtNum(Math.round(r.ship_amount||0))}</td><td class="td-right">${fmt(r.new_client_bonus||0)}</td><td class="td-right">${fmt(r.ship_bonus||0)}</td><td class="td-right"><strong>${fmt(r.total_bonus||0)}</strong></td></tr>`).join('')}</tbody></table>`;
+  else h+=`<div class="info-box" style="font-size:12px">尚未結算（到「業務部 → 執行月結」）</div>`;
+  h+=`</div>`;
+  h+=`<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:14px">🧪 研發成交獎金（${ym}）</div><div style="font-size:13px;line-height:1.9">• 已放行：<strong>${fmt(dealRel)}</strong><br>• 待覆核：${fmt(dealPend)}（${pendDealN} 段，到「研發部 → 成交獎金」放行）</div></div>`;
+  h+=`<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:14px">🔬 研發打樣月結（${ym}）　合計 ${fmt(rdTotal)}</div>`;
+  if(rM.length) h+=`<table><thead><tr><th>研發</th><th class="td-right">實發</th><th>狀態</th></tr></thead><tbody>${rM.map(r=>`<tr><td>${r.employees?.name||''}</td><td class="td-right"><strong>${fmt(r.total_bonus||0)}</strong></td><td style="font-size:11px">${r.status||''}</td></tr>`).join('')}</tbody></table>`;
+  else h+=`<div class="info-box" style="font-size:12px">尚未結算</div>`;
+  h+=`</div>`;
+  h+=`<div class="card" style="background:#f3ede0"><div class="card-title" style="font-size:15px">本月已結算合計：<strong>${fmt(grand)}</strong></div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">＝業務月結 ${fmt(salesTotal)} ＋ 研發成交已放行 ${fmt(dealRel)} ＋ 研發打樣 ${fmt(rdTotal)}。不含待覆核成交、季結（業務季達標、企劃/採購/生管）。</div></div>`;
+  el.innerHTML=h;
 }
 function setSidebarActive(el){document.querySelectorAll('.sidebar-card').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
 function switchInner(el,id){
