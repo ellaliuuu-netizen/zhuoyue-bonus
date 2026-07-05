@@ -805,7 +805,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card" style="border-color:var(--gold)">
             <div class="card-header">
               <div class="card-title">🎯 研發成交獎金（三段式）— 待你覆核</div>
-              <button class="btn btn-outline btn-sm" onclick="scanRecognizeDeals()">🔄 重新掃描出貨認列</button>
+              <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="generateRdConfirmSheets()">🖨️ 產生個人確認表</button><button class="btn btn-outline btn-sm" onclick="scanRecognizeDeals()">🔄 重新掃描出貨認列</button></div>
             </div>
             <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（經理）可見。</div>
             <div id="rd-deal-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div></div>
@@ -4201,6 +4201,75 @@ function computeDealSegments(sc){
   // 確樣段 20%
   lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(pool*0.2), is_orphan_halved:false, note:'確樣人領確樣段'});
   return lines;
+}
+
+// ===== 研發個人確認表（每人一張、只出自己；打樣月結逐月 + 成交三段每品項）=====
+// 制度 v10：打樣 <18=0；≥18=1000+(件-18)×55、上限88；成交三段主責50/打樣30/確樣20（依實際占比算）
+async function generateRdConfirmSheets(){
+  const A=appSettings.aValue||3000;
+  const yr=appSettings.year;
+  const qMonths=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
+  const pad=m=>String(m).padStart(2,'0');
+  // 1) 合格打樣件數（approved/auto_approved）本季各月各人
+  const {data:samples,error:e1}=await sb.from('rd_samples')
+    .select('employee_id, sample_date, approval_status')
+    .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lte('sample_date',`${yr}-${pad(qMonths[qMonths.length-1])}-31`)
+    .in('approval_status',['approved','auto_approved']);
+  if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
+  const cnt={};
+  (samples||[]).forEach(s=>{const m=Number(s.sample_date.slice(5,7)),k=s.employee_id;if(!k)return;(cnt[k]=cnt[k]||{})[m]=(cnt[k][m]||0)+1;});
+  const sampleBonus=n=>rdSamplingBonus(n); // 複用系統既有公式，確保與畫面一致
+  // 2) 成交三段（現有確樣 → 依發獎引擎預估）
+  const {data:scs,error:e2}=await sb.from('rd_sample_customers')
+    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
+    .eq('confirm_status','confirmed');
+  if(e2){showToast('讀取確樣失敗：'+e2.message);return;}
+  const segLabel={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工窗口'};
+  const deal={};
+  (scs||[]).forEach(sc=>{
+    const p=products.find(x=>x.product_code===sc.official_product_code);
+    const segs=computeDealSegments(sc);
+    const pool=sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0);
+    segs.forEach(x=>{
+      if(!x.employee_id)return;
+      const pct=pool?Math.round(x.amount/pool*100):null;
+      (deal[x.employee_id]=deal[x.employee_id]||[]).push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:segLabel[x.segment]||x.segment, pct, amount:x.amount||0});
+    });
+  });
+  // 3) 每人一張
+  const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let pages='';
+  rd.forEach(e=>{
+    const myCnt=cnt[e.id]||{}; let sTot=0;
+    const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
+    const myDeal=deal[e.id]||[]; let dTot=0;
+    const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無成交三段認列</td></tr>';
+    pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
+      <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
+      <h2>一、打樣獎金（每月）</h2>
+      <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。當月成交＝0 者該月打樣獎金暫緩、待日後成交回溯補發。</p>
+      <h2>二、成交獎金三段（每品項）<span class="est">＊預估值，實際以出貨認列為準</span></h2>
+      <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">預估獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計（預估）</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）與實際情況相符。如有錯誤請於下方註明。</p>
+      <p>異議／補充：____________________________________________________</p>
+      <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+  });
+  const css=`<style>@page{size:A4;margin:16mm}body{font-family:"Noto Sans TC",sans-serif;color:#1a1a1a;font-size:13px;line-height:1.6;margin:0}
+    .sheet{page-break-after:always;max-width:720px;margin:0 auto 24px}
+    h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;border-left:4px solid #c99a2e;padding-left:8px}
+    .meta{color:#555;font-size:12px;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin:4px 0}
+    th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px}.r{text-align:right}.c{text-align:center}
+    thead th{background:#f3ede0}tfoot td{font-weight:600;background:#faf7f0}
+    .note{font-size:10px;color:#777;margin:4px 0 0}.est{font-size:10px;color:#b3541e;font-weight:400;margin-left:6px}
+    .cbox{margin-top:16px;border:1px dashed #999;padding:10px 12px;font-size:12px}.sign{margin-top:14px}
+    @media screen{body{background:#eee;padding:20px}.sheet{background:#fff;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.15)}}
+    .tb{position:fixed;top:10px;right:10px}@media print{.tb{display:none}}</style>`;
+  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>研發個人確認表 ${yr}${appSettings.quarter}</title>${css}</head><body><div class="tb"><button onclick="window.print()">🖨️ 列印 / 存 PDF</button></div>${pages||'<p>本季無在職研發同仁</p>'}</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){showToast('請允許彈出視窗後再試');return;}
+  w.document.write(html); w.document.close();
 }
 
 // 出貨觸發：掃這張訂單的產品，新品(編號首次認列)+達500罐→算三段寫待覆核
