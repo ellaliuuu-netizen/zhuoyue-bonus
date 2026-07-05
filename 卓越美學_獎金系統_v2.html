@@ -4322,7 +4322,7 @@ async function loadDealBonuses(){
   const {data:agg}=await sb.from('rd_deal_bonuses').select('employee_id, amount').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
   const cum={}; (agg||[]).forEach(r=>{if(r.employee_id)cum[r.employee_id]=(cum[r.employee_id]||0)+Number(r.amount);});
   const {data:notShipped}=await sb.from('rd_sample_customers')
-    .select('official_product_code, confirmed_at, rd_customers(short_name)')
+    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
     .eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
   const rdActive=employees.filter(e=>e.dept==='研發部'&&e.is_active);
   const assignOpts='<option value="">指定接手人…</option>'+rdActive.map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
@@ -4357,7 +4357,25 @@ async function loadDealBonuses(){
     body=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>`;
   }
   if(notShipped&&notShipped.length){
-    body+=`<div class="card" style="margin-top:14px;border-color:var(--ink-faint)"><div class="card-header"><div class="card-title" style="font-size:13px">📋 已確樣、但還沒出貨認列（${notShipped.length}）</div></div><div class="info-box" style="font-size:12px">課長確樣了、但客戶還沒出貨，所以還沒算獎金。給你看全貌，避免「確了卻漏發」。</div><table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th></tr></thead><tbody>${notShipped.map(n=>{const p=products.find(x=>x.product_code===n.official_product_code);return `<tr><td>${n.official_product_code||'—'}</td><td>${p?.product_name||''}</td><td>${n.rd_customers?.short_name||''}</td><td>${n.confirmed_at||''}</td></tr>`;}).join('')}</tbody></table></div>`;
+    const nmOf=id=>employees.find(e=>e.id===id)?.name||'—';
+    const segWho=n=>{
+      const s=computeDealSegments(n);
+      const oem=s.find(x=>x.segment==='oem');
+      if(oem) return {primary:'代工配方', sampler:'—', confirm:oem.employee_id?nmOf(oem.employee_id)+'（100%）':'—'};
+      const names=k=>s.filter(x=>x.segment===k&&x.employee_id).map(x=>nmOf(x.employee_id));
+      const collab=s.filter(x=>x.segment==='collaborator'&&x.employee_id).map(x=>nmOf(x.employee_id)+'（協作）');
+      const orphanP=s.some(x=>x.segment==='primary'&&x.is_orphan_halved);
+      const orphanS=s.some(x=>x.segment==='sampling'&&x.is_orphan_halved);
+      const prim=[...names('primary'),...collab];
+      const rawSampler=n.rd_samples?.employee_id, samplerName=nmOf(rawSampler);
+      const segSampler=names('sampling');
+      let samplerCell=segSampler.length?segSampler.join('、'):(orphanS?'🩹待接手·折半':'—');
+      if(rawSampler && n.rd_samples?.employees?.role_level==='assistant' && segSampler[0] && segSampler[0]!==samplerName){
+        samplerCell=segSampler.join('、')+`<span style="color:var(--ink-faint);font-size:11px">（${samplerName}助理打樣→回歸主責）</span>`;
+      }
+      return {primary:prim.length?prim.join('、'):(orphanP?'🩹原主責離職·折半':'—'), sampler:samplerCell, confirm:names('confirm').join('、')||'—'};
+    };
+    body+=`<div class="card" style="margin-top:14px;border-color:var(--ink-faint)"><div class="card-header"><div class="card-title" style="font-size:13px">📋 已確樣、但還沒出貨認列（${notShipped.length}）</div></div><div class="info-box" style="font-size:12px">課長確樣了、但客戶還沒出貨，所以還沒算獎金。這裡先依發獎邏輯試算三段歸屬，讓你在出貨前就核對主責/打樣/確樣是否符合實際。</div><table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>主責 50%</th><th>打樣 30%</th><th>確樣 20%</th><th>確樣日</th></tr></thead><tbody>${notShipped.map(n=>{const p=products.find(x=>x.product_code===n.official_product_code);const w=segWho(n);return `<tr><td>${n.official_product_code||'—'}</td><td>${p?.product_name||''}</td><td>${n.rd_customers?.short_name||''}</td><td>${w.primary}</td><td>${w.sampler}</td><td>${w.confirm}</td><td>${n.confirmed_at||''}</td></tr>`;}).join('')}</tbody></table></div>`;
   }
   // D：待審改綁／取消申請（置頂；核准前該確樣已凍結發獎）
   const {data:reqs}=await sb.from('rd_confirm_change_requests')
@@ -4814,7 +4832,8 @@ function onConfirmCustomerChange(){
   document.getElementById('cf-product').value=rc.official_product_code||'';
   document.getElementById('cf-date').value=rc.confirmed_at||new Date().toISOString().slice(0,10);
   let confId=rc.confirmed_by||'';
-  if(!confId){const me=employees.find(e=>e.name===currentUserName&&e.dept==='研發部'&&e.is_active);confId=me?me.id:'';}
+  // 制度 v10：確樣人＝被確樣的這個打樣編號的打樣者（不再預設帶登入者，杜絕代填時默默算課長頭上）
+  if(!confId){confId=cfState.sample?.employee_id||'';}
   document.getElementById('cf-confirmer').value=confId;
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
   document.getElementById('cf-oem').checked=!!rc.is_oem;
