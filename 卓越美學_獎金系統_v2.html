@@ -3902,23 +3902,39 @@ function setStarScore(id,val){const el=document.getElementById(id);if(!el)return
 async function editKpiDraft(id){
   const {data:r}=await sb.from('kpi_scores').select('*').eq('id',id).single();
   if(!r){showToast('找不到草稿');return;}
-  if(r.dept!=='企劃部'){showToast('目前重新試算僅支援企劃部');return;}
-  switchPage('planning');
+  const s=r.scores||{};
+  const pageMap={'企劃部':'planning','採購部':'purchase','生產部':'production'};
+  const page=pageMap[r.dept];
+  if(!page){showToast('此部門暫不支援重新試算');return;}
+  switchPage(page);
   setTimeout(()=>{
-    const sel=document.getElementById('plan-emp-sel');
-    if(sel){ sel.value=r.employee_id||''; if(sel.onchange) sel.onchange(); }
-    const s=r.scores||{};
-    if(document.getElementById('plan-role').value==='主管' || s.mgr_rating){
-      const rating=s.mgr_rating||'待改進';
-      document.getElementById('plan-mgr-rating').value=rating;
-      document.querySelectorAll('#plan-mgr-scores .tier-btn').forEach(b=>b.classList.toggle('active', b.textContent===rating));
-    } else {
-      ['s1','s2','s3','s4','s5'].forEach(k=>setStarScore('plan-'+k, s[k]||0));
-      calcPlanScore();
+    if(r.dept==='企劃部'){
+      const sel=document.getElementById('plan-emp-sel'); if(sel){ sel.value=r.employee_id||''; if(sel.onchange) sel.onchange(); }
+      if(document.getElementById('plan-role').value==='主管' || s.mgr_rating){
+        const rating=s.mgr_rating||'待改進';
+        document.getElementById('plan-mgr-rating').value=rating;
+        document.querySelectorAll('#plan-mgr-scores .tier-btn').forEach(b=>b.classList.toggle('active', b.textContent===rating));
+      } else { ['s1','s2','s3','s4','s5'].forEach(k=>setStarScore('plan-'+k, s[k]||0)); calcPlanScore(); }
+      if(r.ship_count!=null) document.getElementById('plan-shipments').value=r.ship_count;
+      calcPlanning();
+    } else if(r.dept==='採購部'){
+      const sel=document.getElementById('pur-emp-sel'); if(sel){ sel.value=r.employee_id||''; if(sel.onchange) sel.onchange(); }
+      ['s1','s2','s3','s4'].forEach(k=>setStarScore('pur-'+k, s[k]||0));
+      const conc=s.supplement?'yes':'no';
+      const ch=document.getElementById('pur-concurrent'); if(ch) ch.value=conc;
+      document.querySelectorAll('[onclick*="pur-concurrent"]').forEach(b=>b.classList.toggle('active', (b.getAttribute('onclick').includes("'yes'")?'yes':'no')===conc));
+      if(r.ship_count!=null) document.getElementById('pur-shipments').value=r.ship_count;
+      if(typeof calcPurScore==='function') calcPurScore();
+      calcPurchase();
+    } else if(r.dept==='生產部'){
+      const nm=document.getElementById('prod-name'); if(nm) nm.value=r.name||'';
+      ['e1','e2','e3','e4'].forEach((k,i)=>setStarScore('prod-s'+(i+1), s[k]||0));
+      if(s.ontime!=null){ const ot=document.getElementById('prod-ontime'); if(ot){ ot.value=s.ontime; if(typeof updateProdBar==='function') updateProdBar(); } }
+      if(r.ship_count!=null) document.getElementById('prod-shipments').value=r.ship_count;
+      if(typeof calcProdScore==='function') calcProdScore();
+      calcProduction();
     }
-    if(r.ship_count!=null) document.getElementById('plan-shipments').value=r.ship_count;
-    calcPlanning();
-    const pg=document.getElementById('page-planning'); if(pg) pg.scrollIntoView({behavior:'smooth'});
+    const pg=document.getElementById('page-'+page); if(pg) pg.scrollIntoView({behavior:'smooth'});
     showToast(`已載入 ${r.name} 的草稿，可重新評比後再按「存草稿」覆蓋`);
   }, 900);
 }
