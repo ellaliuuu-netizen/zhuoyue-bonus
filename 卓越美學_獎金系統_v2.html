@@ -4360,17 +4360,43 @@ async function confirmOrderImport(){
 function custMatch(a,b){ if(!a||!b)return false; const x=String(a).replace(/\s/g,''),y=String(b).replace(/\s/g,''); return x.includes(y)||y.includes(x); }
 
 let _orderAmbiguous=[];
+let _orderExcluded=[];
+// 剔除裁示：不計件的銷貨（PIF全排／破損／已開票／非正式訂單品項）
+const _EXCLUDE_CODES=['JP000079','JP000080','JP000081','JP000082']; // 非正式（頭皮微針等）
+function saleExcludeReason(s){
+  const nm=s.item_name_raw||'';
+  if(nm.includes('PIF')) return 'PIF不計';
+  if(nm.includes('破損')) return '破損不計';
+  if(nm.includes('開發票')) return '已開票不計';
+  if(_EXCLUDE_CODES.includes(s.product_code)) return '非正式不計';
+  return null;
+}
 // 把銷貨配對到訂單品項、累計、達80%結算（冪等，每次重算）
+// 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
-  const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw');
+  const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date');
   const {data:sales}=await sb.from('sales_records').select('id, source_order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat').not('product_code','is',null).neq('new_or_repeat','其他');
-  const matched={}; _orderAmbiguous=[];
-  for(const s of (sales||[])){
-    let cand=(ols||[]).filter(o=>o.order_no&&s.source_order_no&&o.order_no===s.source_order_no&&o.product_code===s.product_code);   // 1 訂單編號+code
-    if(cand.length===0) cand=(ols||[]).filter(o=>o.product_code===s.product_code&&custMatch(o.customer_name,s.customer_name)); // 2 code+客戶
-    if(cand.length===1){ (matched[cand[0].id]=matched[cand[0].id]||[]).push(s); }
-    else if(cand.length>1){ _orderAmbiguous.push({...s, reason:'多張訂單符合('+cand.map(c=>c.order_no).join('/')+')'}); }
-    else { _orderAmbiguous.push({...s, reason:'找不到對應訂單'}); }
+  const matched={}; _orderAmbiguous=[]; _orderExcluded=[];
+  const cumq={};   // ol.id -> 已累計量（FIFO 判斷是否已滿）
+  const byCode={}; // code -> [ol]
+  for(const o of (ols||[])) (byCode[o.product_code]=byCode[o.product_code]||[]).push(o);
+  // 依出貨日排序後逐筆綁定（FIFO 需時序）
+  const sorted=(sales||[]).slice().sort((a,b)=>(a.ship_date||'').localeCompare(b.ship_date||''));
+  for(const s of sorted){
+    const ex=saleExcludeReason(s); if(ex){ _orderExcluded.push({...s, reason:ex}); continue; }
+    // 1 有訂單編號：精準綁
+    let pick=(ols||[]).find(o=>o.order_no&&s.source_order_no&&o.order_no===s.source_order_no&&o.product_code===s.product_code);
+    if(!pick){
+      // 2 訂購日 FIFO：同 code、訂購日<=出貨日、尚未達80% 的最舊訂單
+      const cands=byCode[s.product_code]||[];
+      if(!cands.length){ _orderAmbiguous.push({...s, reason:'找不到對應訂單'}); continue; }
+      const elig=cands.filter(o=>!o.sign_date||!s.ship_date||o.sign_date<=s.ship_date);
+      const open=elig.filter(o=>(cumq[o.id]||0) < o.order_qty*0.8);
+      const pool=(open.length?open:(elig.length?elig:cands)).slice().sort((a,b)=>(a.sign_date||'').localeCompare(b.sign_date||''));
+      pick=pool[0];
+    }
+    (matched[pick.id]=matched[pick.id]||[]).push(s);
+    cumq[pick.id]=(cumq[pick.id]||0)+(s.qty||0);
   }
   for(const o of (ols||[])){
     const ss=(matched[o.id]||[]).slice().sort((a,b)=>(a.ship_date||'').localeCompare(b.ship_date||''));
@@ -4398,10 +4424,16 @@ async function fillDeptAutoCount(inputId, noteId){
   const el=document.getElementById(inputId); if(el) el.value=n;
   const note=document.getElementById(noteId);
   if(note){
-    let h=`✅ 本季自動件數 <strong>${n}</strong>（訂單品項出貨達 80% 的數量，系統自動算）`;
+    let h=`✅ 本季自動件數 <strong>${n}</strong>（訂單品項出貨達 80% 的數量，系統自動算；併款同編號計 1 件）`;
+    if(_orderExcluded.length){
+      h+=`<div style="color:#7a5c3d;font-size:11px;margin-top:4px">🚫 ${_orderExcluded.length} 筆已依裁示剔除不計（PIF／破損／已開票／非正式）</div>`;
+    }
     if(_orderAmbiguous.length){
-      h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${_orderAmbiguous.length} 筆銷貨對不到訂單（可能少算，請補訂單或確認）：<br>`+
+      h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${_orderAmbiguous.length} 筆銷貨對不到訂單（非剔除、綁不到訂單，請補訂單或確認）：<br>`+
         _orderAmbiguous.slice(0,12).map(s=>`・${s.product_code||''} ${s.customer_name||''} ${(s.qty||0).toLocaleString()}罐 — ${s.reason}`).join('<br>')+`</div>`;
+    }
+    if(inputId==='plan-shipments'){
+      h+=`<div style="margin-top:6px;padding:6px 8px;border:1px solid #c0392b;border-radius:6px;color:#c0392b;font-size:11px;font-weight:600">🔒 此為公司總件數、尚未按「品項→負責企劃」歸屬到人，暫勿據此發放企劃獎金（待歸屬功能 v2 上線）</div>`;
     }
     note.innerHTML=h;
   }
