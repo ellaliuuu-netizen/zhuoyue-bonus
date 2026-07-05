@@ -3546,15 +3546,30 @@ function planMgrKpiBonus(rating){
 }
 
 // ===== v2 品項→企劃 歸屬 =====
-let _planSettled=[], _planProducts={};
+let _planSettled=[], _planProducts={}, _planSplit={normal:0,legacy:0};
 async function loadPlanAttribution(){
   const {data:ols}=await sb.from('order_lines')
-    .select('id,order_no,product_code,item_name_raw,planner_override_id,bonus_forfeit,bonus_settled_month')
+    .select('id,order_no,product_code,item_name_raw,planner_override_id,bonus_forfeit,bonus_legacy_half,bonus_settled_month')
     .eq('bonus_settled_year',appSettings.year).eq('bonus_settled_quarter',appSettings.quarter)
     .order('bonus_settled_month').order('product_code');
   _planSettled=ols||[];
   const {data:prods}=await sb.from('products').select('product_code,product_name,planner_employee_id');
   _planProducts={}; (prods||[]).forEach(p=>_planProducts[p.product_code]=p);
+}
+// 件數獎金：正常件全額、公司過往件該級距費率折半（正常件排前、過往排後；未達15件門檻=0）
+function planTierRate(pos, isMgr){
+  const rates = isMgr ? [[15,300],[25,400],[35,500],[Infinity,600]] : [[15,150],[25,200],[35,250],[Infinity,300]];
+  for(const [maxCount,rate] of rates){ if(pos<=maxCount) return rate; }
+  return 0;
+}
+function planShipBonusWeighted(normalCount, legacyCount, isMgr){
+  const N=normalCount+legacyCount;
+  if(N<15) return {total:0, breakdown:`未達 15 件門檻（目前 ${N} 件）`};
+  let fullSum=0, halfSum=0;
+  for(let p=1;p<=N;p++){ const rate=planTierRate(p,isMgr); if(p<=normalCount) fullSum+=rate; else halfSum+=rate*0.5; }
+  const parts=[`正常 ${normalCount} 件 = ${fullSum.toLocaleString()}`];
+  if(legacyCount>0) parts.push(`公司過往 ${legacyCount} 件折半 = ${halfSum.toLocaleString()}`);
+  return {total:fullSum+halfSum, breakdown:parts.join(' ＋ ')};
 }
 // 解析某結算品項的負責企劃：不發放→forfeit；覆寫優先，否則吃產品主檔；解析到離職者→leaver；空→unassigned
 function resolvedPlanner(o){
@@ -3573,20 +3588,21 @@ function planPersonCount(empId){
 async function renderPlanAttribution(){
   await loadPlanAttribution();
   const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
-  let assigned=0,unassigned=0,leaver=0,forfeit=0;
+  let assigned=0,unassigned=0,leaver=0,forfeit=0,legacyN=0;
   const rows=_planSettled.map(o=>{
     const r=resolvedPlanner(o);
-    if(r.status==='ok')assigned++;else if(r.status==='unassigned')unassigned++;else if(r.status==='leaver')leaver++;else forfeit++;
+    if(r.status==='ok'){assigned++; if(o.bonus_legacy_half) legacyN++;}else if(r.status==='unassigned')unassigned++;else if(r.status==='leaver')leaver++;else forfeit++;
     const curPid=o.planner_override_id||(_planProducts[o.product_code]&&_planProducts[o.product_code].planner_employee_id)||'';
     const opts=`<option value="">— 未指派 —</option>`+planEmps.map(e=>`<option value="${e.id}" ${e.id===curPid?'selected':''}>${e.name}</option>`).join('');
-    const rowStyle=r.status==='leaver'?'background:#fdecea':(r.status==='unassigned'?'background:#fff8e1':(r.status==='forfeit'?'background:#eee;opacity:.7':''));
+    const rowStyle=r.status==='leaver'?'background:#fdecea':(r.status==='unassigned'?'background:#fff8e1':(r.status==='forfeit'?'background:#eee;opacity:.7':(o.bonus_legacy_half?'background:#eef3fb':'')));
     let extra='';
     if(r.status==='leaver') extra=`<span style="color:#c0392b;font-size:11px">⚠️「${r.emp.name}」已離職</span>`;
-    const forfeitBox=`<label style="font-size:11px;white-space:nowrap"><input type="checkbox" onchange="setPlanForfeit('${o.id}',this.checked)" ${o.bonus_forfeit?'checked':''}> 不發放</label>`;
-    return `<tr style="${rowStyle}"><td>${o.product_code||''} · ${o.item_name_raw||''}</td><td class="td-center">${o.bonus_settled_month||''}月</td><td><select class="form-select" style="min-width:110px;padding:4px 6px" onchange="assignPlanner('${o.product_code}',this.value)">${opts}</select></td><td>${extra} ${forfeitBox}</td></tr>`;
+    const legacyBox=`<label style="font-size:11px;white-space:nowrap" title="掛他名下、但此件獎金折半"><input type="checkbox" onchange="setPlanFlag('${o.id}','legacy',this.checked)" ${o.bonus_legacy_half?'checked':''}> 公司過往(半發)</label>`;
+    const forfeitBox=`<label style="font-size:11px;white-space:nowrap"><input type="checkbox" onchange="setPlanFlag('${o.id}','forfeit',this.checked)" ${o.bonus_forfeit?'checked':''}> 不發放</label>`;
+    return `<tr style="${rowStyle}"><td>${o.product_code||''} · ${o.item_name_raw||''}</td><td class="td-center">${o.bonus_settled_month||''}月</td><td><select class="form-select" style="min-width:110px;padding:4px 6px" onchange="assignPlanner('${o.product_code}',this.value)">${opts}</select></td><td style="white-space:nowrap">${extra} ${legacyBox} ${forfeitBox}</td></tr>`;
   }).join('');
   const sum=document.getElementById('plan-attrib-summary');
-  if(sum) sum.innerHTML=`本季結算 <strong>${_planSettled.length}</strong> 件：已歸屬 <strong style="color:#2e7d32">${assigned}</strong>｜待指派 <strong style="color:#b3541e">${unassigned}</strong>｜離職待處理 <strong style="color:#c0392b">${leaver}</strong>｜不發放 ${forfeit}`;
+  if(sum) sum.innerHTML=`本季結算 <strong>${_planSettled.length}</strong> 件：已歸屬 <strong style="color:#2e7d32">${assigned}</strong>（含公司過往 ${legacyN} 件·折半）｜待指派 <strong style="color:#b3541e">${unassigned}</strong>｜離職待處理 <strong style="color:#c0392b">${leaver}</strong>｜不發放 ${forfeit}`;
   const list=document.getElementById('plan-attrib-list');
   if(list) list.innerHTML=`<table><thead><tr><th>品項</th><th class="td-center">結算月</th><th>負責企劃</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   refreshPlanShipCount();
@@ -3597,21 +3613,27 @@ async function assignPlanner(code,empId){
   showToast(`已指派 ${code} → ${nm}（已記憶，之後自動帶）`);
   renderPlanAttribution();
 }
-async function setPlanForfeit(lineId,val){
-  await sb.from('order_lines').update({bonus_forfeit:val}).eq('id',lineId);
+// 不發放 / 公司過往(半發) 互斥
+async function setPlanFlag(lineId,flag,val){
+  const upd = flag==='forfeit'
+    ? (val?{bonus_forfeit:true,bonus_legacy_half:false}:{bonus_forfeit:false})
+    : (val?{bonus_legacy_half:true,bonus_forfeit:false}:{bonus_legacy_half:false});
+  await sb.from('order_lines').update(upd).eq('id',lineId);
   renderPlanAttribution();
 }
 function refreshPlanShipCount(){
   const empId=document.getElementById('plan-emp-sel').value;
   const el=document.getElementById('plan-shipments');
   const note=document.getElementById('plan-ship-note');
-  if(!empId){ if(note)note.innerHTML='選擇企劃人員後、自動帶入其負責件數'; return; }
-  const n=planPersonCount(empId);
-  if(el) el.value=n;
+  let normal=0,legacy=0;
+  _planSettled.forEach(o=>{ const r=resolvedPlanner(o); if(r.status==='ok'&&r.emp.id===empId){ if(o.bonus_legacy_half) legacy++; else normal++; } });
+  _planSplit={normal,legacy};
+  if(!empId){ if(note)note.innerHTML='選擇企劃人員後、自動帶入其負責件數'; if(el)el.value=''; return; }
+  if(el) el.value=normal+legacy;
+  const nm=(employees.find(e=>e.id===empId)||{}).name||'';
   const total=_planSettled.length;
   const unassigned=_planSettled.filter(o=>resolvedPlanner(o).status==='unassigned').length;
-  const nm=(employees.find(e=>e.id===empId)||{}).name||'';
-  if(note) note.innerHTML=`✅ ${nm} 本季負責 <strong>${n}</strong> 件（公司結算共 ${total} 件${unassigned?`；⚠️尚有 ${unassigned} 件未指派、未計入任何人`:''}）`;
+  if(note) note.innerHTML=`✅ ${nm} 本季負責 <strong>${normal+legacy}</strong> 件（正常 ${normal}＋公司過往 ${legacy}·折半${unassigned?`；⚠️尚有 ${unassigned} 件未指派`:''}）`;
 }
 async function initPlanning(){
   try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
@@ -3624,7 +3646,8 @@ function calcPlanning(){
   const isMgr = role==='主管';
   const ships=parseInt(document.getElementById('plan-shipments').value)||0;
 
-  const ship = planTieredShipBonus(ships, isMgr);
+  const legacyCount=Math.min(_planSplit.legacy, ships), normalCount=Math.max(0, ships-legacyCount);
+  const ship = planShipBonusWeighted(normalCount, legacyCount, isMgr);
   let kpi;
   if(isMgr){
     kpi = planMgrKpiBonus(document.getElementById('plan-mgr-rating').value);
@@ -3655,7 +3678,8 @@ async function savePlanning(){
   const role=document.getElementById('plan-role').value;
   const isMgr = role==='主管';
   const ships=parseInt(document.getElementById('plan-shipments').value)||0;
-  const ship = planTieredShipBonus(ships, isMgr);
+  const legacyCount=Math.min(_planSplit.legacy, ships), normalCount=Math.max(0, ships-legacyCount);
+  const ship = planShipBonusWeighted(normalCount, legacyCount, isMgr);
   let kpi;
   if(isMgr){
     kpi = planMgrKpiBonus(document.getElementById('plan-mgr-rating').value);
