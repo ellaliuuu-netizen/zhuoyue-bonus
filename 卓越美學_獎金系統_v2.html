@@ -1537,7 +1537,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
       <div style="display:flex;gap:10px">
         <div class="form-group" style="flex:1"><label class="form-label">確樣日 *</label><input class="form-input" type="date" id="cf-date" /></div>
-        <div class="form-group" style="flex:1"><label class="form-label">確樣人 *（誰確誰領 20%）</label><select class="form-select" id="cf-confirmer"></select></div>
+        <div class="form-group" style="flex:1"><label class="form-label">確樣人 *（誰確誰領 20%）</label><select class="form-select" id="cf-confirmer" onchange="cfState.confirmerManual=true"></select></div>
       </div>
 
       <div style="display:flex;gap:10px;align-items:flex-end">
@@ -4894,6 +4894,16 @@ async function openConfirmModal(sampleId){
   openModal('confirmSampleModal');
 }
 
+// 制度 v10：確樣人＝該打樣編號的打樣者；若打樣者為助理→歸該正式編號的原主責（助理不任確樣人）
+function cfDefaultConfirmer(){
+  const samplerId=cfState.sample?.employee_id;
+  const sampler=employees.find(e=>e.id===samplerId);
+  if(sampler && sampler.role_level==='assistant'){
+    const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+    return p?.primary_owner_employee_id||''; // 編號未選時留空，選編號後由 onConfirmProductChange 補上
+  }
+  return samplerId||'';
+}
 function onConfirmCustomerChange(){
   const scId=document.getElementById('cf-customer').value;
   cfState.activeScId=scId;
@@ -4901,8 +4911,8 @@ function onConfirmCustomerChange(){
   document.getElementById('cf-product').value=rc.official_product_code||'';
   document.getElementById('cf-date').value=rc.confirmed_at||new Date().toISOString().slice(0,10);
   let confId=rc.confirmed_by||'';
-  // 制度 v10：確樣人＝被確樣的這個打樣編號的打樣者（不再預設帶登入者，杜絕代填時默默算課長頭上）
-  if(!confId){confId=cfState.sample?.employee_id||'';}
+  cfState.confirmerManual=!!confId; // 重開已確樣→視為已指定，不自動覆蓋
+  if(!confId){confId=cfDefaultConfirmer();}
   document.getElementById('cf-confirmer').value=confId;
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
   document.getElementById('cf-oem').checked=!!rc.is_oem;
@@ -4930,6 +4940,8 @@ function onConfirmCustomerChange(){
 
 function onConfirmProductChange(){
   const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+  // 正式編號變動 → 未手動指定確樣人則重算（助理案需編號選定後才知主責）
+  if(!cfState.confirmerManual){document.getElementById('cf-confirmer').value=cfDefaultConfirmer();}
   const info=document.getElementById('cf-owner-info');
   if(!p){info.innerHTML='';updateConfirmPool();return;}
   const owner=employees.find(e=>e.id===p.primary_owner_employee_id);
