@@ -513,7 +513,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('planning')" id="tab-planning"><span class="tab-dot" style="background:#6b4f8a"></span>企劃部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
-    <div class="nav-tab rdmgr-hide" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生管部</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生產部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('history')" id="tab-history"><span class="tab-dot" style="background:#888"></span>獎金紀錄</div>
     <div class="nav-tab manager-only" onclick="switchPage('reconcile')" id="tab-reconcile"><span class="tab-dot" style="background:#8a6d1e"></span>月結對帳</div>
     <div class="nav-tab manager-only" onclick="switchPage('settings')" id="tab-settings"><span class="tab-dot" style="background:#555"></span>設定</div>
@@ -559,7 +559,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-desc">出貨件數＋評分</div>
         </div>
         <div class="sidebar-card rdmgr-hide" onclick="switchPage('production');setSidebarActive(this)">
-          <div class="sidebar-card-title"><span class="dept-icon" style="background:#9c3d3d"></span>生管部獎金</div>
+          <div class="sidebar-card-title"><span class="dept-icon" style="background:#9c3d3d"></span>生產部獎金</div>
           <div class="sidebar-card-desc">準時率＋評分</div>
         </div>
       </div>
@@ -990,11 +990,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
       <!-- PRODUCTION -->
       <div class="page" id="page-production">
-        <div class="section-title" style="color:var(--red)">生管部獎金計算</div>
+        <div class="section-title" style="color:var(--red)">生產部獎金計算</div>
         <div class="section-desc">季獎金 = 出貨件數獎金 ＋ 準時率獎金 ＋ 評分加成（依 v2 文件三項獨立計算、直接加總）</div>
         <div class="warn-box" style="font-size:13px;padding:14px 18px">
           <strong>⚠ 本制度尚未啟用</strong><br>
-          依據《生管部獎金規範書》：此制度於「自有 ISO 工廠落地（2026/08）」後才實施。當前由採購部施詠心兼任生管工作，獎金列計於採購部。本頁僅供模擬試算，儲存後標記為 <code>preview</code>。
+          依據《生產部獎金規範書》：此制度於「自有 ISO 工廠落地（2026/08）」後才實施。當前由採購部施詠心兼任生管工作，獎金列計於採購部。本頁僅供模擬試算，儲存後標記為 <code>preview</code>。
         </div>
         <div id="prod-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card">
@@ -1271,7 +1271,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="form-group"><label class="form-label">部門</label>
           <select class="form-select" id="e-dept">
             <option value="業務部">業務部</option><option value="研發部">研發部</option>
-            <option value="企劃部">企劃部</option><option value="採購部">採購部</option><option value="生管部">生管部</option>
+            <option value="企劃部">企劃部</option><option value="採購部">採購部</option><option value="生產部">生產部</option>
           </select>
         </div>
       </div>
@@ -3730,7 +3730,7 @@ async function saveProduction(){
   const scoreObj = prodScoreBonus(score);
   const bonus = ship.total + ot.bonus + scoreObj.bonus;
   const detail = `[未啟用試算] 出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${ontime}%（${fmt(ot.bonus)}）＋ 評分 ${scoreObj.label} ${score}/100（${fmt(scoreObj.bonus)}）`;
-  const ok=await saveRecord({dept:'生管部',name,bonus,detail,record_type:'preview'});
+  const ok=await saveRecord({dept:'生產部',name,bonus,detail,record_type:'preview'});
   if (ok) showToast(`✓ 已儲存 ${name} 模擬試算 ${fmt(bonus)}（不列入撥發，自有 ISO 工廠落地後啟用）`);
 }
 
@@ -3900,7 +3900,7 @@ async function renderSalesSummary(){
 function show(id){const el=document.getElementById(id);if(el)el.style.display='block';}
 function fmt(n){return(n||0).toLocaleString('zh-TW')+' 元';}
 function fmtNum(n){return(n||0).toLocaleString('zh-TW');}
-function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'teal',生管部:'red'}[d]||'gold';}
+function deptColor(d){return{業務部:'green',研發部:'blue',企劃部:'purple',採購部:'teal',生產部:'red'}[d]||'gold';}
 // ===== 研發成交獎金 認列引擎（B② stage 2）=====
 // 池子劑型基數來源：劑型覆寫 > 正式編號劑型 > 原打樣劑型
 function dealBaseInfo(sc){
