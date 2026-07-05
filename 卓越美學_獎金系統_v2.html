@@ -4375,7 +4375,7 @@ function saleExcludeReason(s){
 // 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
   const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date');
-  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat').not('product_code','is',null).neq('new_or_repeat','其他');
+  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter').not('product_code','is',null).neq('new_or_repeat','其他');
   const matched={}; _orderAmbiguous=[]; _orderExcluded=[];
   const cumq={};   // ol.id -> 已累計量（FIFO 判斷是否已滿）
   const byCode={}; // code -> [ol]
@@ -4424,13 +4424,16 @@ async function fillDeptAutoCount(inputId, noteId){
   const el=document.getElementById(inputId); if(el) el.value=n;
   const note=document.getElementById(noteId);
   if(note){
+    // 對不到／剔除清單只顯示「當季」的銷貨（跨季的歸各季頁，件數本就按季）
+    const _sameQ=s=>String(s.year)===String(appSettings.year)&&s.quarter===appSettings.quarter;
+    const curAmb=_orderAmbiguous.filter(_sameQ), curExc=_orderExcluded.filter(_sameQ);
     let h=`✅ 本季自動件數 <strong>${n}</strong>（訂單品項出貨達 80% 的數量，系統自動算；併款同編號計 1 件）`;
-    if(_orderExcluded.length){
-      h+=`<div style="color:#7a5c3d;font-size:11px;margin-top:4px">🚫 ${_orderExcluded.length} 筆已依裁示剔除不計（PIF／破損／已開票／非正式）</div>`;
+    if(curExc.length){
+      h+=`<div style="color:#7a5c3d;font-size:11px;margin-top:4px">🚫 ${curExc.length} 筆已依裁示剔除不計（PIF／破損／已開票／非正式）</div>`;
     }
-    if(_orderAmbiguous.length){
-      h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${_orderAmbiguous.length} 筆銷貨對不到訂單（非剔除、綁不到訂單，請補訂單或確認）：<br>`+
-        _orderAmbiguous.slice(0,12).map(s=>`・${s.product_code||''} ${s.customer_name||''} ${(s.qty||0).toLocaleString()}罐 — ${s.reason}`).join('<br>')+`</div>`;
+    if(curAmb.length){
+      h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${curAmb.length} 筆銷貨對不到訂單（非剔除、綁不到訂單，請補訂單或確認）：<br>`+
+        curAmb.slice(0,12).map(s=>`・${s.product_code||''} ${s.customer_name||''} ${(s.qty||0).toLocaleString()}罐 — ${s.reason}`).join('<br>')+`</div>`;
     }
     if(inputId==='plan-shipments'){
       h+=`<div style="margin-top:6px;padding:6px 8px;border:1px solid #c0392b;border-radius:6px;color:#c0392b;font-size:11px;font-weight:600">🔒 此為公司總件數、尚未按「品項→負責企劃」歸屬到人，暫勿據此發放企劃獎金（待歸屬功能 v2 上線）</div>`;
