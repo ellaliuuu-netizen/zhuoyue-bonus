@@ -3897,6 +3897,31 @@ function initScoreStars(id,onChange){
     el.appendChild(btn);}
 }
 function getStarScore(id){return parseInt(document.getElementById(id)?.dataset.value||0);}
+function setStarScore(id,val){const el=document.getElementById(id);if(!el)return;el.dataset.value=val;el.querySelectorAll('.score-star').forEach((s,idx)=>s.classList.toggle('active',idx<val));}
+// 重新試算：把草稿載回企劃部表單，可再評比後「存草稿」覆蓋
+async function editKpiDraft(id){
+  const {data:r}=await sb.from('kpi_scores').select('*').eq('id',id).single();
+  if(!r){showToast('找不到草稿');return;}
+  if(r.dept!=='企劃部'){showToast('目前重新試算僅支援企劃部');return;}
+  switchPage('planning');
+  setTimeout(()=>{
+    const sel=document.getElementById('plan-emp-sel');
+    if(sel){ sel.value=r.employee_id||''; if(sel.onchange) sel.onchange(); }
+    const s=r.scores||{};
+    if(document.getElementById('plan-role').value==='主管' || s.mgr_rating){
+      const rating=s.mgr_rating||'待改進';
+      document.getElementById('plan-mgr-rating').value=rating;
+      document.querySelectorAll('#plan-mgr-scores .tier-btn').forEach(b=>b.classList.toggle('active', b.textContent===rating));
+    } else {
+      ['s1','s2','s3','s4','s5'].forEach(k=>setStarScore('plan-'+k, s[k]||0));
+      calcPlanScore();
+    }
+    if(r.ship_count!=null) document.getElementById('plan-shipments').value=r.ship_count;
+    calcPlanning();
+    const pg=document.getElementById('page-planning'); if(pg) pg.scrollIntoView({behavior:'smooth'});
+    showToast(`已載入 ${r.name} 的草稿，可重新評比後再按「存草稿」覆蓋`);
+  }, 900);
+}
 function initAllStars(){
   ['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5'].forEach(id=>initScoreStars(id,calcPlanScore));
   ['pur-s1','pur-s2','pur-s3','pur-s4'].forEach(id=>initScoreStars(id,calcPurScore));
@@ -3943,11 +3968,12 @@ async function loadKpiReview(){
   const de=document.getElementById('kpi-draft-content');
   if(!drafts.length){ de.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">本季尚無草稿</div></div>'; }
   else{
-    de.innerHTML=`<table><thead><tr><th>部門</th><th>姓名</th><th>件數</th><th>評分</th><th class="td-right">試算獎金</th><th class="td-center">操作</th></tr></thead><tbody>`+
+    de.innerHTML=`<table><thead><tr><th>部門</th><th>姓名</th><th>件數</th><th>評分</th><th class="td-right">試算獎金</th><th class="td-right">主管加給</th><th class="td-center">操作</th></tr></thead><tbody>`+
       drafts.map(r=>`<tr><td><span class="badge badge-${deptColor(r.dept)}">${r.dept}</span></td><td>${r.name}</td><td>${r.ship_count}</td>`+
         `<td style="font-size:11px;color:var(--ink-faint)">${kpiScoreStr(r.dept,r.scores)}${r.score_total!=null?`（${r.score_total}）`:''}${r.probation_ratio<1?`<br>⏳試用比例 ${(r.probation_ratio*100).toFixed(1)}%`:''}</td>`+
         `<td class="td-right" style="font-weight:600;color:#6b4f8a">${fmt(r.final_bonus)}</td>`+
-        `<td class="td-center"><button class="btn btn-gold btn-sm" onclick="releaseKpi('${r.id}')">✅ 放行</button> <button class="btn btn-outline btn-sm" style="color:var(--red)" onclick="deleteKpiDraft('${r.id}','${r.name}')">刪</button></td></tr>`).join('')+`</tbody></table>`;
+        `<td class="td-right"><input type="number" id="mgr-addon-${r.id}" value="${r.mgr_addon||0}" min="0" step="100" style="width:88px;padding:4px 6px;text-align:right" title="放行時併入總額（可留 0）"/></td>`+
+        `<td class="td-center" style="white-space:nowrap"><button class="btn btn-gold btn-sm" onclick="releaseKpi('${r.id}')">✅ 放行</button> <button class="btn btn-outline btn-sm" onclick="editKpiDraft('${r.id}')">✏️ 重新試算</button> <button class="btn btn-outline btn-sm" style="color:var(--red)" onclick="deleteKpiDraft('${r.id}','${r.name}')">刪</button></td></tr>`).join('')+`</tbody></table>`;
   }
   const he=document.getElementById('kpi-hist-content');
   if(!rows.length){ he.innerHTML='<div class="empty-state"><div style="font-size:14px">尚無紀錄</div></div>'; }
@@ -3961,12 +3987,16 @@ async function loadKpiReview(){
 async function releaseKpi(id){
   const {data:r}=await sb.from('kpi_scores').select('*').eq('id',id).single();
   if(!r){showToast('找不到紀錄');return;}
-  if(!confirm(`確定放行 ${r.name}（${r.dept}）${fmt(r.final_bonus)}？\n放行後將寫入正式獎金紀錄、財務可見。`)) return;
-  const ok=await saveRecord({dept:r.dept,name:r.name,bonus:r.final_bonus,role_title:r.role_title,detail:(r.detail||'')+'｜KPI放行',record_type:'quarterly'});
+  const addonEl=document.getElementById('mgr-addon-'+id);
+  const addon=addonEl?(parseInt(addonEl.value)||0):(r.mgr_addon||0);
+  const total=(r.final_bonus||0)+addon;
+  if(!confirm(`確定放行 ${r.name}（${r.dept}）？\n試算 ${fmt(r.final_bonus)}${addon?` ＋ 主管加給 ${fmt(addon)}`:''} ＝ ${fmt(total)}\n放行後將寫入正式獎金紀錄、財務可見。`)) return;
+  const detail=(r.detail||'')+(addon?`｜主管加給 ${fmt(addon)}`:'')+'｜KPI放行';
+  const ok=await saveRecord({dept:r.dept,name:r.name,bonus:total,role_title:r.role_title,detail,record_type:'quarterly'});
   if(!ok) return;
-  const {error}=await sb.from('kpi_scores').update({status:'released',released_by:currentUser.id,released_at:new Date().toISOString()}).eq('id',id);
+  const {error}=await sb.from('kpi_scores').update({status:'released',released_by:currentUser.id,released_at:new Date().toISOString(),mgr_addon:addon,final_bonus:total}).eq('id',id);
   if(error){showToast('❌ 放行狀態更新失敗：'+error.message);return;}
-  showToast(`✅ 已放行 ${r.name} ${fmt(r.final_bonus)}，已入帳`);
+  showToast(`✅ 已放行 ${r.name} ${fmt(total)}，已入帳`);
   loadKpiReview();
 }
 async function deleteKpiDraft(id,name){
