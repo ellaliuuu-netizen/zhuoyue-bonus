@@ -1537,9 +1537,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
       <div class="form-group" id="cf-sampler-group">
         <label class="form-label">同品項打樣人（分打樣 30%）— 勾選屬於這支產品的所有打樣編號</label>
+        <div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;line-height:1.6">勾選這支產品的所有打樣編號（含主責親自打的）。助理打的可勾、系統自動不計分潤並歸主責；確樣人＝確樣那支的打樣者。</div>
         <input class="form-input" id="cf-sampler-filter" placeholder="篩選 品名 / 打樣人 / 編號…" oninput="renderSamplerCandidates()" style="margin-bottom:6px" />
         <div id="cf-sampler-list" style="max-height:170px;overflow:auto;border:1px solid var(--ink-faint);border-radius:6px;padding:6px;font-size:12px"></div>
         <div id="cf-sampler-summary" style="font-size:12px;margin-top:6px;color:var(--ink-light)"></div>
+        <input class="form-input" id="cf-sampler-note" placeholder="打樣群組備註：為何這幾筆算同一支（多人打樣時必填，供 ELLA 覆核留底）" style="margin-top:8px" />
       </div>
 
       <div style="display:flex;gap:10px">
@@ -4398,7 +4400,7 @@ function dealFlags(rows, sc, cum){
 async function loadDealBonuses(){
   const el=document.getElementById('rd-deal-content'); if(!el)return;
   const {data,error}=await sb.from('rd_deal_bonuses')
-    .select('*, employees(name), rd_sample_customers(change_level, confirmed_by, formula_type_override, is_oem, rd_customers(short_name), rd_samples(formula_type))')
+    .select('*, employees(name), rd_sample_customers(change_level, confirmed_by, sampler_note, formula_type_override, is_oem, rd_customers(short_name), rd_samples(formula_type))')
     .eq('status','pending_review').order('recognized_at',{ascending:false});
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   const {data:agg}=await sb.from('rd_deal_bonuses').select('employee_id, amount').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
@@ -4425,6 +4427,7 @@ async function loadDealBonuses(){
       const flagHtml=flags.map(f=>`<span style="display:inline-block;font-size:11px;color:${fColor[f.lv]};border:1px solid ${fColor[f.lv]};border-radius:4px;padding:1px 6px;margin:2px 4px 2px 0">${fIcon[f.lv]} ${f.t}</span>`).join('');
       body+=`<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title" style="font-size:14px">${code} · ${prod?.product_name||''}　<span style="color:var(--ink-faint);font-weight:400">客戶 ${cust}</span></div><div style="font-weight:600">小計 ${sub.toLocaleString()}</div></div>`;
       if(flagHtml) body+=`<div style="margin-bottom:8px">${flagHtml}</div>`;
+      if(sc.sampler_note) body+=`<div style="margin-bottom:8px;font-size:12px;background:#f3ede0;border-radius:4px;padding:6px 8px">📝 打樣群組備註：${sc.sampler_note}</div>`;
       body+=`<table><thead><tr><th>段別</th><th>領取人</th><th class="td-right" style="width:120px">金額（可改）</th><th>說明</th></tr></thead><tbody>`;
       rows.forEach(r=>{
         const whoCell=r.employee_id
@@ -4890,7 +4893,7 @@ const FORMULA_BASE={liquid:0.3,essence:0.4,emulsion_ow:0.8,emulsion_wo:1.0,speci
 
 async function openConfirmModal(sampleId){
   const {data:s,error}=await sb.from('rd_samples')
-    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
+    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, sampler_note, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
     .eq('id',sampleId).single();
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
@@ -4935,6 +4938,7 @@ function onConfirmCustomerChange(){
   cfState.samplerPicks=new Set([cfState.sampleId]);
   const exSamp=(rc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id).map(d=>d.employee_id);
   if(exSamp.length)(cfState.allSamples||[]).forEach(x=>{if(exSamp.includes(x.employee_id))cfState.samplerPicks.add(x.id);});
+  document.getElementById('cf-sampler-note').value=rc.sampler_note||'';
   renderSamplerCandidates();
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
   document.getElementById('cf-oem').checked=!!rc.is_oem;
@@ -5057,8 +5061,11 @@ async function saveConfirm(){
     employee_id:r.querySelector('.cf-split-emp').value,
     pct:parseFloat(r.querySelector('.cf-split-pct').value)
   })).filter(x=>x.employee_id && !isNaN(x.pct));
+  const samplerNote=document.getElementById('cf-sampler-note').value.trim();
+  const _nonAsst=new Set((cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id)&&x.employee_id&&x.employees?.role_level!=='assistant').map(x=>x.employee_id));
+  if(_nonAsst.size>=2 && !samplerNote){showToast('多人打樣：請填「打樣群組備註」，說明為何這幾筆算同一支（留底供覆核）');return;}
   const upd={
-    official_product_code:code, confirm_status:'confirmed', confirmed_at:date, confirmed_by:confirmer,
+    official_product_code:code, confirm_status:'confirmed', confirmed_at:date, confirmed_by:confirmer, sampler_note:samplerNote||null,
     formula_type_override:document.getElementById('cf-formula-override').value||null,
     is_oem:document.getElementById('cf-oem').checked,
     change_level:lv, changed_architectures:arch.length?arch:null,
