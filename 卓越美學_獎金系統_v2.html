@@ -4253,6 +4253,16 @@ async function generateRdConfirmSheets(){
   });
   // 3) 每人一張
   const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
+  // 課長 15% 團隊加成 / 助理 5% 分潤 基數（制度七、八章）
+  let poolTotal=0, staffTotal=0;
+  Object.entries(deal).forEach(([eid,rows])=>{
+    const emp=employees.find(x=>x.id===eid);
+    const sum=rows.reduce((s,d)=>s+d.amount,0);
+    poolTotal+=sum; // 全團隊成交池（含課長已分得的段）
+    if(emp && emp.dept==='研發部' && (emp.role_level==='staff'||emp.role_level==='senior')) staffTotal+=sum; // 研發同仁成交池（不含課長/助理）
+  });
+  const mgrAddon=Math.round(staffTotal*0.15);
+  const asstShare=Math.round(poolTotal*0.05);
   const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   let pages='';
   rd.forEach(e=>{
@@ -4260,6 +4270,16 @@ async function generateRdConfirmSheets(){
     const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
     const myDeal=deal[e.id]||[]; let dTot=0;
     const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無成交三段認列</td></tr>';
+    // 三、加成/分潤（依角色）
+    let extraH='', extra=0;
+    if(e.role_level==='manager'){
+      extra=mgrAddon;
+      extraH=`<h2>三、團隊加成（研發同仁成交池 × 15%）<span class="est">＊預估</span></h2><table><tbody><tr><td>研發同仁成交池合計（不含課長自己）</td><td class="r">${staffTotal.toLocaleString()} 元</td></tr><tr><td>× 15% 團隊加成</td><td class="r"><b>${mgrAddon.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">課長總獎金＝個人（打樣＋成交）＋研發同仁成交池×15%；加成池不含課長自己已分得的段。</p>`;
+    }else if(e.role_level==='assistant'){
+      extra=asstShare;
+      extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）<span class="est">＊預估</span></h2><table><tbody><tr><td>全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr><tr><td>× 5% 助理分潤</td><td class="r"><b>${asstShare.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">助理不走成交三段，改領全團隊成交池 5%。</p>`;
+    }
+    const grand=sTot+dTot+extra;
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       <h2>一、打樣獎金（每月）</h2>
@@ -4267,7 +4287,9 @@ async function generateRdConfirmSheets(){
       <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。當月成交＝0 者該月打樣獎金暫緩、待日後成交回溯補發。</p>
       <h2>二、成交獎金三段（每品項）<span class="est">＊預估值，實際以出貨認列為準</span></h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">預估獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計（預估）</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
-      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）與實際情況相符。如有錯誤請於下方註明。</p>
+      ${extraH}
+      <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季合計（含預估）：${grand.toLocaleString()} 元</div>
+      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':e.role_level==='assistant'?'與分潤':''}與實際情況相符。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
