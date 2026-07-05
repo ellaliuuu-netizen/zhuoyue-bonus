@@ -909,13 +909,20 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="section-title" style="color:var(--purple)">企劃部獎金計算</div>
         <div class="section-desc">季獎金 = 出貨件數獎金（階梯逐件累加）＋ KPI 表現獎金（依 v5 文件）</div>
         <div id="plan-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
+        <div class="card manager-only" id="plan-attrib-card">
+          <div class="card-header"><div class="card-title">🎯 本季結算品項 → 負責企劃 歸屬</div></div>
+          <div class="section-desc" style="margin-bottom:8px">指派一次即存進產品主檔、以後自動記憶免重選。未指派的品項不計入任何人、不發放。負責企劃離職→改指派或勾「不發放」。</div>
+          <div id="plan-attrib-summary" style="font-size:12px;margin-bottom:8px;color:var(--ink-faint)"></div>
+          <div id="plan-attrib-list" class="table-wrap"></div>
+          <button class="btn btn-gold" style="margin-top:10px" onclick="renderPlanAttribution()">🔄 重新載入歸屬</button>
+        </div>
         <div class="card">
           <div class="card-header"><div class="card-title">✏️ 企劃部試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">企劃人員</label><select class="form-select" id="plan-emp-sel"><option value="">請選擇</option></select></div>
             <div class="form-group"><label class="form-label">職稱</label><div id="plan-role-display" style="padding:9px 0;font-size:13px;color:var(--ink-faint)">選擇人員後自動顯示</div><input type="hidden" id="plan-role" value="同仁" /></div>
           </div>
-          <div class="form-group"><label class="form-label">公司當季總出貨件數（系統自動帶，可手改）</label>
+          <div class="form-group"><label class="form-label">本企劃本季負責件數（依歸屬自動帶，可手改）</label>
             <input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" />
             <div id="plan-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           <div id="plan-staff-scores">
@@ -1848,12 +1855,14 @@ function populateEmpSelects() {
   };
   document.getElementById('plan-emp-sel').onchange = function() {
     const emp = employees.find(e => e.id === this.value);
-    if (!emp) return;
-    document.getElementById('plan-role-display').textContent = emp.role_title;
-    const isMgr = emp.role_level === 'manager';
-    document.getElementById('plan-staff-scores').style.display = isMgr ? 'none' : 'block';
-    document.getElementById('plan-mgr-scores').style.display = isMgr ? 'block' : 'none';
-    document.getElementById('plan-role').value = isMgr ? '主管' : '同仁';
+    if (emp) {
+      document.getElementById('plan-role-display').textContent = emp.role_title;
+      const isMgr = emp.role_level === 'manager';
+      document.getElementById('plan-staff-scores').style.display = isMgr ? 'none' : 'block';
+      document.getElementById('plan-mgr-scores').style.display = isMgr ? 'block' : 'none';
+      document.getElementById('plan-role').value = isMgr ? '主管' : '同仁';
+    }
+    refreshPlanShipCount(); // v2：帶入該企劃負責件數
   };
 }
 function fillSelect(id, emps, optional=false) {
@@ -3536,6 +3545,78 @@ function planMgrKpiBonus(rating){
   return {bonus:map[rating]||0, label:rating};
 }
 
+// ===== v2 品項→企劃 歸屬 =====
+let _planSettled=[], _planProducts={};
+async function loadPlanAttribution(){
+  const {data:ols}=await sb.from('order_lines')
+    .select('id,order_no,product_code,item_name_raw,planner_override_id,bonus_forfeit,bonus_settled_month')
+    .eq('bonus_settled_year',appSettings.year).eq('bonus_settled_quarter',appSettings.quarter)
+    .order('bonus_settled_month').order('product_code');
+  _planSettled=ols||[];
+  const {data:prods}=await sb.from('products').select('product_code,product_name,planner_employee_id');
+  _planProducts={}; (prods||[]).forEach(p=>_planProducts[p.product_code]=p);
+}
+// 解析某結算品項的負責企劃：不發放→forfeit；覆寫優先，否則吃產品主檔；解析到離職者→leaver；空→unassigned
+function resolvedPlanner(o){
+  if(o.bonus_forfeit) return {status:'forfeit'};
+  const pid=o.planner_override_id || (_planProducts[o.product_code]&&_planProducts[o.product_code].planner_employee_id);
+  if(!pid) return {status:'unassigned'};
+  const emp=employees.find(e=>e.id===pid);
+  if(!emp) return {status:'unassigned'};
+  if(!emp.is_active) return {status:'leaver', emp};
+  return {status:'ok', emp};
+}
+function planPersonCount(empId){
+  if(!empId) return 0;
+  return _planSettled.filter(o=>{const r=resolvedPlanner(o);return r.status==='ok'&&r.emp.id===empId;}).length;
+}
+async function renderPlanAttribution(){
+  await loadPlanAttribution();
+  const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
+  let assigned=0,unassigned=0,leaver=0,forfeit=0;
+  const rows=_planSettled.map(o=>{
+    const r=resolvedPlanner(o);
+    if(r.status==='ok')assigned++;else if(r.status==='unassigned')unassigned++;else if(r.status==='leaver')leaver++;else forfeit++;
+    const curPid=o.planner_override_id||(_planProducts[o.product_code]&&_planProducts[o.product_code].planner_employee_id)||'';
+    const opts=`<option value="">— 未指派 —</option>`+planEmps.map(e=>`<option value="${e.id}" ${e.id===curPid?'selected':''}>${e.name}</option>`).join('');
+    const rowStyle=r.status==='leaver'?'background:#fdecea':(r.status==='unassigned'?'background:#fff8e1':(r.status==='forfeit'?'background:#eee;opacity:.7':''));
+    let extra='';
+    if(r.status==='leaver') extra=`<span style="color:#c0392b;font-size:11px">⚠️「${r.emp.name}」已離職</span>`;
+    const forfeitBox=`<label style="font-size:11px;white-space:nowrap"><input type="checkbox" onchange="setPlanForfeit('${o.id}',this.checked)" ${o.bonus_forfeit?'checked':''}> 不發放</label>`;
+    return `<tr style="${rowStyle}"><td>${o.product_code||''} · ${o.item_name_raw||''}</td><td class="td-center">${o.bonus_settled_month||''}月</td><td><select class="form-select" style="min-width:110px;padding:4px 6px" onchange="assignPlanner('${o.product_code}',this.value)">${opts}</select></td><td>${extra} ${forfeitBox}</td></tr>`;
+  }).join('');
+  const sum=document.getElementById('plan-attrib-summary');
+  if(sum) sum.innerHTML=`本季結算 <strong>${_planSettled.length}</strong> 件：已歸屬 <strong style="color:#2e7d32">${assigned}</strong>｜待指派 <strong style="color:#b3541e">${unassigned}</strong>｜離職待處理 <strong style="color:#c0392b">${leaver}</strong>｜不發放 ${forfeit}`;
+  const list=document.getElementById('plan-attrib-list');
+  if(list) list.innerHTML=`<table><thead><tr><th>品項</th><th class="td-center">結算月</th><th>負責企劃</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  refreshPlanShipCount();
+}
+async function assignPlanner(code,empId){
+  await sb.from('products').update({planner_employee_id:empId||null}).eq('product_code',code);
+  const nm=empId?(employees.find(e=>e.id===empId)||{}).name:'未指派';
+  showToast(`已指派 ${code} → ${nm}（已記憶，之後自動帶）`);
+  renderPlanAttribution();
+}
+async function setPlanForfeit(lineId,val){
+  await sb.from('order_lines').update({bonus_forfeit:val}).eq('id',lineId);
+  renderPlanAttribution();
+}
+function refreshPlanShipCount(){
+  const empId=document.getElementById('plan-emp-sel').value;
+  const el=document.getElementById('plan-shipments');
+  const note=document.getElementById('plan-ship-note');
+  if(!empId){ if(note)note.innerHTML='選擇企劃人員後、自動帶入其負責件數'; return; }
+  const n=planPersonCount(empId);
+  if(el) el.value=n;
+  const total=_planSettled.length;
+  const unassigned=_planSettled.filter(o=>resolvedPlanner(o).status==='unassigned').length;
+  const nm=(employees.find(e=>e.id===empId)||{}).name||'';
+  if(note) note.innerHTML=`✅ ${nm} 本季負責 <strong>${n}</strong> 件（公司結算共 ${total} 件${unassigned?`；⚠️尚有 ${unassigned} 件未指派、未計入任何人`:''}）`;
+}
+async function initPlanning(){
+  try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
+  await renderPlanAttribution();
+}
 function calcPlanning(){
   const empId=document.getElementById('plan-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
@@ -3882,7 +3963,7 @@ function switchPage(page){
   if(page==='settings')renderEmployeeList();
   if(page==='rd-sampling')initRdSamplingPage();
   if(page==='sales')populateSalesMonthSel();
-  if(page==='planning')fillDeptAutoCount('plan-shipments','plan-ship-note');
+  if(page==='planning')initPlanning();
   if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
   if(page==='reconcile')loadReconcile();
@@ -4434,9 +4515,6 @@ async function fillDeptAutoCount(inputId, noteId){
     if(curAmb.length){
       h+=`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠️ ${curAmb.length} 筆銷貨對不到訂單（非剔除、綁不到訂單，請補訂單或確認）：<br>`+
         curAmb.slice(0,12).map(s=>`・${s.product_code||''} ${s.customer_name||''} ${(s.qty||0).toLocaleString()}罐 — ${s.reason}`).join('<br>')+`</div>`;
-    }
-    if(inputId==='plan-shipments'){
-      h+=`<div style="margin-top:6px;padding:6px 8px;border:1px solid #c0392b;border-radius:6px;color:#c0392b;font-size:11px;font-weight:600">🔒 此為公司總件數、尚未按「品項→負責企劃」歸屬到人，暫勿據此發放企劃獎金（待歸屬功能 v2 上線）</div>`;
     }
     note.innerHTML=h;
   }
