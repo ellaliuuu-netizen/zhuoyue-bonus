@@ -515,6 +515,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab rdmgr-hide" onclick="switchPage('purchase')" id="tab-purchase"><span class="tab-dot" style="background:#3d7a7a"></span>採購部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('production')" id="tab-production"><span class="tab-dot" style="background:#9c3d3d"></span>生產部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('history')" id="tab-history"><span class="tab-dot" style="background:#888"></span>獎金紀錄</div>
+    <div class="nav-tab manager-only" onclick="switchPage('kpireview')" id="tab-kpireview"><span class="tab-dot" style="background:#6b4f8a"></span>KPI覆核</div>
     <div class="nav-tab manager-only" onclick="switchPage('reconcile')" id="tab-reconcile"><span class="tab-dot" style="background:#8a6d1e"></span>月結對帳</div>
     <div class="nav-tab manager-only" onclick="switchPage('settings')" id="tab-settings"><span class="tab-dot" style="background:#555"></span>設定</div>
   </nav>
@@ -944,7 +945,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn btn-gold" onclick="calcPlanning()">試算</button>
-            <button class="btn btn-primary manager-only" onclick="savePlanning()">儲存</button>
+            <button class="btn btn-primary manager-only" onclick="savePlanning()">存草稿</button>
           </div>
         </div>
       </div>
@@ -983,7 +984,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn btn-gold" onclick="calcPurchase()">試算</button>
-            <button class="btn btn-primary manager-only" onclick="savePurchase()">儲存</button>
+            <button class="btn btn-primary manager-only" onclick="savePurchase()">存草稿</button>
           </div>
         </div>
       </div>
@@ -1020,7 +1021,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn btn-gold" onclick="calcProduction()">試算</button>
-            <button class="btn btn-primary manager-only" onclick="saveProduction()">儲存</button>
+            <button class="btn btn-primary manager-only" onclick="saveProduction()">存草稿</button>
           </div>
         </div>
       </div>
@@ -1039,6 +1040,20 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       </div>
 
       <!-- SETTINGS -->
+      <!-- KPI 覆核放行 -->
+      <div class="page" id="page-kpireview">
+        <div class="section-title" style="color:#6b4f8a">📝 KPI 評分覆核與放行</div>
+        <div class="section-desc">各部門評分頁「存草稿」後在此彙整；覆核無誤按「放行」→ 正式入帳（寫入獎金紀錄、財務可見），放行後鎖定。</div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📥 本季草稿（待放行）</div><div id="kpi-q-label" style="font-size:12px;color:var(--ink-faint)"></div></div>
+          <div id="kpi-draft-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">本季尚無草稿</div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🕘 歷季回看（所有評分紀錄）</div></div>
+          <div id="kpi-hist-content"></div>
+        </div>
+      </div>
+
       <div class="page" id="page-reconcile">
         <div class="section-title">📋 月結對帳</div>
         <div class="section-desc">一頁看本月各部門「已結算獎金 + 待辦 + 異常」，對帳用。正式金額以各部門結算頁為準。</div>
@@ -3572,8 +3587,9 @@ async function savePlanning(){
   const pr=probationRatio(emp);
   const bonus=Math.round(base*pr.ratio);
   const detail=`${role}｜出貨 ${ships} 件（件數 ${fmt(ship.total)}）＋ KPI ${kpi.label}（${fmt(kpi.bonus)}）${!isMgr?`，總分 ${kpi.totalScore}/25`:''}${pr.note}`;
-  const ok=await saveRecord({dept:'企劃部',name:emp.name,bonus,role_title:role,detail,record_type:'quarterly'});
-  if (ok) showToast(pr.ratio<1?`⚠️ ${emp.name} 依比例 ${(pr.ratio*100).toFixed(1)}%，${fmt(bonus)}`:`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
+  const scores = isMgr ? {mgr_rating:document.getElementById('plan-mgr-rating').value} : {s1:getStarScore('plan-s1'),s2:getStarScore('plan-s2'),s3:getStarScore('plan-s3'),s4:getStarScore('plan-s4'),s5:getStarScore('plan-s5')};
+  const ok=await saveKpiDraft({employee_id:emp.id,dept:'企劃部',name:emp.name,role_title:role,ship_count:ships,scores,score_total:isMgr?null:kpi.totalScore,kpi_bonus:kpi.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
+  if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
 // PURCHASE
@@ -3648,8 +3664,9 @@ async function savePurchase(){
   const pr=probationRatio(emp);
   const bonus=Math.round(base*pr.ratio);
   const detail=`出貨 ${ships} 件（${fmt(ship.total)}）＋ 評分 ${scoreObj.label}（${score}/100，${fmt(scoreObj.bonus)}）${concurrent?'＋ 兼任補貼 '+fmt(supplement):''}${pr.note}`;
-  const ok=await saveRecord({dept:'採購部',name:emp.name,bonus,detail,record_type:'quarterly'});
-  if (ok) showToast(pr.ratio<1?`⚠️ ${emp.name} 依比例 ${(pr.ratio*100).toFixed(1)}%，${fmt(bonus)}`:`✓ 已儲存 ${emp.name} ${fmt(bonus)}`);
+  const scores={s1:getStarScore('pur-s1'),s2:getStarScore('pur-s2'),s3:getStarScore('pur-s3'),s4:getStarScore('pur-s4'),supplement:concurrent?1:0};
+  const ok=await saveKpiDraft({employee_id:emp.id,dept:'採購部',name:emp.name,role_title:emp.role_title,ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
+  if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
 // PRODUCTION
@@ -3730,8 +3747,12 @@ async function saveProduction(){
   const scoreObj = prodScoreBonus(score);
   const bonus = ship.total + ot.bonus + scoreObj.bonus;
   const detail = `[未啟用試算] 出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${ontime}%（${fmt(ot.bonus)}）＋ 評分 ${scoreObj.label} ${score}/100（${fmt(scoreObj.bonus)}）`;
-  const ok=await saveRecord({dept:'生產部',name,bonus,detail,record_type:'preview'});
-  if (ok) showToast(`✓ 已儲存 ${name} 模擬試算 ${fmt(bonus)}（不列入撥發，自有 ISO 工廠落地後啟用）`);
+  const empP=employees.find(e=>e.name===name);
+  const pr=empP?probationRatio(empP):{ratio:1,note:''};
+  const finalB=Math.round(bonus*pr.ratio);
+  const scores={ontime,e1:getStarScore('prod-s1'),e2:getStarScore('prod-s2'),e3:getStarScore('prod-s3'),e4:getStarScore('prod-s4')};
+  const ok=await saveKpiDraft({employee_id:empP?empP.id:null,dept:'生產部',name,role_title:empP?empP.role_title:'生管',ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:finalB,detail:detail.replace('[未啟用試算] ','')});
+  if (ok) showToast(`📝 已存草稿：${name} 試算 ${fmt(finalB)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
 // HISTORY
@@ -3782,6 +3803,73 @@ function selectTier(el,hiddenId,val){
   el.closest('.tier-select').querySelectorAll('.tier-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');
   const h=document.getElementById(hiddenId);if(h)h.value=val;
 }
+// ===== KPI 評分草稿 → 放行 =====
+async function saveKpiDraft(b){
+  const y=appSettings.year, q=appSettings.quarter;
+  const payload={employee_id:b.employee_id||null,dept:b.dept,name:b.name,role_title:b.role_title||null,year:y,quarter:q,
+    ship_count:b.ship_count||0,scores:b.scores||{},score_total:(b.score_total??null),
+    kpi_bonus:b.kpi_bonus||0,ship_bonus:b.ship_bonus||0,probation_ratio:(b.probation_ratio??1),
+    final_bonus:b.final_bonus||0,detail:b.detail||null,status:'draft',evaluator:currentUser.id,updated_at:new Date().toISOString()};
+  let qy=sb.from('kpi_scores').select('id,status').eq('year',y).eq('quarter',q).eq('dept',b.dept);
+  qy = b.employee_id ? qy.eq('employee_id',b.employee_id) : qy.is('employee_id',null).eq('name',b.name);
+  const {data:exist}=await qy;
+  if(exist&&exist.length){
+    if(exist[0].status==='released'){ if(!confirm(`${b.name} 本季已放行入帳。要退回改草稿並覆蓋嗎？（財務端的已放行紀錄需另行處理）`)) return false; payload.released_by=null; payload.released_at=null; }
+    const {error}=await sb.from('kpi_scores').update(payload).eq('id',exist[0].id);
+    if(error){showToast('❌ 存草稿失敗：'+error.message);return false;}
+  } else {
+    const {error}=await sb.from('kpi_scores').insert(payload);
+    if(error){showToast('❌ 存草稿失敗：'+error.message);return false;}
+  }
+  return true;
+}
+function kpiScoreStr(dept,s){
+  if(!s) return '';
+  if(dept==='企劃部') return s.mgr_rating?`整體評等：${s.mgr_rating}`:`①${s.s1} ②${s.s2} ③${s.s3} ④${s.s4} ⑤${s.s5}`;
+  if(dept==='採購部') return `議價${s.s1} 缺料${s.s2} 協調${s.s3} 預測${s.s4}${s.supplement?'｜兼生管':''}`;
+  if(dept==='生產部') return `準時率${s.ontime}%｜排程${s.e1} 協調${s.e2} 異常${s.e3} 文件${s.e4}`;
+  return JSON.stringify(s);
+}
+async function loadKpiReview(){
+  document.getElementById('kpi-q-label').textContent=`${appSettings.year} ${appSettings.quarter}`;
+  const {data:all}=await sb.from('kpi_scores').select('*').order('year',{ascending:false}).order('quarter',{ascending:false}).order('dept');
+  const rows=all||[];
+  const drafts=rows.filter(r=>r.year===appSettings.year&&r.quarter===appSettings.quarter&&r.status==='draft');
+  const de=document.getElementById('kpi-draft-content');
+  if(!drafts.length){ de.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">本季尚無草稿</div></div>'; }
+  else{
+    de.innerHTML=`<table><thead><tr><th>部門</th><th>姓名</th><th>件數</th><th>評分</th><th class="td-right">試算獎金</th><th class="td-center">操作</th></tr></thead><tbody>`+
+      drafts.map(r=>`<tr><td><span class="badge badge-${deptColor(r.dept)}">${r.dept}</span></td><td>${r.name}</td><td>${r.ship_count}</td>`+
+        `<td style="font-size:11px;color:var(--ink-faint)">${kpiScoreStr(r.dept,r.scores)}${r.score_total!=null?`（${r.score_total}）`:''}${r.probation_ratio<1?`<br>⏳試用比例 ${(r.probation_ratio*100).toFixed(1)}%`:''}</td>`+
+        `<td class="td-right" style="font-weight:600;color:#6b4f8a">${fmt(r.final_bonus)}</td>`+
+        `<td class="td-center"><button class="btn btn-gold btn-sm" onclick="releaseKpi('${r.id}')">✅ 放行</button> <button class="btn btn-outline btn-sm" style="color:var(--red)" onclick="deleteKpiDraft('${r.id}','${r.name}')">刪</button></td></tr>`).join('')+`</tbody></table>`;
+  }
+  const he=document.getElementById('kpi-hist-content');
+  if(!rows.length){ he.innerHTML='<div class="empty-state"><div style="font-size:14px">尚無紀錄</div></div>'; }
+  else{
+    he.innerHTML=`<table><thead><tr><th>季度</th><th>部門</th><th>姓名</th><th>評分</th><th class="td-right">獎金</th><th class="td-center">狀態</th></tr></thead><tbody>`+
+      rows.map(r=>`<tr><td style="font-size:11px;color:var(--ink-faint)">${r.year} ${r.quarter}</td><td><span class="badge badge-${deptColor(r.dept)}">${r.dept}</span></td><td>${r.name}</td>`+
+        `<td style="font-size:11px;color:var(--ink-faint)">${kpiScoreStr(r.dept,r.scores)}</td><td class="td-right">${fmt(r.final_bonus)}</td>`+
+        `<td class="td-center"><span class="badge badge-${r.status==='released'?'green':'gold'}">${r.status==='released'?'已放行':'草稿'}</span></td></tr>`).join('')+`</tbody></table>`;
+  }
+}
+async function releaseKpi(id){
+  const {data:r}=await sb.from('kpi_scores').select('*').eq('id',id).single();
+  if(!r){showToast('找不到紀錄');return;}
+  if(!confirm(`確定放行 ${r.name}（${r.dept}）${fmt(r.final_bonus)}？\n放行後將寫入正式獎金紀錄、財務可見。`)) return;
+  const ok=await saveRecord({dept:r.dept,name:r.name,bonus:r.final_bonus,role_title:r.role_title,detail:(r.detail||'')+'｜KPI放行',record_type:'quarterly'});
+  if(!ok) return;
+  const {error}=await sb.from('kpi_scores').update({status:'released',released_by:currentUser.id,released_at:new Date().toISOString()}).eq('id',id);
+  if(error){showToast('❌ 放行狀態更新失敗：'+error.message);return;}
+  showToast(`✅ 已放行 ${r.name} ${fmt(r.final_bonus)}，已入帳`);
+  loadKpiReview();
+}
+async function deleteKpiDraft(id,name){
+  if(!confirm(`刪除 ${name} 的草稿？`)) return;
+  const {error}=await sb.from('kpi_scores').delete().eq('id',id);
+  if(error){showToast('❌ 刪除失敗：'+error.message);return;}
+  showToast('已刪除草稿'); loadKpiReview();
+}
 function switchPage(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
@@ -3798,6 +3886,7 @@ function switchPage(page){
   if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
   if(page==='reconcile')loadReconcile();
+  if(page==='kpireview')loadKpiReview();
 }
 async function loadReconcile(){
   const sel=document.getElementById('rec-month');
