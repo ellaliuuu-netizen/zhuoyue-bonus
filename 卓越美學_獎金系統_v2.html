@@ -1535,6 +1535,13 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="cf-owner-info" style="font-size:12px;margin-top:6px"></div>
       </div>
 
+      <div class="form-group" id="cf-sampler-group">
+        <label class="form-label">同品項打樣人（分打樣 30%）— 勾選屬於這支產品的所有打樣編號</label>
+        <input class="form-input" id="cf-sampler-filter" placeholder="篩選 品名 / 打樣人 / 編號…" oninput="renderSamplerCandidates()" style="margin-bottom:6px" />
+        <div id="cf-sampler-list" style="max-height:170px;overflow:auto;border:1px solid var(--ink-faint);border-radius:6px;padding:6px;font-size:12px"></div>
+        <div id="cf-sampler-summary" style="font-size:12px;margin-top:6px;color:var(--ink-light)"></div>
+      </div>
+
       <div style="display:flex;gap:10px">
         <div class="form-group" style="flex:1"><label class="form-label">確樣日 *</label><input class="form-input" type="date" id="cf-date" /></div>
         <div class="form-group" style="flex:1"><label class="form-label">確樣人 *（誰確誰領 20%）</label><select class="form-select" id="cf-confirmer" onchange="cfState.confirmerManual=true"></select></div>
@@ -4188,15 +4195,21 @@ function computeDealSegments(sc){
   }
   // 打樣段 30%
   const sampleSeg=pool*0.3;
-  const samplerId=sc.rd_samples?.employee_id;
-  const samplerRole=sc.rd_samples?.employees?.role_level;
-  if(samplerId&&samplerRole!=='assistant'){
-    lines.push({segment:'sampling', employee_id:samplerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'打樣者領打樣段'});
-  }else if(orphan){
-    lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
-      pending_reason:'打樣段歸主責但主責孤兒，待指定接手人', note:'助理/無重打→歸主責，主責離職折半'});
+  const samplerSplits=(sc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id);
+  if(samplerSplits.length){
+    // 多人打樣：依確樣時勾選、按打樣次數存下的比例分（助理已於確樣排除）
+    samplerSplits.forEach(sp=>lines.push({segment:'sampling', employee_id:sp.employee_id, amount:Math.round(sampleSeg*Number(sp.pct)/100), is_orphan_halved:false, note:`多人打樣 占打樣段 ${sp.pct}%`}));
   }else{
-    lines.push({segment:'sampling', employee_id:primaryOwnerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'助理/無重打→打樣段歸主責'});
+    const samplerId=sc.rd_samples?.employee_id;
+    const samplerRole=sc.rd_samples?.employees?.role_level;
+    if(samplerId&&samplerRole!=='assistant'){
+      lines.push({segment:'sampling', employee_id:samplerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'打樣者領打樣段'});
+    }else if(orphan){
+      lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
+        pending_reason:'打樣段歸主責但主責孤兒，待指定接手人', note:'助理/無重打→歸主責，主責離職折半'});
+    }else{
+      lines.push({segment:'sampling', employee_id:primaryOwnerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'助理/無重打→打樣段歸主責'});
+    }
   }
   // 確樣段 20%
   lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(pool*0.2), is_orphan_halved:false, note:'確樣人領確樣段'});
@@ -4881,6 +4894,10 @@ async function openConfirmModal(sampleId){
     .eq('id',sampleId).single();
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
+  // 載入本季所有打樣，作為「同品項打樣人」勾選候選
+  const _qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[4,5,6];
+  const {data:_cand}=await sb.from('rd_samples').select('id, sample_code, sample_date, item_name, employee_id, employees!rd_samples_employee_id_fkey(name, role_level)').gte('sample_date',`${appSettings.year}-${String(_qm[0]).padStart(2,'0')}-01`).lte('sample_date',`${appSettings.year}-${String(_qm[_qm.length-1]).padStart(2,'0')}-31`).order('sample_date');
+  cfState.allSamples=_cand||[];
   if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
   document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜<span style="color:#b3541e;font-weight:600">打樣日 ${s.sample_date}</span>｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
   const custSel=document.getElementById('cf-customer');
@@ -4914,6 +4931,11 @@ function onConfirmCustomerChange(){
   cfState.confirmerManual=!!confId; // 重開已確樣→視為已指定，不自動覆蓋
   if(!confId){confId=cfDefaultConfirmer();}
   document.getElementById('cf-confirmer').value=confId;
+  // 打樣 30% 多人分潤：初始化勾選（本筆必含；重開已確樣則帶回既有 sampler 拆分對應打樣人）
+  cfState.samplerPicks=new Set([cfState.sampleId]);
+  const exSamp=(rc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id).map(d=>d.employee_id);
+  if(exSamp.length)(cfState.allSamples||[]).forEach(x=>{if(exSamp.includes(x.employee_id))cfState.samplerPicks.add(x.id);});
+  renderSamplerCandidates();
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
   document.getElementById('cf-oem').checked=!!rc.is_oem;
   document.getElementById('cf-change-level').value=rc.change_level||'minor';
@@ -4955,6 +4977,30 @@ function onConfirmProductChange(){
   updateConfirmPool();
 }
 
+// 打樣 30% 多人分潤：候選勾選清單
+function renderSamplerCandidates(){
+  const list=document.getElementById('cf-sampler-list'); if(!list)return;
+  if(!cfState.samplerPicks)cfState.samplerPicks=new Set([cfState.sampleId]);
+  const f=(document.getElementById('cf-sampler-filter')?.value||'').trim().toLowerCase();
+  const cur=cfState.sampleId;
+  const rows=(cfState.allSamples||[]).filter(x=>!f||(x.item_name||'').toLowerCase().includes(f)||(x.employees?.name||'').toLowerCase().includes(f)||(x.sample_code||'').toLowerCase().includes(f));
+  list.innerHTML=rows.map(x=>{
+    const checked=cfState.samplerPicks.has(x.id)?'checked':'';
+    const isCur=x.id===cur, asst=x.employees?.role_level==='assistant';
+    return `<label style="display:flex;gap:6px;align-items:center;padding:2px 0${isCur?';font-weight:600':''}"><input type="checkbox" ${checked} ${isCur?'disabled':''} onchange="toggleSamplerPick('${x.id}',this.checked)"><span>${x.sample_code} · ${x.employees?.name||'-'}${asst?'（助理）':''} · ${x.sample_date} · ${x.item_name||'—'}${isCur?' ★本筆':''}</span></label>`;
+  }).join('')||'<div style="color:#999">無符合的打樣紀錄</div>';
+  updateSamplerSummary();
+}
+function toggleSamplerPick(id,on){ if(!cfState.samplerPicks)cfState.samplerPicks=new Set(); if(on)cfState.samplerPicks.add(id); else cfState.samplerPicks.delete(id); updateSamplerSummary(); }
+function updateSamplerSummary(){
+  const sum=document.getElementById('cf-sampler-summary'); if(!sum)return;
+  const picked=(cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id));
+  const byEmp={};
+  picked.forEach(x=>{ if(x.employees?.role_level==='assistant')return; const k=x.employee_id; if(!k)return; (byEmp[k]=byEmp[k]||{n:0,name:x.employees?.name||'-'}).n++; });
+  const total=Object.values(byEmp).reduce((s,v)=>s+v.n,0);
+  if(!total){ sum.innerHTML='<span style="color:#b3541e">目前無「非助理」打樣人 → 打樣段 30% 將歸主責</span>'; return; }
+  sum.innerHTML='打樣 30% 分配：'+Object.values(byEmp).map(v=>`${v.name} ${v.n}次＝${Math.round(v.n/total*100)}%`).join('　');
+}
 function updateConfirmPool(){
   const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
   const override=document.getElementById('cf-formula-override').value;
@@ -5043,6 +5089,16 @@ async function saveConfirm(){
   if(lv!=='minor' && splitRows.length){
     const {error:e2}=await sb.from('rd_deal_owner_splits').insert(splitRows.map(x=>({sample_customer_id:scId, employee_id:x.employee_id, pct:x.pct, role:'collaborator'})));
     if(e2){showToast('確樣已存，但協作拆分寫入失敗：'+e2.message);return;}
+  }
+  // 打樣 30% 多人分潤：依勾選的同品項打樣編號，非助理按打樣次數分
+  const _picked=(cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id));
+  const _byEmp={};
+  _picked.forEach(x=>{ if(x.employees?.role_level==='assistant')return; const k=x.employee_id; if(!k)return; _byEmp[k]=(_byEmp[k]||0)+1; });
+  const _tot=Object.values(_byEmp).reduce((s,n)=>s+n,0);
+  if(_tot){
+    const samplerRows=Object.entries(_byEmp).map(([eid,n])=>({sample_customer_id:scId, employee_id:eid, pct:Math.round(n/_tot*100), role:'sampler'}));
+    const {error:e4}=await sb.from('rd_deal_owner_splits').insert(samplerRows);
+    if(e4){showToast('確樣已存，但打樣分潤寫入失敗：'+e4.message);return;}
   }
   showToast('✅ 確樣已儲存');
   closeModal('confirmSampleModal');
