@@ -508,6 +508,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
     <div class="nav-tab manager-only" onclick="switchPage('order-import')" id="tab-order-import"><span class="tab-dot" style="background:#8a6d3b"></span>訂單匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
+    <div class="nav-tab manager-only" onclick="switchPage('products')" id="tab-products"><span class="tab-dot" style="background:#6b4f8a"></span>產品主檔</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('sales')" id="tab-sales"><span class="tab-dot" style="background:#4a7c59"></span>業務部</div>
     <div class="nav-tab rdmgr-hide" onclick="switchPage('rd')" id="tab-rd"><span class="tab-dot" style="background:#3d6a8a"></span>研發部</div>
     <div class="nav-tab" onclick="switchPage('rd-sampling')" id="tab-rd-sampling"><span class="tab-dot" style="background:#5d8aa8"></span>研發打樣</div>
@@ -954,6 +955,22 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-gold" onclick="calcPlanning()">試算</button>
             <button class="btn btn-primary manager-only" onclick="savePlanning()">存草稿</button>
           </div>
+        </div>
+      </div>
+
+      <!-- PRODUCT MASTER -->
+      <div class="page manager-only" id="page-products">
+        <div class="section-title" style="color:var(--purple)">產品主檔 · 研發／企劃歸屬</div>
+        <div class="section-desc">全產品清單。<strong>負責企劃</strong>可隨時指派/修改（算獎金時吃這格）；<strong>研發主責</strong>只讀，由確樣認定（研發成交獎金吃確樣、不吃這格）。未指派企劃的品項，算獎金時會被硬擋要求先補。</div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📋 產品清單</div></div>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <input class="form-input" id="pm-search" placeholder="搜尋 編號 / 品名" style="max-width:220px" oninput="renderProductMaster()" />
+            <label style="font-size:12px;white-space:nowrap"><input type="checkbox" id="pm-only-unassigned" onchange="renderProductMaster()"> 只看企劃未指派</label>
+            <button class="btn btn-gold btn-sm" onclick="loadProductMaster()">🔄 重新載入</button>
+          </div>
+          <div id="pm-summary" style="font-size:12px;margin-bottom:8px;color:var(--ink-faint)"></div>
+          <div id="pm-list" class="table-wrap"></div>
         </div>
       </div>
 
@@ -3649,6 +3666,7 @@ async function initPlanning(){
   await renderPlanAttribution();
 }
 function calcPlanning(){
+  if(planUnassignedGuard())return;
   const empId=document.getElementById('plan-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   const role=document.getElementById('plan-role').value;
@@ -3681,6 +3699,7 @@ function calcPlanning(){
 }
 
 async function savePlanning(){
+  if(planUnassignedGuard())return;
   const empId=document.getElementById('plan-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇企劃人員');return;}
@@ -3704,6 +3723,75 @@ async function savePlanning(){
   const scores = isMgr ? {mgr_rating:document.getElementById('plan-mgr-rating').value} : {s1:getStarScore('plan-s1'),s2:getStarScore('plan-s2'),s3:getStarScore('plan-s3'),s4:getStarScore('plan-s4'),s5:getStarScore('plan-s5')};
   const ok=await saveKpiDraft({employee_id:emp.id,dept:'企劃部',name:emp.name,role_title:role,ship_count:ships,scores,score_total:isMgr?null:kpi.totalScore,kpi_bonus:kpi.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
   if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
+}
+
+// ===== 產品主檔清單（研發只讀／企劃可改）=====
+let _pmProducts=[], _pmOwnerConfirmed={};
+async function loadProductMaster(){
+  const {data:prods}=await sb.from('products')
+    .select('product_code,product_name,formula_type,planner_employee_id,primary_owner_employee_id')
+    .order('product_code');
+  _pmProducts=prods||[];
+  // 研發主責：只從「已確樣」帶出（取分潤佔比最高者＝主責 50%），確樣才是權威
+  _pmOwnerConfirmed={};
+  const {data:scs}=await sb.from('rd_sample_customers')
+    .select('official_product_code,confirm_status,rd_deal_owner_splits(employee_id,pct,role)')
+    .eq('confirm_status','confirmed').not('official_product_code','is',null);
+  (scs||[]).forEach(sc=>{
+    const splits=sc.rd_deal_owner_splits||[];
+    if(!splits.length) return;
+    const main=splits.slice().sort((a,b)=>(b.pct||0)-(a.pct||0))[0];
+    if(main&&main.employee_id) _pmOwnerConfirmed[sc.official_product_code]=main.employee_id;
+  });
+  renderProductMaster();
+}
+function pmOwnerCell(p){
+  const cid=_pmOwnerConfirmed[p.product_code];
+  if(cid){ const e=employees.find(x=>x.id===cid); return `<span style="color:#2e7d32">${e?e.name:'?'}</span><div style="font-size:10px;color:#2e7d32">✅ 確樣認定</div>`; }
+  // 未確樣：灰字顯示主檔預設值（不算數）
+  const pid=p.primary_owner_employee_id;
+  if(!pid) return `<span style="color:var(--ink-faint)">— 未確樣 —</span>`;
+  const e=employees.find(x=>x.id===pid);
+  const leaver=e&&!e.is_active;
+  return `<span style="color:var(--ink-faint)">（未確樣·主檔預設：${e?e.name:'?'}${leaver?' 🔴離職':''}）</span>`;
+}
+function renderProductMaster(){
+  const kw=(document.getElementById('pm-search').value||'').trim().toLowerCase();
+  const onlyUn=document.getElementById('pm-only-unassigned').checked;
+  const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
+  let rows=_pmProducts.filter(p=>{
+    if(onlyUn && p.planner_employee_id) return false;
+    if(kw && !((p.product_code||'').toLowerCase().includes(kw)||(p.product_name||'').toLowerCase().includes(kw))) return false;
+    return true;
+  });
+  let assigned=0,unassigned=0;
+  const body=rows.map(p=>{
+    if(p.planner_employee_id) assigned++; else unassigned++;
+    const opts=`<option value="">— 未指派 —</option>`+planEmps.map(e=>`<option value="${e.id}" ${e.id===p.planner_employee_id?'selected':''}>${e.name}</option>`).join('');
+    const rowStyle=p.planner_employee_id?'':'background:#fff8e1';
+    return `<tr style="${rowStyle}"><td><strong>${p.product_code||''}</strong></td><td>${p.product_name||''}</td><td>${rdFormulaLabel(p.formula_type)||'—'}</td><td>${pmOwnerCell(p)}</td><td><select class="form-select" style="min-width:120px;padding:4px 6px" onchange="assignPlannerPM('${p.product_code}',this.value)">${opts}</select></td></tr>`;
+  }).join('');
+  const sum=document.getElementById('pm-summary');
+  if(sum) sum.innerHTML=`顯示 <strong>${rows.length}</strong> / 全 ${_pmProducts.length} 支｜已指派企劃 <strong style="color:#2e7d32">${assigned}</strong>｜未指派 <strong style="color:#b3541e">${unassigned}</strong>`;
+  const list=document.getElementById('pm-list');
+  if(list) list.innerHTML=`<table><thead><tr><th>正式編號</th><th>品名</th><th>劑型</th><th>研發主責（確樣認定·只讀）</th><th>負責企劃（可改）</th></tr></thead><tbody>${body||'<tr><td colspan="5" style="text-align:center;color:var(--ink-faint)">無符合的產品</td></tr>'}</tbody></table>`;
+}
+async function assignPlannerPM(code,empId){
+  await sb.from('products').update({planner_employee_id:empId||null}).eq('product_code',code);
+  const row=_pmProducts.find(p=>p.product_code===code); if(row) row.planner_employee_id=empId||null;
+  const nm=empId?(employees.find(e=>e.id===empId)||{}).name:'未指派';
+  showToast(`已指派 ${code} → ${nm}（已記憶，算獎金時自動帶）`);
+  renderProductMaster();
+}
+// 企劃獎金硬擋：本季已結算品項若有「負責企劃未指派」→ 不准試算/存檔
+function planUnassignedGuard(){
+  const bad=(_planSettled||[]).filter(o=>resolvedPlanner(o).status==='unassigned');
+  if(bad.length){
+    const lines=bad.slice(0,15).map(o=>`• ${o.product_code||''} · ${o.item_name_raw||''}（${o.bonus_settled_month||''}月）`).join('\n');
+    alert(`⛔ 有 ${bad.length} 筆已結算品項「負責企劃未指派」，不能試算/存檔。\n\n請先到「產品主檔」頁或本頁上方歸屬卡指派企劃：\n\n${lines}${bad.length>15?'\n…等 '+(bad.length-15)+' 筆':''}`);
+    return true;
+  }
+  return false;
 }
 
 // PURCHASE
@@ -4043,6 +4131,7 @@ function switchPage(page){
   if(page==='rd-sampling')initRdSamplingPage();
   if(page==='sales')populateSalesMonthSel();
   if(page==='planning')initPlanning();
+  if(page==='products')loadProductMaster();
   if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
   if(page==='reconcile')loadReconcile();
