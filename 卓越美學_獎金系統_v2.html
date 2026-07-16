@@ -730,7 +730,6 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="inner-tab" onclick="switchInner(this,'rd-collab-sec')">多人協作分配</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-deal-sec');loadDealBonuses()">🎯 成交獎金（三段）</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-report-sec');loadDealReports()">📊 成交報表</div>
-          <div class="inner-tab" onclick="switchInner(this,'rd-progress-sec');loadConfirmProgress()">✅ 確樣進度</div>
         </div>
         <div id="rd-calc-sec">
           <div class="card" style="border-color:var(--gold)">
@@ -834,32 +833,33 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div id="rpt-personal"></div>
           </div>
         </div>
-        <div id="rd-progress-sec" style="display:none">
-          <div class="card" style="border-color:var(--blue)">
-            <div class="card-header">
-              <div class="card-title">✅ 確樣進度總表（跨月）</div>
-              <div>
-                <select id="cp-month" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
-                <select id="cp-emp" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
-                <select id="cp-status" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px">
-                  <option value="none">未確樣</option>
-                  <option value="confirmed">已確樣</option>
-                  <option value="">全部</option>
-                </select>
-                <button class="btn btn-outline btn-sm" onclick="loadConfirmProgress()">重新整理</button>
-              </div>
-            </div>
-            <div class="info-box" style="font-size:12px">每筆打樣有沒有確樣、卡在哪。確樣＝掛上正式產品編號才算成交，沒確樣就永遠不會有獎金。<strong>已確樣但缺配方主責</strong>的，出貨時算不出「主責 50%」那段，要先補。三段歸屬試算在「🎯 成交獎金（三段）」頁。</div>
-            <div id="cp-stats"></div>
-            <div id="cp-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div></div>
-          </div>
-        </div>
       </div>
 
       <!-- RD SAMPLING (研發打樣 - 對齊 PDF v6 雙軌制) -->
       <div class="page" id="page-rd-sampling">
         <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
         <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
+
+        <!-- Card -1: 確樣進度總表（跨月）— manager + rd_manager 都看得到 -->
+        <div class="card rdmgr-show" style="border-color:var(--blue)">
+          <div class="card-header">
+            <div class="card-title">✅ 確樣進度總表（跨月）</div>
+            <div>
+              <select id="cp-month" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
+              <select id="cp-emp" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
+              <select id="cp-status" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px">
+                <option value="none">未確樣</option>
+                <option value="confirmed">已確樣</option>
+                <option value="missing">⚠️ 已確樣但沒填完</option>
+                <option value="">全部</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="loadConfirmProgress()">重新整理</button>
+            </div>
+          </div>
+          <div class="info-box" style="font-size:12px">每筆打樣有沒有確樣、卡在哪。<strong>確樣＝掛上正式產品編號才算成交，沒確樣就永遠不會有獎金。</strong>已確樣但沒填研發主責的，出貨時算不出「主責 50%」那段 → 用下面的「補填主責」直接補。</div>
+          <div id="cp-stats"></div>
+          <div id="cp-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div></div>
+        </div>
 
         <!-- Card 0: 本月打樣統計 (含跨人合計) -->
         <div class="card">
@@ -3023,6 +3023,7 @@ function initRdSamplingPage(){
   const empNew=document.getElementById('rds-emp');
   if(empNew)empNew.innerHTML='<option value="">請選擇</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
   loadRdCustomers();
+  loadConfirmProgress();
   loadRdSamples();
   loadRdSamplingStats();
   loadPendingReviews();
@@ -4598,7 +4599,12 @@ function renderConfirmProgress(){
     box('已確樣·劑型不明',noBase.length,noBase.length?'#c99a2e':'inherit')+
     `</div>`+
     (noOwner.length?`<div class="info-box" style="font-size:12px;background:#fbf0ea;border-color:#b3541e;margin-bottom:10px">⚠️ 有 ${noOwner.length} 筆已確樣但<strong>產品主檔沒設研發主責</strong>，出貨時「主責 50%」那段算不出人，會變成待你手動指定。</div>`:'');
-  const rows=scope.filter(r=>fs===''||( fs==='confirmed'? r.confirm_status==='confirmed' : r.confirm_status!=='confirmed'));
+  const rows=scope.filter(r=>{
+    if(fs==='') return true;
+    if(fs==='confirmed') return r.confirm_status==='confirmed';
+    if(fs==='missing') return r.confirm_status==='confirmed' && cpOwnerOf(r).missing;
+    return r.confirm_status!=='confirmed';
+  });
   if(!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">此條件下沒有資料</div></div>';return;}
   const canConfirm=currentRole==='manager'||currentRole==='rd_manager';
   el.innerHTML=`<table><thead><tr><th>打樣日</th><th>打樣編號</th><th>品項</th><th>客戶</th><th>打樣人</th><th>狀態</th><th>正式編號 · 品名</th><th>確樣日</th><th>確樣人</th><th>研發主責</th><th>動作</th></tr></thead><tbody>${rows.map(r=>{
@@ -4607,16 +4613,38 @@ function renderConfirmProgress(){
     const isDone=r.confirm_status==='confirmed';
     const prod=products.find(p=>p.product_code===r.official_product_code);
     const own=isDone?cpOwnerOf(r):null;
+    // 已確樣卻沒填主責 → 直接在這格補（課長對已確樣的存檔鈕是鎖的，走不了確樣視窗）
+    const canFix=isDone&&own.missing&&canConfirm&&!r.change_lock&&r.official_product_code;
     const ownCell=!isDone?'<span style="color:var(--ink-faint)">—</span>'
+      :canFix?`<select id="fo-${r.id}" class="form-select" style="font-size:11px;padding:2px;width:auto;border-color:#b3541e"><option value="">⚠️ 未填，請選</option>${employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}</select>`
       :own.missing?`<span style="color:#b3541e">⚠️ ${own.note}</span>`:own.name;
     const stat=isDone
       ?(r.recognized_at?'<span style="color:#2e7d52">✅ 已確樣·已認列</span>':'<span style="color:#2e7d52">✅ 已確樣</span>')
       +(r.change_lock?'<div style="font-size:10px;color:#c99a2e">🔒 改綁審核中</div>':'')
       :'<span style="color:#b3541e">○ 未確樣</span>';
     const codeCell=isDone?`<strong>${r.official_product_code||'—'}</strong><div style="font-size:11px;color:var(--ink-faint)">${prod?.product_name||''}</div>`:'—';
-    const act=(!isDone&&canConfirm)?`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${r.sample_id}')">🎯 確樣</button>`:'';
+    const act=canFix?`<button class="btn btn-gold btn-sm" onclick="fillOwner('${r.id}','${r.official_product_code}')">補填主責</button>`
+      :(!isDone&&canConfirm)?`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${r.sample_id}')">🎯 確樣</button>`:'';
     return `<tr><td>${s.sample_date||''}</td><td>${s.sample_code||''}</td><td>${s.item_name||''}</td><td>${r.rd_customers?.short_name||'—'}</td><td>${sampler}</td><td>${stat}</td><td>${codeCell}</td><td>${r.confirmed_at||'—'}</td><td>${employees.find(e=>e.id===r.confirmed_by)?.name||'—'}</td><td>${ownCell}</td><td>${act}</td></tr>`;
   }).join('')}</tbody></table>`;
+}
+
+// 補填主責：只寫這一格，確樣其他內容一律不動（課長對已確樣不能走確樣視窗存檔）
+async function fillOwner(scId, code){
+  const eid=document.getElementById('fo-'+scId)?.value;
+  if(!eid){showToast('請先在「研發主責」那格選人');return;}
+  const nm=employees.find(e=>e.id===eid)?.name||'';
+  const prod=products.find(p=>p.product_code===code);
+  const ok=await confirmCard('補填研發主責',
+    `<strong>${code}</strong> · ${prod?.product_name||''}<br><br>`+
+    `研發主責：<strong style="color:#b3541e;font-size:15px">${nm}</strong><br>`+
+    `<span style="color:var(--ink-faint);font-size:12px">他將領這支產品的主責 50%。只補這一格，確樣的其他內容（編號／確樣人／打樣分潤）完全不動。</span>`,
+    '確認補填');
+  if(!ok)return;
+  const {error}=await sb.from('rd_sample_customers').update({owner_override_employee_id:eid}).eq('id',scId);
+  if(error){showToast('補填失敗：'+error.message);return;}
+  showToast(`✅ ${code} 主責已補填：${nm}`);
+  loadConfirmProgress();
 }
 
 async function loadDealBonuses(){
