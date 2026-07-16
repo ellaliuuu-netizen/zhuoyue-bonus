@@ -730,6 +730,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="inner-tab" onclick="switchInner(this,'rd-collab-sec')">多人協作分配</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-deal-sec');loadDealBonuses()">🎯 成交獎金（三段）</div>
           <div class="inner-tab" onclick="switchInner(this,'rd-report-sec');loadDealReports()">📊 成交報表</div>
+          <div class="inner-tab" onclick="switchInner(this,'rd-progress-sec');loadConfirmProgress()">✅ 確樣進度</div>
         </div>
         <div id="rd-calc-sec">
           <div class="card" style="border-color:var(--gold)">
@@ -831,6 +832,26 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <select id="rpt-person" onchange="renderPersonalDetail()" class="form-select" style="width:auto;display:inline-block"></select>
             </div>
             <div id="rpt-personal"></div>
+          </div>
+        </div>
+        <div id="rd-progress-sec" style="display:none">
+          <div class="card" style="border-color:var(--blue)">
+            <div class="card-header">
+              <div class="card-title">✅ 確樣進度總表（跨月）</div>
+              <div>
+                <select id="cp-month" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"></select>
+                <select id="cp-emp" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px"><option value="">全部研發</option></select>
+                <select id="cp-status" onchange="renderConfirmProgress()" class="form-select" style="width:auto;display:inline-block;margin-right:8px">
+                  <option value="none">未確樣</option>
+                  <option value="confirmed">已確樣</option>
+                  <option value="">全部</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="loadConfirmProgress()">重新整理</button>
+              </div>
+            </div>
+            <div class="info-box" style="font-size:12px">每筆打樣有沒有確樣、卡在哪。確樣＝掛上正式產品編號才算成交，沒確樣就永遠不會有獎金。<strong>已確樣但缺配方主責</strong>的，出貨時算不出「主責 50%」那段，要先補。三段歸屬試算在「🎯 成交獎金（三段）」頁。</div>
+            <div id="cp-stats"></div>
+            <div id="cp-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div></div>
           </div>
         </div>
       </div>
@@ -4506,6 +4527,84 @@ function dealFlags(rows, sc, cum){
   const over=[...new Set(recips.filter(id=>cum[id]>20000).map(id=>employees.find(e=>e.id===id)?.name))].filter(Boolean);
   if(over.length) flags.push({lv:'low',t:`本季累計超 2 萬：${over.join('、')}`});
   return flags;
+}
+
+// ===== 確樣進度總表（跨月）=====
+let _cpRows=[];
+async function loadConfirmProgress(){
+  const el=document.getElementById('cp-content'); if(!el)return;
+  el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div>';
+  const {data,error}=await sb.from('rd_sample_customers')
+    .select('id, sample_id, confirm_status, official_product_code, confirmed_at, confirmed_by, formula_type_override, recognized_at, change_lock, rd_customers(short_name), rd_samples(sample_code, sample_date, item_name, employee_id, formula_type)');
+  if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  _cpRows=(data||[]).filter(r=>r.rd_samples)
+    .sort((a,b)=>(b.rd_samples.sample_date||'').localeCompare(a.rd_samples.sample_date||''));
+  const months=[...new Set(_cpRows.map(r=>(r.rd_samples.sample_date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const mSel=document.getElementById('cp-month');
+  if(mSel && mSel.options.length<=months.length){
+    const cur=mSel.value;
+    mSel.innerHTML='<option value="">全部月份</option>'+months.map(m=>`<option value="${m}">${m}</option>`).join('');
+    mSel.value=cur;
+  }
+  const eSel=document.getElementById('cp-emp');
+  if(eSel && eSel.options.length<=1){
+    const cur=eSel.value;
+    eSel.innerHTML='<option value="">全部研發</option>'+employees.filter(e=>e.dept==='研發部').map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+    eSel.value=cur;
+  }
+  renderConfirmProgress();
+}
+function cpOwnerOf(code){
+  const p=products.find(x=>x.product_code===code);
+  if(!p) return {name:'', missing:true, note:'主檔查無此編號'};
+  const e=employees.find(x=>x.id===p.primary_owner_employee_id);
+  if(!e) return {name:'', missing:true, note:'產品主檔未設研發主責'};
+  return {name:e.name+(e.is_active===false?' 🔴離職':''), missing:false};
+}
+function renderConfirmProgress(){
+  const el=document.getElementById('cp-content'); if(!el)return;
+  const fm=document.getElementById('cp-month')?.value||'';
+  const fe=document.getElementById('cp-emp')?.value||'';
+  const fs=document.getElementById('cp-status')?.value??'none';
+  // 統計吃「月份＋研發」兩個篩選，不吃狀態（狀態是要對比的東西）
+  const scope=_cpRows.filter(r=>{
+    if(fm && (r.rd_samples.sample_date||'').slice(0,7)!==fm) return false;
+    if(fe && r.rd_samples.employee_id!==fe) return false;
+    return true;
+  });
+  const done=scope.filter(r=>r.confirm_status==='confirmed');
+  const noOwner=done.filter(r=>cpOwnerOf(r.official_product_code).missing);
+  const noBase=done.filter(r=>!FORMULA_BASE[r.formula_type_override||products.find(x=>x.product_code===r.official_product_code)?.formula_type||r.rd_samples.formula_type]);
+  const pct=scope.length?Math.round(done.length/scope.length*100):0;
+  const box=(t,v,c)=>`<div style="flex:1;min-width:110px;border:1px solid var(--line,#e5e0d5);border-radius:6px;padding:8px 10px"><div style="font-size:11px;color:var(--ink-faint)">${t}</div><div style="font-size:20px;font-weight:600;color:${c||'inherit'}">${v}</div></div>`;
+  document.getElementById('cp-stats').innerHTML=
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">`+
+    box('打樣總數',scope.length)+
+    box('已確樣',`${done.length} <span style="font-size:12px;font-weight:400;color:var(--ink-faint)">${pct}%</span>`,'#2e7d52')+
+    box('未確樣',scope.length-done.length,'#b3541e')+
+    box('已確樣·缺主責',noOwner.length,noOwner.length?'#b3541e':'inherit')+
+    box('已確樣·劑型不明',noBase.length,noBase.length?'#c99a2e':'inherit')+
+    `</div>`+
+    (noOwner.length?`<div class="info-box" style="font-size:12px;background:#fbf0ea;border-color:#b3541e;margin-bottom:10px">⚠️ 有 ${noOwner.length} 筆已確樣但<strong>產品主檔沒設研發主責</strong>，出貨時「主責 50%」那段算不出人，會變成待你手動指定。</div>`:'');
+  const rows=scope.filter(r=>fs===''||( fs==='confirmed'? r.confirm_status==='confirmed' : r.confirm_status!=='confirmed'));
+  if(!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">此條件下沒有資料</div></div>';return;}
+  const canConfirm=currentRole==='manager'||currentRole==='rd_manager';
+  el.innerHTML=`<table><thead><tr><th>打樣日</th><th>打樣編號</th><th>品項</th><th>客戶</th><th>打樣人</th><th>狀態</th><th>正式編號 · 品名</th><th>確樣日</th><th>確樣人</th><th>研發主責</th><th>動作</th></tr></thead><tbody>${rows.map(r=>{
+    const s=r.rd_samples;
+    const sampler=employees.find(e=>e.id===s.employee_id)?.name||'—';
+    const isDone=r.confirm_status==='confirmed';
+    const prod=products.find(p=>p.product_code===r.official_product_code);
+    const own=isDone?cpOwnerOf(r.official_product_code):null;
+    const ownCell=!isDone?'<span style="color:var(--ink-faint)">—</span>'
+      :own.missing?`<span style="color:#b3541e">⚠️ ${own.note}</span>`:own.name;
+    const stat=isDone
+      ?(r.recognized_at?'<span style="color:#2e7d52">✅ 已確樣·已認列</span>':'<span style="color:#2e7d52">✅ 已確樣</span>')
+      +(r.change_lock?'<div style="font-size:10px;color:#c99a2e">🔒 改綁審核中</div>':'')
+      :'<span style="color:#b3541e">○ 未確樣</span>';
+    const codeCell=isDone?`<strong>${r.official_product_code||'—'}</strong><div style="font-size:11px;color:var(--ink-faint)">${prod?.product_name||''}</div>`:'—';
+    const act=(!isDone&&canConfirm)?`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${r.sample_id}')">🎯 確樣</button>`:'';
+    return `<tr><td>${s.sample_date||''}</td><td>${s.sample_code||''}</td><td>${s.item_name||''}</td><td>${r.rd_customers?.short_name||'—'}</td><td>${sampler}</td><td>${stat}</td><td>${codeCell}</td><td>${r.confirmed_at||'—'}</td><td>${employees.find(e=>e.id===r.confirmed_by)?.name||'—'}</td><td>${ownCell}</td><td>${act}</td></tr>`;
+  }).join('')}</tbody></table>`;
 }
 
 async function loadDealBonuses(){
