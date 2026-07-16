@@ -1760,6 +1760,9 @@ async function initApp(user) {
   initInnerTabs();
 }
 function applyRoleRestrictions() {
+  // 先清掉上一個角色留下的隱藏樣式：登出不會重載頁面，同一頁換帳號登入會殘留（經理登入卻只看到課長的 tab）
+  document.querySelectorAll('.manager-only, .rdmgr-hide, .rdmgr-show').forEach(el => el.style.display = '');
+  document.querySelectorAll('.read-only-notice').forEach(el => el.style.display = 'none');
   if (currentRole === 'manager') return;
   // finance 跟 rd_manager 都看不到 manager-only（設定 tab 等）
   document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'none');
