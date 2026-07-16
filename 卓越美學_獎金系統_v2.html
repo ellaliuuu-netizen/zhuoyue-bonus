@@ -1573,6 +1573,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="cf-owner-info" style="font-size:12px;margin-top:6px"></div>
       </div>
 
+      <div class="form-group" id="cf-owner-set-wrap" style="display:none;border:1px solid #b3541e;background:#fbf0ea;border-radius:6px;padding:10px">
+        <label class="form-label">研發主責 *（配方撰寫者，領主責 50%）</label>
+        <select class="form-select" id="cf-owner-set"><option value="">請指定研發主責</option></select>
+        <div style="font-size:11px;color:#b3541e;margin-top:5px;line-height:1.6">這支正式編號在產品主檔還沒設主責（新品都會這樣）。<strong>指定誰＝誰領主責 50%</strong>，只影響這筆確樣，不會動到產品主檔或其他確樣。填錯了 ELLA 覆核時看得到。</div>
+      </div>
+
       <div class="form-group" id="cf-sampler-group">
         <label class="form-label">同品項打樣人（分打樣 30%）— 勾選屬於這支產品的所有打樣編號</label>
         <div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;line-height:1.6">勾選這支產品的所有打樣編號（含主責親自打的）。助理打的可勾、系統自動不計分潤並歸主責；確樣人＝確樣那支的打樣者。</div>
@@ -4291,7 +4297,8 @@ function computeDealSegments(sc){
     primaryOwnerId=sc.owner_override_employee_id;            // 接手重建＝新主責，不孤兒
   }else{
     const p=products.find(x=>x.product_code===sc.official_product_code);
-    primaryOwnerId=p?.primary_owner_employee_id||null;
+    // 主檔有設就以主檔為準；新品主檔沒設 → 用確樣時課長指定的主責
+    primaryOwnerId=p?.primary_owner_employee_id||sc.owner_override_employee_id||null;
     const po=emp(primaryOwnerId);
     if(po&&po.is_active===false) orphan=true;
   }
@@ -4535,7 +4542,7 @@ async function loadConfirmProgress(){
   const el=document.getElementById('cp-content'); if(!el)return;
   el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div>';
   const {data,error}=await sb.from('rd_sample_customers')
-    .select('id, sample_id, confirm_status, official_product_code, confirmed_at, confirmed_by, formula_type_override, recognized_at, change_lock, rd_customers(short_name), rd_samples(sample_code, sample_date, item_name, employee_id, formula_type)');
+    .select('id, sample_id, confirm_status, official_product_code, confirmed_at, confirmed_by, formula_type_override, recognized_at, change_lock, owner_override_employee_id, rd_customers(short_name), rd_samples(sample_code, sample_date, item_name, employee_id, formula_type)');
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   _cpRows=(data||[]).filter(r=>r.rd_samples)
     .sort((a,b)=>(b.rd_samples.sample_date||'').localeCompare(a.rd_samples.sample_date||''));
@@ -4554,12 +4561,14 @@ async function loadConfirmProgress(){
   }
   renderConfirmProgress();
 }
-function cpOwnerOf(code){
+function cpOwnerOf(row){
+  const code=row.official_product_code;
   const p=products.find(x=>x.product_code===code);
   if(!p) return {name:'', missing:true, note:'主檔查無此編號'};
-  const e=employees.find(x=>x.id===p.primary_owner_employee_id);
-  if(!e) return {name:'', missing:true, note:'產品主檔未設研發主責'};
-  return {name:e.name+(e.is_active===false?' 🔴離職':''), missing:false};
+  const fromMaster=!!p.primary_owner_employee_id;
+  const e=employees.find(x=>x.id===(p.primary_owner_employee_id||row.owner_override_employee_id));
+  if(!e) return {name:'', missing:true, note:'未設研發主責'};
+  return {name:e.name+(e.is_active===false?' 🔴離職':'')+(fromMaster?'':'<div style="font-size:10px;color:var(--ink-faint)">確樣時指定</div>'), missing:false};
 }
 function renderConfirmProgress(){
   const el=document.getElementById('cp-content'); if(!el)return;
@@ -4573,7 +4582,7 @@ function renderConfirmProgress(){
     return true;
   });
   const done=scope.filter(r=>r.confirm_status==='confirmed');
-  const noOwner=done.filter(r=>cpOwnerOf(r.official_product_code).missing);
+  const noOwner=done.filter(r=>cpOwnerOf(r).missing);
   const noBase=done.filter(r=>!FORMULA_BASE[r.formula_type_override||products.find(x=>x.product_code===r.official_product_code)?.formula_type||r.rd_samples.formula_type]);
   const pct=scope.length?Math.round(done.length/scope.length*100):0;
   const box=(t,v,c)=>`<div style="flex:1;min-width:110px;border:1px solid var(--line,#e5e0d5);border-radius:6px;padding:8px 10px"><div style="font-size:11px;color:var(--ink-faint)">${t}</div><div style="font-size:20px;font-weight:600;color:${c||'inherit'}">${v}</div></div>`;
@@ -4594,7 +4603,7 @@ function renderConfirmProgress(){
     const sampler=employees.find(e=>e.id===s.employee_id)?.name||'—';
     const isDone=r.confirm_status==='confirmed';
     const prod=products.find(p=>p.product_code===r.official_product_code);
-    const own=isDone?cpOwnerOf(r.official_product_code):null;
+    const own=isDone?cpOwnerOf(r):null;
     const ownCell=!isDone?'<span style="color:var(--ink-faint)">—</span>'
       :own.missing?`<span style="color:#b3541e">⚠️ ${own.note}</span>`:own.name;
     const stat=isDone
@@ -5172,6 +5181,10 @@ function onConfirmCustomerChange(){
   onConfirmProductChange();
   onConfirmChangeLevel();
   onConfirmArchChange();
+  // 重開已確樣：主檔無主責的編號，把當初指定的主責帶回來
+  if(document.getElementById('cf-owner-set-wrap').style.display!=='none'){
+    document.getElementById('cf-owner-set').value=rc.owner_override_employee_id||'';
+  }
 }
 
 function onConfirmProductChange(){
@@ -5186,9 +5199,27 @@ function onConfirmProductChange(){
   } else if(owner){
     info.innerHTML=`<span style="color:var(--ink-faint)">原主責：${owner.name}</span>`;
   } else {
-    info.innerHTML=`<span style="color:#b3541e">⚠️ 此正式編號未設原主責，建議先到產品主檔補</span>`;
+    info.innerHTML=`<span style="color:#b3541e">⚠️ 此正式編號主檔未設原主責 → 請在下方指定</span>`;
   }
+  syncOwnerSetField();
   updateConfirmPool();
+}
+
+// 主檔沒設主責的編號（新品都這樣）→ 確樣時由課長指定，寫在 rd_sample_customers（課長有權限；products 只有經理能寫）
+function syncOwnerSetField(){
+  const wrap=document.getElementById('cf-owner-set-wrap'); if(!wrap)return;
+  const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+  const lv=document.getElementById('cf-change-level')?.value;
+  // 大幅改動已有自己的換主責欄，不重複問
+  const need=!!p && !p.primary_owner_employee_id && lv!=='major';
+  wrap.style.display=need?'block':'none';
+  if(!need)return;
+  const sel=document.getElementById('cf-owner-set');
+  if(sel.options.length<=1){
+    const cur=sel.value;
+    sel.innerHTML='<option value="">請指定研發主責</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
+    sel.value=cur;
+  }
 }
 
 // 打樣 30% 多人分潤：候選勾選清單
@@ -5234,6 +5265,7 @@ function onConfirmChangeLevel(){
   const lv=document.getElementById('cf-change-level').value;
   document.getElementById('cf-split-section').style.display=lv==='minor'?'none':'block';
   document.getElementById('cf-owner-override-wrap').style.display=lv==='major'?'block':'none';
+  syncOwnerSetField();
 }
 
 function onConfirmArchChange(){
@@ -5271,6 +5303,9 @@ async function saveConfirm(){
     employee_id:r.querySelector('.cf-split-emp').value,
     pct:parseFloat(r.querySelector('.cf-split-pct').value)
   })).filter(x=>x.employee_id && !isNaN(x.pct));
+  const needOwnerSet=document.getElementById('cf-owner-set-wrap').style.display!=='none';
+  const ownerSet=needOwnerSet?document.getElementById('cf-owner-set').value:'';
+  if(needOwnerSet && !ownerSet){showToast('請指定研發主責（此正式編號主檔未設，不指定就算不出主責 50%）');return;}
   const samplerNote=document.getElementById('cf-sampler-note').value.trim();
   const _nonAsst=new Set((cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id)&&x.employee_id&&x.employees?.role_level!=='assistant').map(x=>x.employee_id));
   if(_nonAsst.size>=2 && !samplerNote){showToast('多人打樣：請填「打樣群組備註」，說明為何這幾筆算同一支（留底供覆核）');return;}
@@ -5279,7 +5314,7 @@ async function saveConfirm(){
     formula_type_override:document.getElementById('cf-formula-override').value||null,
     is_oem:document.getElementById('cf-oem').checked,
     change_level:lv, changed_architectures:arch.length?arch:null,
-    owner_override_employee_id:lv==='major'?(document.getElementById('cf-owner-override').value||null):null,
+    owner_override_employee_id:lv==='major'?(document.getElementById('cf-owner-override').value||null):(ownerSet||null),
     split_reason:lv==='minor'?null:reason
   };
   // B：送出前再核對一次（凸顯打樣編號＋打樣日，防綁錯打樣）
@@ -5293,6 +5328,7 @@ async function saveConfirm(){
     `<span style="color:#b3541e;font-weight:600;font-size:15px">打樣日 ${s.sample_date}</span><br>`+
     `品名：${s.item_name||'—'}</div>`+
     `正式編號：<strong>${code}</strong> · ${prod?.product_name||''}<br>`+
+    (ownerSet?`研發主責：<strong style="color:#b3541e">${employees.find(e=>e.id===ownerSet)?.name||''}</strong>（主檔未設，本次指定 → 領主責 50%）<br>`:'')+
     `確樣人：<strong>${confName}</strong>　變動：${lvTxt}<br>${poolTxt}`,
     '確認無誤、儲存');
   if(!okCard) return;
