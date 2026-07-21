@@ -1581,8 +1581,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
       <div class="form-group" id="cf-sampler-group">
         <label class="form-label">同品項打樣人（分打樣 30%）— 勾選屬於這支產品的所有打樣編號</label>
-        <div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;line-height:1.6">勾選這支產品的所有打樣編號（含主責親自打的）。助理打的可勾、系統自動不計分潤並歸主責；確樣人＝確樣那支的打樣者。</div>
-        <input class="form-input" id="cf-sampler-filter" placeholder="篩選 品名 / 打樣人 / 編號…" oninput="renderSamplerCandidates()" style="margin-bottom:6px" />
+        <div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;line-height:1.6">勾選這支產品的所有打樣編號（含主責親自打的）。助理打的可勾、系統自動不計分潤並歸主責；確樣人＝確樣那支的打樣者。<br>清單為「全部打樣、不限季度」，★本筆已置頂。<b>請用「打樣當時的品名／打樣人／打樣編號」搜尋，不是正式產品品名或 JP 編號</b>（例：正式品名叫「胺基酸晶透洗卸慕絲」，但打樣當時登記的是「洗卸慕斯」，搜「慕斯」或「洗卸」才找得到）。</div>
+        <input class="form-input" id="cf-sampler-filter" placeholder="搜打樣品名 / 打樣人 / 打樣編號（非正式品名/JP）…" oninput="renderSamplerCandidates()" style="margin-bottom:6px" />
         <div id="cf-sampler-list" style="max-height:170px;overflow:auto;border:1px solid var(--ink-faint);border-radius:6px;padding:6px;font-size:12px"></div>
         <div id="cf-sampler-summary" style="font-size:12px;margin-top:6px;color:var(--ink-light)"></div>
         <input class="form-input" id="cf-sampler-note" placeholder="打樣群組備註：為何這幾筆算同一支（多人打樣時必填，供 ELLA 覆核留底）" style="margin-top:8px" />
@@ -5149,10 +5149,8 @@ async function openConfirmModal(sampleId){
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
   // 載入本季所有打樣，作為「同品項打樣人」勾選候選
-  const _qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[4,5,6];
-  // 季末上界用「下一季首月 1 號」的排他比較，避免 06-31/09-31 這種不存在的日期讓查詢整條報錯
-  const _qLast=_qm[_qm.length-1], _qEndY=_qLast===12?appSettings.year+1:appSettings.year, _qEndM=_qLast===12?1:_qLast+1;
-  const {data:_cand,error:_ce}=await sb.from('rd_samples').select('id, sample_code, sample_date, item_name, employee_id, employees!rd_samples_employee_id_fkey(name, role_level)').gte('sample_date',`${appSettings.year}-${String(_qm[0]).padStart(2,'0')}-01`).lt('sample_date',`${_qEndY}-${String(_qEndM).padStart(2,'0')}-01`).order('sample_date');
+  // 打樣候選撈「全部打樣、不限季度」：打樣常在上一季、確樣/成交拖到這季才做，若只撈當季會漏勾跨季打樣→漏發打樣 30%（新近優先，本筆於 render 置頂當錨點）
+  const {data:_cand,error:_ce}=await sb.from('rd_samples').select('id, sample_code, sample_date, item_name, employee_id, employees!rd_samples_employee_id_fkey(name, role_level)').order('sample_date',{ascending:false});
   if(_ce)showToast('載入打樣候選失敗：'+_ce.message);
   cfState.allSamples=_cand||[];
   if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
@@ -5263,7 +5261,7 @@ function renderSamplerCandidates(){
   if(!cfState.samplerPicks)cfState.samplerPicks=new Set([cfState.sampleId]);
   const f=(document.getElementById('cf-sampler-filter')?.value||'').trim().toLowerCase();
   const cur=cfState.sampleId;
-  const rows=(cfState.allSamples||[]).filter(x=>!f||(x.item_name||'').toLowerCase().includes(f)||(x.employees?.name||'').toLowerCase().includes(f)||(x.sample_code||'').toLowerCase().includes(f));
+  const rows=(cfState.allSamples||[]).filter(x=>!f||(x.item_name||'').toLowerCase().includes(f)||(x.employees?.name||'').toLowerCase().includes(f)||(x.sample_code||'').toLowerCase().includes(f)).sort((a,b)=>(a.id===cur?-1:b.id===cur?1:0));
   list.innerHTML=rows.map(x=>{
     const checked=cfState.samplerPicks.has(x.id)?'checked':'';
     const isCur=x.id===cur, asst=x.employees?.role_level==='assistant';
