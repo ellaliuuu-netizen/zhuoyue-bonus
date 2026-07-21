@@ -4346,10 +4346,11 @@ async function generateRdConfirmSheets(){
   const yr=appSettings.year;
   const qMonths=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
   const pad=m=>String(m).padStart(2,'0');
+  const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
   // 1) 合格打樣件數（approved/auto_approved）本季各月各人
   const {data:samples,error:e1}=await sb.from('rd_samples')
     .select('employee_id, sample_date, approval_status')
-    .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lte('sample_date',`${yr}-${pad(qMonths[qMonths.length-1])}-31`)
+    .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lt('sample_date',`${endY}-${pad(endM)}-01`)
     .in('approval_status',['approved','auto_approved']);
   if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
   const cnt={};
@@ -5149,7 +5150,10 @@ async function openConfirmModal(sampleId){
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
   // 載入本季所有打樣，作為「同品項打樣人」勾選候選
   const _qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[4,5,6];
-  const {data:_cand}=await sb.from('rd_samples').select('id, sample_code, sample_date, item_name, employee_id, employees!rd_samples_employee_id_fkey(name, role_level)').gte('sample_date',`${appSettings.year}-${String(_qm[0]).padStart(2,'0')}-01`).lte('sample_date',`${appSettings.year}-${String(_qm[_qm.length-1]).padStart(2,'0')}-31`).order('sample_date');
+  // 季末上界用「下一季首月 1 號」的排他比較，避免 06-31/09-31 這種不存在的日期讓查詢整條報錯
+  const _qLast=_qm[_qm.length-1], _qEndY=_qLast===12?appSettings.year+1:appSettings.year, _qEndM=_qLast===12?1:_qLast+1;
+  const {data:_cand,error:_ce}=await sb.from('rd_samples').select('id, sample_code, sample_date, item_name, employee_id, employees!rd_samples_employee_id_fkey(name, role_level)').gte('sample_date',`${appSettings.year}-${String(_qm[0]).padStart(2,'0')}-01`).lt('sample_date',`${_qEndY}-${String(_qEndM).padStart(2,'0')}-01`).order('sample_date');
+  if(_ce)showToast('載入打樣候選失敗：'+_ce.message);
   cfState.allSamples=_cand||[];
   if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
   document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜<span style="color:#b3541e;font-weight:600">打樣日 ${s.sample_date}</span>｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
