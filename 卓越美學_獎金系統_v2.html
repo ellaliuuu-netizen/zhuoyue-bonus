@@ -1131,6 +1131,13 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div class="form-group"><label class="form-label">採購兼任生管補貼（元/季）</label><input class="form-input" type="number" id="set-pur-supp" value="2000" /></div>
             </div>
             <button class="btn btn-primary" onclick="saveGeneralSettings()">儲存設定</button>
+            <div class="form-group" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+              <label class="form-label">🛠️ 研發打樣補登模式（放寬 7 天限制）</label>
+              <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">開啟後，研發課長可新增「打樣日超過 7 天」的舊打樣編號（回填系統上線前的打樣，例如卸妝膏）。這是<strong>暫時放寬防造假限制</strong>，補登完請關閉。⚠️ 開關後，課長需<strong>重整瀏覽器</strong>才生效。</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;user-select:none">
+                <input type="checkbox" id="set-backfill" onchange="saveBackfillMode(this.checked)"> 允許補登舊打樣（目前：<strong id="set-backfill-state">關閉</strong>）
+              </label>
+            </div>
           </div>
         </div>
         <div id="set-employees-sec" style="display:none">
@@ -1560,6 +1567,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div style="font-size:13px;color:#8a6d1e;margin-bottom:8px">⚠ 此客戶已確樣為 <strong id="cf-rebind-code"></strong>。<span id="cf-rebind-mode-txt"></span>，要修正請用：</div>
         <button type="button" class="btn btn-outline btn-sm" onclick="openRebind('rebind')">🔁 <span class="cf-rebind-verb"></span>改綁到別筆打樣</button>
         <button type="button" class="btn btn-outline btn-sm" onclick="openRebind('cancel')">↩ <span class="cf-rebind-verb"></span>取消此確樣</button>
+        <div id="cf-splitsonly-hint" style="display:none;font-size:12px;color:#5d6d3a;margin-top:8px;border-top:1px dashed #d8c78a;padding-top:8px">✏️ 你仍可直接更新下方的<strong>「同品項打樣人（打樣 30% 分潤）」與備註</strong>，按底部<strong>「更新打樣分潤」</strong>即可存（不需申請）。其餘欄位（正式編號／確樣人／劑型）已鎖定，要改請用上面兩個申請鈕。</div>
       </div>
 
       <div class="form-group" id="cf-customer-wrap">
@@ -1709,7 +1717,7 @@ let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
 // 2026-05-18 ~ 2026-05-22 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣
 // 補完於 5/22；DB constraint 已用 NOT VALID 加回（既有 42 筆豁免、未來新 row 受限）
-const RDS_BACKFILL_RELAXED = false;
+let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，經理在設定頁開關
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -1797,6 +1805,7 @@ async function loadSettings() {
     if (r.key === 'rd_max_base') appSettings.rdMaxBase = parseFloat(r.value);
     if (r.key === 'sales_new_client_bonus') appSettings.newClientBonus = parseInt(r.value);
     if (r.key === 'purchase_supplement') appSettings.purSupplement = parseInt(r.value);
+    if (r.key === 'rds_backfill_relaxed') RDS_BACKFILL_RELAXED = (r.value === 'true');
   });
   syncSettingsUI();
 }
@@ -1814,8 +1823,17 @@ function syncSettingsUI() {
   const qMonths={Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]}[appSettings.quarter]||[4,5,6];
   const mSel=document.getElementById('sales-month-sel');
   if (mSel) mSel.innerHTML = qMonths.map(m=>`<option value="${m}">${m}月</option>`).join('');
+  const bf=document.getElementById('set-backfill'); if(bf) bf.checked=RDS_BACKFILL_RELAXED;
+  const bfs=document.getElementById('set-backfill-state'); if(bfs){bfs.textContent=RDS_BACKFILL_RELAXED?'開啟':'關閉';bfs.style.color=RDS_BACKFILL_RELAXED?'#b3541e':'var(--ink-faint)';}
 }
 async function saveSetting(key, value) { await sb.from('system_settings').update({ value: String(value) }).eq('key', key); }
+async function saveBackfillMode(on){
+  const {error}=await sb.from('system_settings').upsert({key:'rds_backfill_relaxed', value:on?'true':'false'},{onConflict:'key'});
+  if(error){showToast('補登模式儲存失敗：'+error.message);const bf=document.getElementById('set-backfill');if(bf)bf.checked=RDS_BACKFILL_RELAXED;return;}
+  RDS_BACKFILL_RELAXED=on;
+  syncSettingsUI();
+  showToast(on?'🛠️ 補登模式已開啟——請通知課長重整瀏覽器後補登，補完記得關閉':'✓ 補登模式已關閉');
+}
 async function saveGeneralSettings() {
   const year = parseInt(document.getElementById('set-year').value);
   const quarter = document.getElementById('set-quarter').value;
@@ -5210,7 +5228,11 @@ function onConfirmCustomerChange(){
     document.querySelectorAll('.cf-rebind-verb').forEach(sp=>sp.textContent=isMgr?'':'申請');
     document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是經理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
   }
-  document.getElementById('cf-save-btn').style.display=(isConfirmed&&!isMgr)?'none':'';
+  // 課長對已確樣：不再隱藏儲存鈕，改成「只更新打樣分潤+備註」模式（編號/確樣人/狀態仍鎖，走申請）
+  cfState.splitsOnly = isConfirmed && !isMgr;
+  const _saveBtn=document.getElementById('cf-save-btn');
+  _saveBtn.style.display='';
+  _saveBtn.textContent = cfState.splitsOnly ? '更新打樣分潤' : '儲存確樣';
   onConfirmProductChange();
   onConfirmChangeLevel();
   onConfirmArchChange();
@@ -5218,6 +5240,13 @@ function onConfirmCustomerChange(){
   if(document.getElementById('cf-owner-set-wrap').style.display!=='none'){
     document.getElementById('cf-owner-set').value=rc.owner_override_employee_id||'';
   }
+  // splitsOnly 模式：鎖住其餘欄位為唯讀，只留「打樣分潤勾選 + 備註」可編輯，避免課長誤以為改了編號/確樣人也會存
+  const _lock=cfState.splitsOnly;
+  ['cf-product','cf-confirmer','cf-date','cf-formula-override','cf-oem','cf-change-level','cf-owner-override','cf-owner-set'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=_lock;});
+  document.querySelectorAll('.cf-arch').forEach(cb=>cb.disabled=_lock);
+  document.querySelectorAll('#cf-split-rows input,#cf-split-rows select,#cf-split-reason').forEach(el=>el.disabled=_lock);
+  const _hint=document.getElementById('cf-splitsonly-hint');
+  if(_hint)_hint.style.display=_lock?'block':'none';
 }
 
 function onConfirmProductChange(){
@@ -5319,7 +5348,39 @@ function addSplitRow(empId='', pct=''){
   document.getElementById('cf-split-rows').appendChild(div);
 }
 
+// 課長對「已確樣」紀錄：只重寫打樣 30% 分潤 + 備註，不動編號/確樣人/確樣狀態（那些走改綁申請）
+async function saveSamplerSplitsOnly(){
+  const scId=cfState.activeScId;
+  if(!scId){showToast('請選擇客戶');return;}
+  const samplerNote=document.getElementById('cf-sampler-note').value.trim();
+  const _nonAsst=new Set((cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id)&&x.employee_id&&x.employees?.role_level!=='assistant').map(x=>x.employee_id));
+  if(_nonAsst.size>=2 && !samplerNote){showToast('多人打樣：請填「打樣群組備註」，說明為何這幾筆算同一支（留底供覆核）');return;}
+  const _picked=(cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id));
+  const _byEmp={};
+  _picked.forEach(x=>{ if(x.employees?.role_level==='assistant')return; const k=x.employee_id; if(!k)return; _byEmp[k]=(_byEmp[k]||0)+1; });
+  const _tot=Object.values(_byEmp).reduce((s,n)=>s+n,0);
+  const summary=_tot?('打樣分潤：'+Object.entries(_byEmp).map(([eid,n])=>`${employees.find(e=>e.id===eid)?.name||'-'} ${n}次＝${Math.round(n/_tot*100)}%`).join('　')):'目前無「非助理」打樣人 → 打樣段 30% 歸主責';
+  const okCard=await confirmCard('更新打樣分潤',
+    `此為<strong>已確樣</strong>紀錄，僅更新「打樣 30% 分潤」與備註；<br>正式編號／確樣人／確樣狀態不會變動（要改請走改綁申請）。<br><br>${summary}`,
+    '確認、更新分潤');
+  if(!okCard) return;
+  // 只更新備註（不碰 code/status/confirmed_by，DB guard 不會觸發）
+  const {error:e0}=await sb.from('rd_sample_customers').update({sampler_note:samplerNote||null}).eq('id',scId);
+  if(e0){showToast('備註更新失敗：'+e0.message);return;}
+  // 只刪重寫 sampler 分潤，保留 collaborator（主責拆分）不動
+  await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId).eq('role','sampler');
+  if(_tot){
+    const samplerRows=Object.entries(_byEmp).map(([eid,n])=>({sample_customer_id:scId, employee_id:eid, pct:Math.round(n/_tot*100), role:'sampler'}));
+    const {error:e4}=await sb.from('rd_deal_owner_splits').insert(samplerRows);
+    if(e4){showToast('打樣分潤寫入失敗：'+e4.message);return;}
+  }
+  showToast('✅ 打樣分潤已更新');
+  closeModal('confirmSampleModal');
+  loadRdSamples();
+}
+
 async function saveConfirm(){
+  if(cfState.splitsOnly){ return saveSamplerSplitsOnly(); }
   const scId=cfState.activeScId;
   if(!scId){showToast('請選擇客戶');return;}
   const code=document.getElementById('cf-product').value;
