@@ -1828,7 +1828,8 @@ function syncSettingsUI() {
 }
 async function saveSetting(key, value) { await sb.from('system_settings').update({ value: String(value) }).eq('key', key); }
 async function saveBackfillMode(on){
-  const {error}=await sb.from('system_settings').upsert({key:'rds_backfill_relaxed', value:on?'true':'false'},{onConflict:'key'});
+  // 用 update（row 已種）而非 upsert：system_settings 只有 UPDATE 政策給 manager、無 INSERT 政策
+  const {error}=await sb.from('system_settings').update({value:on?'true':'false'}).eq('key','rds_backfill_relaxed');
   if(error){showToast('補登模式儲存失敗：'+error.message);const bf=document.getElementById('set-backfill');if(bf)bf.checked=RDS_BACKFILL_RELAXED;return;}
   RDS_BACKFILL_RELAXED=on;
   syncSettingsUI();
@@ -5162,7 +5163,7 @@ const FORMULA_BASE={liquid:0.3,essence:0.4,emulsion_ow:0.8,emulsion_wo:1.0,speci
 
 async function openConfirmModal(sampleId){
   const {data:s,error}=await sb.from('rd_samples')
-    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, sampler_note, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
+    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, sampler_note, sampler_sample_ids, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
     .eq('id',sampleId).single();
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
@@ -5204,10 +5205,14 @@ function onConfirmCustomerChange(){
   cfState.confirmerManual=!!confId; // 重開已確樣→視為已指定，不自動覆蓋
   if(!confId){confId=cfDefaultConfirmer();}
   document.getElementById('cf-confirmer').value=confId;
-  // 打樣 30% 多人分潤：初始化勾選（本筆必含；重開已確樣則帶回既有 sampler 拆分對應打樣人）
+  // 打樣 30% 多人分潤：初始化勾選（本筆必含）。重開已確樣→優先用存下的「被勾打樣編號」精準還原；舊資料無此欄位才 fallback 靠 employee_id（單人正確、多人可能爆勾）
   cfState.samplerPicks=new Set([cfState.sampleId]);
-  const exSamp=(rc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id).map(d=>d.employee_id);
-  if(exSamp.length)(cfState.allSamples||[]).forEach(x=>{if(exSamp.includes(x.employee_id))cfState.samplerPicks.add(x.id);});
+  if(Array.isArray(rc.sampler_sample_ids) && rc.sampler_sample_ids.length){
+    rc.sampler_sample_ids.forEach(id=>cfState.samplerPicks.add(id));
+  } else {
+    const exSamp=(rc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id).map(d=>d.employee_id);
+    if(exSamp.length)(cfState.allSamples||[]).forEach(x=>{if(exSamp.includes(x.employee_id))cfState.samplerPicks.add(x.id);});
+  }
   document.getElementById('cf-sampler-note').value=rc.sampler_note||'';
   renderSamplerCandidates();
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
@@ -5364,8 +5369,8 @@ async function saveSamplerSplitsOnly(){
     `此為<strong>已確樣</strong>紀錄，僅更新「打樣 30% 分潤」與備註；<br>正式編號／確樣人／確樣狀態不會變動（要改請走改綁申請）。<br><br>${summary}`,
     '確認、更新分潤');
   if(!okCard) return;
-  // 只更新備註（不碰 code/status/confirmed_by，DB guard 不會觸發）
-  const {error:e0}=await sb.from('rd_sample_customers').update({sampler_note:samplerNote||null}).eq('id',scId);
+  // 只更新備註 + 被勾的打樣編號（不碰 code/status/confirmed_by，DB guard 不會觸發）
+  const {error:e0}=await sb.from('rd_sample_customers').update({sampler_note:samplerNote||null, sampler_sample_ids:[...(cfState.samplerPicks||[])]}).eq('id',scId);
   if(e0){showToast('備註更新失敗：'+e0.message);return;}
   // 只刪重寫 sampler 分潤，保留 collaborator（主責拆分）不動
   await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId).eq('role','sampler');
@@ -5405,6 +5410,7 @@ async function saveConfirm(){
   if(_nonAsst.size>=2 && !samplerNote){showToast('多人打樣：請填「打樣群組備註」，說明為何這幾筆算同一支（留底供覆核）');return;}
   const upd={
     official_product_code:code, confirm_status:'confirmed', confirmed_at:date, confirmed_by:confirmer, sampler_note:samplerNote||null,
+    sampler_sample_ids:[...(cfState.samplerPicks||[])],
     formula_type_override:document.getElementById('cf-formula-override').value||null,
     is_oem:document.getElementById('cf-oem').checked,
     change_level:lv, changed_architectures:arch.length?arch:null,
