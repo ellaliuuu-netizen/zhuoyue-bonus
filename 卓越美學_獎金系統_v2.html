@@ -3229,7 +3229,7 @@ function updateRdsDelayInfo(){
   if(currentEditId){info.style.display='block';info.innerHTML=`✏️ 修改模式：延遲 ${delay} 天可直接送審`;info.style.color='#5d8aa8';reasonWrap.style.display='none';return;}
   if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(delay<=2){info.style.display='block';info.innerHTML=`🟢 延遲 ${delay} 天，自動通過（無需原因、無需審核）`;info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（原因選填）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
+  else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（<strong>原因必填</strong>，例如「系統上線前舊打樣補登」）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
   else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因送 ELLA 審核`;info.style.color='var(--red)';reasonWrap.style.display='block';}
   else{info.style.display='block';info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
 }
@@ -3274,9 +3274,10 @@ async function saveRdSample(){
   const delay=Math.floor((new Date()-new Date(date))/86400000);
   if(delay<0){showToast('打樣日期不能是未來');return;}
   // 7 天/3 天原因限制僅對「新增模式 + 非補登放寬」生效；修改既有 row 永遠放行
-  if(!currentEditId && !RDS_BACKFILL_RELAXED){
-    if(delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
-    if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因');return;}
+  if(!currentEditId){
+    // 「超過 7 天禁止」只在非補登模式擋；補登模式放行超過 7 天，但「3 天以上要填原因」一律保留（供 ELLA 覆核留軌跡，且對應 DB 的 chk_d3plus_needs_reason）
+    if(!RDS_BACKFILL_RELAXED && delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
+    if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因（補登舊打樣也要填，供 ELLA 覆核）');return;}
   }
 
   // 配方擬定者驗證
