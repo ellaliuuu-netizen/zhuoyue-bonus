@@ -497,7 +497,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="logo"><div class="logo-mark">卓</div><h1>獎金計算系統</h1><span style="font-size:11px;color:rgba(255,255,255,.3);margin-left:6px">v2</span></div>
     <div class="header-right">
       <div class="user-badge"><div class="role-dot" id="role-dot"></div><span id="user-display-name">—</span><span id="user-role-label" style="color:rgba(255,255,255,.4)"></span></div>
-      <div class="quarter-badge" id="pending-review-badge" onclick="openPendingReviewModal()" style="display:none;background:rgba(200,120,64,.24);border-color:rgba(222,140,90,.55);color:#ffd9c2" title="研發打樣待審核（點擊審核）">⏳ 待審核 <strong id="pending-review-badge-n" style="margin-left:2px">0</strong></div>
+      <div class="quarter-badge" id="pending-review-badge" onclick="openPendingReviewModal()" style="display:none;position:relative;background:rgba(200,120,64,.18);border-color:rgba(222,140,90,.4);color:#ffd9c2" title="研發打樣待審核（點擊審核）">⏳ 待審核<span id="pending-review-dot" style="display:none;position:absolute;top:-7px;right:-7px;background:#e5484d;color:#fff;border-radius:999px;min-width:18px;height:18px;line-height:18px;font-size:11px;font-weight:700;text-align:center;padding:0 4px;box-shadow:0 0 0 2px #241f1a">0</span></div>
       <div class="quarter-badge" id="quarter-badge-btn" onclick="openModal('quarterModal')">📅 2026 Q2</div>
       <button class="btn-logout" onclick="doLogout()">登出</button>
     </div>
@@ -3476,9 +3476,9 @@ async function loadPendingReviews(){
   const n=data?.length||0;
   const cnt=document.getElementById('rds-pending-count');
   if(cnt)cnt.textContent=`${n} 筆`;
-  // 表頭「待審核」鈕：只有 manager / rd_manager、且有待審才顯示
-  const badge=document.getElementById('pending-review-badge'), badgeN=document.getElementById('pending-review-badge-n');
-  if(badge){ const canSee=(currentRole==='manager'); badge.style.display=(canSee&&n>0)?'':'none'; if(badgeN)badgeN.textContent=n; }
+  // 表頭「待審核」鈕：經理一律顯示（隨時點得到），只有 n>0 才亮紅點提示
+  const badge=document.getElementById('pending-review-badge'), dot=document.getElementById('pending-review-dot');
+  if(badge){ const canManage=(currentRole==='manager'); badge.style.display=canManage?'':'none'; badge.style.opacity=(n>0)?'1':'.55'; if(dot){ dot.style.display=(n>0)?'':'none'; dot.textContent=n; } }
   const emptyHtml='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';
   const html = (!n)?emptyHtml:`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const isEdit=!!s.edit_reason;
