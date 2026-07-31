@@ -497,7 +497,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="logo"><div class="logo-mark">卓</div><h1>獎金計算系統</h1><span style="font-size:11px;color:rgba(255,255,255,.3);margin-left:6px">v2</span></div>
     <div class="header-right">
       <div class="user-badge"><div class="role-dot" id="role-dot"></div><span id="user-display-name">—</span><span id="user-role-label" style="color:rgba(255,255,255,.4)"></span></div>
-      <div class="quarter-badge" id="pending-review-badge" onclick="openPendingReviewModal()" style="display:none;position:relative;background:rgba(200,120,64,.18);border-color:rgba(222,140,90,.4);color:#ffd9c2" title="研發打樣待審核（點擊審核）">⏳ 待審核<span id="pending-review-dot" style="display:none;position:absolute;top:-7px;right:-7px;background:#e5484d;color:#fff;border-radius:999px;min-width:18px;height:18px;line-height:18px;font-size:11px;font-weight:700;text-align:center;padding:0 4px;box-shadow:0 0 0 2px #241f1a">0</span></div>
+      <div class="quarter-badge" id="pending-review-badge" onclick="openTodoCenter()" style="display:none;position:relative;background:rgba(200,120,64,.18);border-color:rgba(222,140,90,.4);color:#ffd9c2" title="待辦中心（點擊處理）">🔔 待辦<span id="pending-review-dot" style="display:none;position:absolute;top:-7px;right:-7px;background:#e5484d;color:#fff;border-radius:999px;min-width:18px;height:18px;line-height:18px;font-size:11px;font-weight:700;text-align:center;padding:0 4px;box-shadow:0 0 0 2px #241f1a">0</span></div>
       <div class="quarter-badge" id="quarter-badge-btn" onclick="openModal('quarterModal')">📅 2026 Q2</div>
       <button class="btn-logout" onclick="doLogout()">登出</button>
     </div>
@@ -887,7 +887,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
 
         <!-- Card 2: 待審核（manager + rd_manager 都可看） -->
-        <div class="card manager-only rdmgr-show">
+        <div class="card manager-only rdmgr-show" id="todo-anchor-pending">
           <div class="card-header">
             <div class="card-title">⏳ 待審核（隔天補登需通過）</div>
             <div><span id="rds-pending-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆</span><button class="btn btn-outline btn-sm" onclick="loadPendingReviews()">重新整理</button></div>
@@ -909,7 +909,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
 
         <!-- Card 4: 待回溯台帳 -->
-        <div class="card">
+        <div class="card" id="todo-anchor-carry">
           <div class="card-header">
             <div class="card-title">🔄 待回溯台帳（pending_carryover）</div>
             <div><button class="btn btn-outline btn-sm" onclick="loadCarryover()">重新整理</button></div>
@@ -1388,12 +1388,21 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
-<!-- 研發打樣待審核（表頭鈕點入，manager / rd_manager） -->
-<div class="modal-overlay" id="pendingReviewModal">
-  <div class="modal" style="max-width:860px">
-    <div class="modal-header"><div class="modal-title">⏳ 研發打樣待審核</div><button class="modal-close" onclick="closeModal('pendingReviewModal')">✕</button></div>
-    <div class="info-box" style="font-size:12px;margin-bottom:10px">研發新登打的打樣（含補登舊打樣）要核准後才計入件數。請核對<strong>打樣日／編號／原因</strong>後，通過或退回。</div>
-    <div id="pending-modal-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div></div>
+<!-- 待辦中心（表頭鈕點入，manager）— 只看清單＋跳頁處理 -->
+<div class="modal-overlay" id="todoCenterModal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header"><div class="modal-title">🔔 待辦中心</div><button class="modal-close" onclick="closeModal('todoCenterModal')">✕</button></div>
+    <div class="info-box" style="font-size:12px;margin-bottom:10px">集中顯示需要你處理的事項。各分類只列清單，按「前往處理」跳到原頁面操作。</div>
+    <div class="inner-tabs" id="todo-tabs" style="margin-bottom:12px;flex-wrap:wrap">
+      <div class="inner-tab active" onclick="switchTodoTab(this,'todo-samples')">🧪 打樣待審核 <span id="todo-cnt-samples" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
+      <div class="inner-tab" onclick="switchTodoTab(this,'todo-deals')">🎯 成交獎金待覆核 <span id="todo-cnt-deals" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
+      <div class="inner-tab" onclick="switchTodoTab(this,'todo-reqs')">🔁 改綁／取消申請 <span id="todo-cnt-reqs" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
+      <div class="inner-tab" onclick="switchTodoTab(this,'todo-carry')">🔄 打樣回溯台帳 <span id="todo-cnt-carry" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
+    </div>
+    <div id="todo-samples" class="todo-sec"></div>
+    <div id="todo-deals" class="todo-sec" style="display:none"></div>
+    <div id="todo-reqs" class="todo-sec" style="display:none"></div>
+    <div id="todo-carry" class="todo-sec" style="display:none"></div>
   </div>
 </div>
 
@@ -1774,7 +1783,7 @@ async function initApp(user) {
   await loadEmployees();
   await loadProducts();
   await loadDashboard();
-  loadPendingReviews(); // 表頭「待審核」鈕一登入就有數字（不必先進研發打樣分頁）
+  loadTodoCenter(); // 表頭「待辦」鈕一登入就有數字（不必先進任何分頁）
   initAllStars();
   initInnerTabs();
 }
@@ -3476,9 +3485,6 @@ async function loadPendingReviews(){
   const n=data?.length||0;
   const cnt=document.getElementById('rds-pending-count');
   if(cnt)cnt.textContent=`${n} 筆`;
-  // 表頭「待審核」鈕：經理一律顯示（隨時點得到），只有 n>0 才亮紅點提示
-  const badge=document.getElementById('pending-review-badge'), dot=document.getElementById('pending-review-dot');
-  if(badge){ const canManage=(currentRole==='manager'); badge.style.display=canManage?'':'none'; badge.style.opacity=(n>0)?'1':'.55'; if(dot){ dot.style.display=(n>0)?'':'none'; dot.textContent=n; } }
   const emptyHtml='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';
   const html = (!n)?emptyHtml:`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const isEdit=!!s.edit_reason;
@@ -3488,9 +3494,50 @@ async function loadPendingReviews(){
   }).join('')}</tbody></table>`;
   // 同時餵給「分頁卡片」與「表頭彈窗」，兩邊審核共用同一套按鈕
   const el=document.getElementById('rds-pending-content'); if(el)el.innerHTML=html;
-  const mEl=document.getElementById('pending-modal-content'); if(mEl)mEl.innerHTML=html;
+  loadTodoCenter(); // 同步更新表頭待辦鈕/紅點
 }
-async function openPendingReviewModal(){ await loadPendingReviews(); openModal('pendingReviewModal'); }
+
+// ===== 待辦中心（表頭鈕）：四類集中，只看清單＋跳頁處理（經理限定）=====
+async function loadTodoCenter(){
+  const badge=document.getElementById('pending-review-badge'), dot=document.getElementById('pending-review-dot');
+  const isMgr=(currentRole==='manager');
+  if(badge) badge.style.display=isMgr?'':'none';
+  if(!isMgr) return;
+  const [smp, dl, rq, cy] = await Promise.all([
+    sb.from('rd_samples').select('sample_date,sample_code,item_name,delay_days,approval_reason,edit_reason,employees!rd_samples_employee_id_fkey(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false}),
+    sb.from('rd_deal_bonuses').select('official_product_code,segment,amount,recognized_at,employees(name)').eq('status','pending_review').order('recognized_at',{ascending:false}),
+    sb.from('rd_confirm_change_requests').select('action,created_at,src:rd_sample_customers!rd_confirm_change_requests_sample_customer_id_fkey(official_product_code,rd_customers(short_name))').eq('status','pending').order('created_at',{ascending:false}),
+    sb.from('rd_monthly_settlement').select('year,month,sample_count,carryover_deadline,employees(name)').eq('status','pending_carryover').order('carryover_deadline')
+  ]);
+  const sD=smp.data||[], dD=dl.data||[], rD=rq.data||[], cD=cy.data||[];
+  const nS=sD.length, nD=dD.length, nR=rD.length, nC=cD.length, total=nS+nD+nR+nC;
+  if(dot){ dot.style.display=total>0?'':'none'; dot.textContent=total; }
+  if(badge) badge.style.opacity=total>0?'1':'.55';
+  const setCnt=(id,v)=>{const e=document.getElementById(id); if(e){e.textContent=v; e.style.background=v>0?'#e5484d':'#b0a89c';}};
+  setCnt('todo-cnt-samples',nS); setCnt('todo-cnt-deals',nD); setCnt('todo-cnt-reqs',nR); setCnt('todo-cnt-carry',nC);
+  const jump=(kind,label)=>`<button class="btn btn-gold btn-sm" onclick="gotoTodo('${kind}')" style="margin-bottom:10px">前往處理 →（${label}）</button>`;
+  const empty='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">目前沒有</div></div>';
+  const segLabel={primary:'主責50%',sampling:'打樣30%',confirm:'確樣20%',collaborator:'協作',oem:'代工100%'};
+  const secS=document.getElementById('todo-samples'); if(secS) secS.innerHTML = jump('samples','研發打樣審核') + (nS? `<table><thead><tr><th>打樣日</th><th>編號</th><th>品項</th><th>研發</th><th>延遲</th><th>原因</th></tr></thead><tbody>${sD.map(s=>`<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${s.delay_days||0}天</td><td>${s.edit_reason||s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
+  const secD=document.getElementById('todo-deals'); if(secD) secD.innerHTML = jump('deals','成交獎金覆核') + (nD? `<table><thead><tr><th>正式編號</th><th>段別</th><th>領獎人</th><th class="td-right">金額</th><th>認列日</th></tr></thead><tbody>${dD.map(d=>`<tr><td>${d.official_product_code||'—'}</td><td>${segLabel[d.segment]||d.segment}</td><td>${d.employees?.name||'待指定'}</td><td class="td-right">${fmt(d.amount||0)}</td><td>${(d.recognized_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
+  const secR=document.getElementById('todo-reqs'); if(secR) secR.innerHTML = jump('reqs','改綁／取消申請') + (nR? `<table><thead><tr><th>類型</th><th>正式編號</th><th>客戶</th><th>申請日</th></tr></thead><tbody>${rD.map(q=>`<tr><td>${q.action==='cancel'?'取消確樣':'改綁'}</td><td>${q.src?.official_product_code||'—'}</td><td>${q.src?.rd_customers?.short_name||'—'}</td><td>${(q.created_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
+  const secC=document.getElementById('todo-carry'); if(secC) secC.innerHTML = jump('carry','研發打樣月結回溯') + (nC? `<table><thead><tr><th>研發</th><th>月份</th><th>件數</th><th>回溯期限</th></tr></thead><tbody>${cD.map(c=>`<tr><td>${c.employees?.name||'-'}</td><td>${c.year}-${String(c.month).padStart(2,'0')}</td><td>${c.sample_count||0}</td><td>${c.carryover_deadline||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
+}
+function switchTodoTab(el,id){
+  el.closest('.inner-tabs').querySelectorAll('.inner-tab').forEach(t=>t.classList.remove('active')); el.classList.add('active');
+  ['todo-samples','todo-deals','todo-reqs','todo-carry'].forEach(s=>{const e=document.getElementById(s); if(e)e.style.display=(s===id)?'block':'none';});
+}
+async function openTodoCenter(){ await loadTodoCenter(); openModal('todoCenterModal'); }
+function gotoTodo(kind){
+  closeModal('todoCenterModal');
+  if(kind==='samples'||kind==='carry'){
+    switchPage('rd-sampling');
+    setTimeout(()=>{ document.getElementById(kind==='samples'?'todo-anchor-pending':'todo-anchor-carry')?.scrollIntoView({behavior:'smooth',block:'center'}); }, 350);
+  } else if(kind==='deals'||kind==='reqs'){
+    switchPage('rd');
+    setTimeout(()=>{ const t=[...document.querySelectorAll('#page-rd .inner-tab')].find(x=>/rd-deal-sec/.test(x.getAttribute('onclick')||'')); if(t)t.click(); }, 250);
+  }
+}
 
 async function approveRdSample(id){
   const {data:user}=await sb.auth.getUser();
@@ -4785,7 +4832,7 @@ async function approveRequest(reqId){
   const meEmp=employees.find(e=>e.name===currentUserName);
   await sb.from('rd_confirm_change_requests').update({status:'approved', reviewed_by:meEmp?.id||null, reviewed_at:new Date().toISOString(), review_note:note}).eq('id',reqId);
   showToast('✅ 已核准並執行');
-  loadDealBonuses();
+  loadDealBonuses();loadTodoCenter();
 }
 async function rejectRequest(reqId){
   const {data:q,error}=await sb.from('rd_confirm_change_requests').select('*').eq('id',reqId).single();
@@ -4795,7 +4842,7 @@ async function rejectRequest(reqId){
   const meEmp=employees.find(e=>e.name===currentUserName);
   await sb.from('rd_confirm_change_requests').update({status:'rejected', reviewed_by:meEmp?.id||null, reviewed_at:new Date().toISOString(), review_note:note}).eq('id',reqId);
   showToast('已駁回，確樣維持原狀、解除凍結');
-  loadDealBonuses();
+  loadDealBonuses();loadTodoCenter();
 }
 
 // 放行：把這筆成交的所有段轉 released（財務才看得到）；孤兒段須先指定接手人
@@ -4821,7 +4868,7 @@ async function releaseDeal(scId){
     if(error){showToast('放行失敗：'+error.message);return;}
   }
   showToast('✅ 已放行給財務');
-  loadDealBonuses();
+  loadDealBonuses();loadTodoCenter();
 }
 
 // ===== 訂單 CSV 匯入 =====
