@@ -497,6 +497,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="logo"><div class="logo-mark">卓</div><h1>獎金計算系統</h1><span style="font-size:11px;color:rgba(255,255,255,.3);margin-left:6px">v2</span></div>
     <div class="header-right">
       <div class="user-badge"><div class="role-dot" id="role-dot"></div><span id="user-display-name">—</span><span id="user-role-label" style="color:rgba(255,255,255,.4)"></span></div>
+      <div class="quarter-badge" id="pending-review-badge" onclick="openPendingReviewModal()" style="display:none;background:rgba(200,120,64,.24);border-color:rgba(222,140,90,.55);color:#ffd9c2" title="研發打樣待審核（點擊審核）">⏳ 待審核 <strong id="pending-review-badge-n" style="margin-left:2px">0</strong></div>
       <div class="quarter-badge" id="quarter-badge-btn" onclick="openModal('quarterModal')">📅 2026 Q2</div>
       <button class="btn-logout" onclick="doLogout()">登出</button>
     </div>
@@ -1387,6 +1388,15 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
+<!-- 研發打樣待審核（表頭鈕點入，manager / rd_manager） -->
+<div class="modal-overlay" id="pendingReviewModal">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-header"><div class="modal-title">⏳ 研發打樣待審核</div><button class="modal-close" onclick="closeModal('pendingReviewModal')">✕</button></div>
+    <div class="info-box" style="font-size:12px;margin-bottom:10px">研發新登打的打樣（含補登舊打樣）要核准後才計入件數。請核對<strong>打樣日／編號／原因</strong>後，通過或退回。</div>
+    <div id="pending-modal-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div></div>
+  </div>
+</div>
+
 <!-- 新增打樣紀錄（rd_manager / manager） -->
 <div class="modal-overlay" id="newRdSampleModal">
   <div class="modal" style="max-width:600px">
@@ -1764,6 +1774,7 @@ async function initApp(user) {
   await loadEmployees();
   await loadProducts();
   await loadDashboard();
+  loadPendingReviews(); // 表頭「待審核」鈕一登入就有數字（不必先進研發打樣分頁）
   initAllStars();
   initInnerTabs();
 }
@@ -3462,17 +3473,24 @@ async function deleteRdSample(id){
 
 async function loadPendingReviews(){
   const {data}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false});
-  const el=document.getElementById('rds-pending-content');
+  const n=data?.length||0;
   const cnt=document.getElementById('rds-pending-count');
-  if(cnt)cnt.textContent=`${data?.length||0} 筆`;
-  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';return;}
-  el.innerHTML=`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
+  if(cnt)cnt.textContent=`${n} 筆`;
+  // 表頭「待審核」鈕：只有 manager / rd_manager、且有待審才顯示
+  const badge=document.getElementById('pending-review-badge'), badgeN=document.getElementById('pending-review-badge-n');
+  if(badge){ const canSee=(currentRole==='manager'); badge.style.display=(canSee&&n>0)?'':'none'; if(badgeN)badgeN.textContent=n; }
+  const emptyHtml='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';
+  const html = (!n)?emptyHtml:`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const isEdit=!!s.edit_reason;
     const typeBadge=isEdit?'<span class="badge badge-gold">📝 修改</span>':`<span class="badge badge-blue">⏰ 補登 ${s.delay_days}天</span>`;
     const reasonText=isEdit?s.edit_reason:(s.approval_reason||'（隔天補登）');
     return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${typeBadge}</td><td>${reasonText}</td><td><button class="btn btn-primary btn-sm" onclick="approveRdSample('${s.id}')">✓ 通過</button> <button class="btn btn-outline btn-sm" onclick="rejectRdSample('${s.id}')">退回</button></td></tr>`;
   }).join('')}</tbody></table>`;
+  // 同時餵給「分頁卡片」與「表頭彈窗」，兩邊審核共用同一套按鈕
+  const el=document.getElementById('rds-pending-content'); if(el)el.innerHTML=html;
+  const mEl=document.getElementById('pending-modal-content'); if(mEl)mEl.innerHTML=html;
 }
+async function openPendingReviewModal(){ await loadPendingReviews(); openModal('pendingReviewModal'); }
 
 async function approveRdSample(id){
   const {data:user}=await sb.auth.getUser();
