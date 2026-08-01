@@ -4463,25 +4463,51 @@ async function generateRdConfirmSheets(){
     .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lt('sample_date',`${endY}-${pad(endM)}-01`)
     .in('approval_status',['approved','auto_approved']);
   if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
-  const cnt={};
-  (samples||[]).forEach(s=>{const m=Number(s.sample_date.slice(5,7)),k=s.employee_id;if(!k)return;(cnt[k]=cnt[k]||{})[m]=(cnt[k][m]||0)+1;});
+  // 試用期（到職起三個月）內產生的打樣不計獎金——按「打樣日」逐筆判定，非按季度比例折算
+  const inProbation=(empId, dateStr)=>{
+    const e=employees.find(x=>x.id===empId);
+    return !!(e && e.probation_end_date && dateStr && dateStr < e.probation_end_date);
+  };
+  const cnt={}, probSkip={};
+  (samples||[]).forEach(s=>{
+    const k=s.employee_id; if(!k)return;
+    if(inProbation(k, s.sample_date)){ (probSkip[k]=probSkip[k]||{n:0})['n']++; return; }
+    const m=Number(s.sample_date.slice(5,7));
+    (cnt[k]=cnt[k]||{})[m]=(cnt[k][m]||0)+1;
+  });
   const sampleBonus=n=>rdSamplingBonus(n); // 複用系統既有公式，確保與畫面一致
   // 2) 成交三段（現有確樣 → 依發獎引擎預估）
   const {data:scs,error:e2}=await sb.from('rd_sample_customers')
-    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
+    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
     .eq('confirm_status','confirmed');
   if(e2){showToast('讀取確樣失敗：'+e2.message);return;}
   const segLabel={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工窗口'};
-  const deal={};
+  // 成交獎金跟著「出貨認列」走，不是跟確樣日：確樣落在本季但尚未出貨者，該筆獎金屬於日後出貨的那一季，
+  // 不得計入本季合計（與其他部門「出貨才計獎」一致）。故此處分兩組：本季已認列＝計入；未認列＝僅列示。
+  const qStart=`${yr}-${pad(qMonths[0])}-01`, qEnd=`${endY}-${pad(endM)}-01`;
+  const inThisQ=sc=>sc.recognized_at && sc.recognized_at>=qStart && sc.recognized_at<qEnd;
+  const deal={}, pendingDeal={}, probDeal={}, allRows=[];
   (scs||[]).forEach(sc=>{
     const p=products.find(x=>x.product_code===sc.official_product_code);
     const segs=computeDealSegments(sc);
     const pool=sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0);
+    const recognized=inThisQ(sc);
+    const who={};
     segs.forEach(x=>{
       if(!x.employee_id)return;
+      const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
+      const lb=segLabel[x.segment]||x.segment;
+      who[lb]=(who[lb]?who[lb]+'、':'')+nm;
       const pct=pool?Math.round(x.amount/pool*100):null;
-      (deal[x.employee_id]=deal[x.employee_id]||[]).push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:segLabel[x.segment]||x.segment, pct, amount:x.amount||0});
+      const row={code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:lb, pct, amount:x.amount||0, recAt:(sc.recognized_at||'').slice(0,10)};
+      // 確樣產生於該員試用期內者不計獎金（逐人判定：同一品項可能一人已轉正、另一人仍在試用期）
+      if(inProbation(x.employee_id, (sc.confirmed_at||'').slice(0,10))){
+        (probDeal[x.employee_id]=probDeal[x.employee_id]||[]).push(row);
+      } else if(recognized) (deal[x.employee_id]=deal[x.employee_id]||[]).push(row);
+      else (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push(row);
     });
+    allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
+      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, who});
   });
   // 3) 每人一張
   const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
@@ -4493,15 +4519,39 @@ async function generateRdConfirmSheets(){
     poolTotal+=sum; // 全團隊成交池（含課長已分得的段）
     if(emp && emp.dept==='研發部' && (emp.role_level==='staff'||emp.role_level==='senior')) staffTotal+=sum; // 研發同仁成交池（不含課長/助理）
   });
-  const mgrAddon=Math.round(staffTotal*0.15);
-  const asstShare=Math.round(poolTotal*0.05);
+  // 課長／助理的加成與分潤同樣受試用期限制：試用期內認列的成交不納入其基數
+  const _mgrEmp=rd.find(e=>e.role_level==='manager');
+  const _asstEmp=rd.find(e=>e.role_level==='assistant');
+  const _sumFor=emp=>Object.values(deal).flat().reduce((s,r)=>
+    s + ((!emp?.probation_end_date || (r.recAt||'') >= emp.probation_end_date) ? r.amount : 0), 0);
+  const _staffForMgr=Object.entries(deal).reduce((s,[eid,rows])=>{
+    const e2=employees.find(x=>x.id===eid);
+    if(!(e2 && e2.dept==='研發部' && (e2.role_level==='staff'||e2.role_level==='senior'))) return s;
+    return s + rows.reduce((t,r)=>t + ((!_mgrEmp?.probation_end_date || (r.recAt||'') >= _mgrEmp.probation_end_date) ? r.amount : 0), 0);
+  },0);
+  const mgrAddon=Math.round(_staffForMgr*0.15);
+  const asstShare=Math.round(_sumFor(_asstEmp)*0.05);
   const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // 全研發部確樣品項一覽：每個人都看得到「所有品項」與三段歸屬（不含金額，避免互比薪資）。
+  // 個人表只列自己領到的，看不出「本該有我卻被登給別人」；有這張全覽才能由當事人自行發現遺漏。
+  const allSorted=allRows.slice().sort((a,b)=>(b.confirmed||'').localeCompare(a.confirmed||''));
+  const allTable=allSorted.length?`<h2>附表、全研發部確樣品項一覽（供交叉核對）</h2>
+    <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th><th class="c">出貨認列</th><th>主責</th><th>打樣</th><th>確樣</th></tr></thead><tbody>
+    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':'待出貨'}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="note">本表列出全研發部所有確樣品項與三段歸屬，不含金額。<b>若你參與了其中某個品項，但該段別沒有列出你的名字，請在下方異議欄註明。</b></p>`:'';
   let pages='';
   rd.forEach(e=>{
     const myCnt=cnt[e.id]||{}; let sTot=0;
     const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
     const myDeal=deal[e.id]||[]; let dTot=0;
-    const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無成交三段認列</td></tr>';
+    const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無出貨認列的成交</td></tr>';
+    // 已確樣但尚未出貨：列示但不計入本季合計
+    const myPend=pendingDeal[e.id]||[]; let pTot=0;
+    const pRows=myPend.map(d=>{pTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('');
+    const pendH=myPend.length?`<h2>二之二、已確樣但尚未出貨（<span style="color:#b3541e">不計入本季</span>）</h2>
+      <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我的段別</th><th class="r">屆時可領</th></tr></thead><tbody>${pRows}</tbody><tfoot><tr><td colspan="4" class="r">合計（待出貨）</td><td class="r">${pTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <p class="note">成交獎金以「出貨認列」為計算時點：出貨落在哪一季，該筆獎金就計入哪一季。上列品項待客戶出貨後，會計入出貨當季的獎金，不會取消。</p>`:'';
     // 三、加成/分潤（依角色）
     let extraH='', extra=0;
     if(e.role_level==='manager'){
@@ -4512,16 +4562,31 @@ async function generateRdConfirmSheets(){
       extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）<span class="est">＊預估</span></h2><table><tbody><tr><td>全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr><tr><td>× 5% 助理分潤</td><td class="r"><b>${asstShare.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">助理不走成交三段，改領全團隊成交池 5%。</p>`;
     }
     const grand=sTot+dTot+extra;
+    // 試用期揭露：講清楚哪些被排除、為什麼、何時起計，避免當事人以為系統漏算
+    const probEnd=e.probation_end_date||'';
+    const probSkipN=(probSkip[e.id]||{}).n||0;
+    const myProb=probDeal[e.id]||[];
+    const probH=(probSkipN||myProb.length)?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
+      <table><tbody>
+      ${probSkipN?`<tr><td>試用期內打樣（不計獎金）</td><td class="r">${probSkipN} 件</td></tr>`:''}
+      ${myProb.length?`<tr><td>試用期內確樣之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
+      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎</td></tr>
+      </tbody></table>
+      <p class="note">依制度，試用期（到職起三個月）內產生的打樣與確樣不計獎金；自正式錄用日起產生者始納入計算。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       <h2>一、打樣獎金（每月）</h2>
       <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
-      <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。當月成交＝0 者該月打樣獎金暫緩、待日後成交回溯補發。</p>
-      <h2>二、成交獎金三段（每品項）<span class="est">＊預估值，實際以出貨認列為準</span></h2>
-      <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">預估獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計（預估）</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。當月成交＝0 者該月打樣獎金暫緩、待日後成交回溯補發。試用期內之打樣不列入件數。</p>
+      <h2>二、成交獎金三段（本季已出貨認列）</h2>
+      <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <p class="note">成交獎金以「出貨認列」為計算時點：出貨落在哪一季，該筆獎金即計入哪一季。</p>
+      ${pendH}
       ${extraH}
-      <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季合計（含預估）：${grand.toLocaleString()} 元</div>
-      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':e.role_level==='assistant'?'與分潤':''}與實際情況相符。如有錯誤請於下方註明。</p>
+      ${probH}
+      <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季實計合計：${grand.toLocaleString()} 元</div>
+      ${allTable}
+      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':e.role_level==='assistant'?'與分潤':''}與實際情況相符；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
