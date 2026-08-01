@@ -2855,45 +2855,67 @@ async function saveRd() {
   const ok=await saveRecord({dept:'研發部',name:emp.name,bonus:total,role_title:emp.role_title,detail:`${emp.role_title}｜${items.join(', ')}｜A值${appSettings.aValue}｜上限${appSettings.rdMaxBase}${pr.note}`,record_type:'quarterly'});
   if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(total)}`);
 }
+// 制度 v10：課長加成＝研發同仁「成交獎金」×15%（不含課長自己）；助理＝全團隊（含課長）「成交獎金」×5%。
+// 三段式上線後成交獎金存在 rd_deal_bonuses，放行（released）不會寫回 bonus_records，
+// 若仍只讀 bonus_records，兩項加成的基數會是 0。故基數改以成交明細為準，無明細才退回舊的手動季獎金。
+async function fetchRdTeamBase(){
+  const yr=appSettings.year;
+  const qMonths=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
+  const pad=m=>String(m).padStart(2,'0');
+  const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
+  const {data:deals}=await sb.from('rd_deal_bonuses')
+    .select('employee_id, amount, employees(name, role_title)')
+    .eq('status','released')
+    .gte('recognized_at',`${yr}-${pad(qMonths[0])}-01`).lt('recognized_at',`${endY}-${pad(endM)}-01`);
+  if(deals&&deals.length){
+    const by={};
+    deals.forEach(d=>{ if(!d.employee_id)return;
+      const k=d.employee_id;
+      (by[k]=by[k]||{name:d.employees?.name||'-', role_title:d.employees?.role_title||'研發', bonus:0}).bonus+=Number(d.amount)||0; });
+    return {rows:Object.values(by), source:'三段式成交獎金（已放行）'};
+  }
+  const {data}=await sb.from('bonus_records').select('*')
+    .eq('dept','研發部').eq('year',yr).eq('quarter',appSettings.quarter).eq('record_type','quarterly');
+  return {rows:(data||[]).map(r=>({name:r.name, role_title:r.role_title, bonus:r.bonus})), source:'手動輸入的季獎金'};
+}
 async function calcRdTeam() {
-  // 只算 quarterly（成交獎金）池子，排除 team_bonus 自己（避免顯示時池子膨脹、與儲存值不一致）
-  const {data}=await sb.from('bonus_records').select('*').eq('dept','研發部').eq('year',appSettings.year).eq('quarter',appSettings.quarter).eq('record_type','quarterly');
+  const {rows,source}=await fetchRdTeamBase();
   const el=document.getElementById('rd-team-content');
-  if (!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">尚未儲存研發人員資料</div></div>';return;}
-  const allBase=data.reduce((s,r)=>s+r.bonus,0);
-  const mgrBase=data.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
+  if (!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">本季尚無研發成交獎金（放行後才計入加成基數）</div></div>';return;}
+  const allBase=rows.reduce((s,r)=>s+r.bonus,0);
+  const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
   const assistantBonus=Math.round(allBase*.05);
-  el.innerHTML=`<table><thead><tr><th>姓名</th><th>職稱</th><th>基礎獎金</th><th class="td-right">加成後</th></tr></thead><tbody>
-    ${data.map(r=>{
+  el.innerHTML=`<div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px">加成基數來源：<strong>${source}</strong>　｜　全團隊池 ${fmt(allBase)}（含課長）、同仁池 ${fmt(mgrBase)}（不含課長）</div>`+
+    `<table><thead><tr><th>姓名</th><th>職稱</th><th>成交獎金</th><th class="td-right">加成後</th></tr></thead><tbody>
+    ${rows.map(r=>{
       const isMgr=r.role_title?.includes('課長');
       let final=r.bonus,note='';
       if (isMgr){final=Math.round(r.bonus+mgrBase*.15);note='＋同仁池15%';}
       return `<tr><td>${r.name}</td><td>${r.role_title||'研發'}</td><td>${fmt(r.bonus)}</td><td class="td-right"><strong>${fmt(final)}</strong>${note?`<span style="font-size:11px;color:var(--ink-faint);margin-left:4px">${note}</span>`:''}</td></tr>`;
     }).join('')}
-    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（5%）</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
+    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（全團隊池 ${fmt(allBase)} × 5%）</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
   </tbody></table>`;
 }
 async function saveRdTeam(){
-  // 讀取本季研發部「quarterly」紀錄作為基礎（排除已存在的 team_bonus，避免疊加）
-  const {data}=await sb.from('bonus_records').select('*')
-    .eq('dept','研發部').eq('year',appSettings.year).eq('quarter',appSettings.quarter)
-    .eq('record_type','quarterly');
-  if (!data||!data.length){ showToast('尚無研發本季基礎獎金，請先儲存各人獎金'); return; }
-  const allBase=data.reduce((s,r)=>s+r.bonus,0);
-  const mgrBase=data.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
-  const mgr=data.find(r=>r.role_title?.includes('課長'));
+  // 基數與 calcRdTeam 同源（優先三段式成交明細），避免畫面顯示與實際入帳不一致
+  const {rows,source}=await fetchRdTeamBase();
+  if (!rows.length){ showToast('尚無研發本季成交獎金，請先放行成交明細或儲存各人獎金'); return; }
+  const allBase=rows.reduce((s,r)=>s+r.bonus,0);
+  const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
+  const mgr=rows.find(r=>r.role_title?.includes('課長'))
+    || (()=>{const m=employees.find(e=>e.dept==='研發部'&&e.is_active&&(e.role_title||'').includes('課長')); return m?{name:m.name,role_title:m.role_title}:null;})();
   const assistant=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
   const mgrAdd=mgr?Math.round(mgrBase*.15):0;
   const asstBonus=assistant?Math.round(allBase*.05):0;
   let count=0;
   if (mgr && mgrAdd>0){
-    const ok=await saveRecord({dept:'研發部',name:mgr.name,bonus:mgrAdd,role_title:mgr.role_title,detail:`課長加成 15% × 同仁池 ${fmt(mgrBase)}`,record_type:'team_bonus'});
+    const ok=await saveRecord({dept:'研發部',name:mgr.name,bonus:mgrAdd,role_title:mgr.role_title,detail:`課長加成 15% × 同仁成交池 ${fmt(mgrBase)}（基數：${source}）`,record_type:'team_bonus'});
     if (ok) count++;
   }
   if (assistant && asstBonus>0){
     const pr=probationRatio(assistant);
     const asstFinal=Math.round(asstBonus*pr.ratio);
-    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstFinal,role_title:assistant.role_title,detail:`助理獎金 5% × 全團隊 ${fmt(allBase)}${pr.note}`,record_type:'team_bonus'});
+    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstFinal,role_title:assistant.role_title,detail:`助理獎金 5% × 全團隊成交池 ${fmt(allBase)}（含課長；基數：${source}）${pr.note}`,record_type:'team_bonus'});
     if (ok) count++;
   }
   showToast(`✓ 已寫入 ${count} 筆團隊加成`);
