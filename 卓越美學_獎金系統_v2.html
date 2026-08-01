@@ -4500,11 +4500,14 @@ async function generateRdConfirmSheets(){
       who[lb]=(who[lb]?who[lb]+'、':'')+nm;
       const pct=pool?Math.round(x.amount/pool*100):null;
       const row={code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:lb, pct, amount:x.amount||0, recAt:(sc.recognized_at||'').slice(0,10)};
-      // 確樣產生於該員試用期內者不計獎金（逐人判定：同一品項可能一人已轉正、另一人仍在試用期）
-      if(inProbation(x.employee_id, (sc.confirmed_at||'').slice(0,10))){
+      // 試用期資格以「出貨認列日」判定，非確樣日：成交獎金在出貨當下才發生，
+      // 試用期內確樣、轉正後才出貨者，該筆獎金產生於轉正之後，具領取資格。
+      // 尚未出貨者不在此判定，一律列待認列，屆時再依實際出貨日判斷。
+      if(!recognized){
+        (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push(row);
+      } else if(inProbation(x.employee_id, (sc.recognized_at||'').slice(0,10))){
         (probDeal[x.employee_id]=probDeal[x.employee_id]||[]).push(row);
-      } else if(recognized) (deal[x.employee_id]=deal[x.employee_id]||[]).push(row);
-      else (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push(row);
+      } else (deal[x.employee_id]=deal[x.employee_id]||[]).push(row);
     });
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
       confirmed:(sc.confirmed_at||'').slice(0,10), recognized, who});
@@ -4569,10 +4572,10 @@ async function generateRdConfirmSheets(){
     const probH=(probSkipN||myProb.length)?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
       <table><tbody>
       ${probSkipN?`<tr><td>試用期內打樣（不計獎金）</td><td class="r">${probSkipN} 件</td></tr>`:''}
-      ${myProb.length?`<tr><td>試用期內確樣之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
+      ${myProb.length?`<tr><td>試用期內出貨認列之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
       <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎</td></tr>
       </tbody></table>
-      <p class="note">依制度，試用期（到職起三個月）內產生的打樣與確樣不計獎金；自正式錄用日起產生者始納入計算。</p>`:'';
+      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       <h2>一、打樣獎金（每月）</h2>
