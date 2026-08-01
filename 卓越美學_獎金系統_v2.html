@@ -1642,7 +1642,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
       <div class="form-group">
         <label class="form-label">主責變動程度（影響主責 50% 怎麼分）</label>
-        <select class="form-select" id="cf-change-level" onchange="onConfirmChangeLevel()">
+        <select class="form-select" id="cf-change-level" onchange="onConfirmChangeLevel(true)">
           <option value="minor">輕微改動 — 原主責拿滿 50%</option>
           <option value="medium_light">中度偏輕 — 原主責 40% + 協作 10%</option>
           <option value="medium_heavy">中度偏重 — 原主責 35% + 協作 15%</option>
@@ -1670,6 +1670,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
         <div class="form-group">
           <label class="form-label" style="font-size:13px">協作者拆分（分主責 50% 段；原主責不用列在此）</label>
+          <div id="cf-split-formula" style="font-size:12px;background:#fbf6ea;border:1px solid #e0d3b0;border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.7"></div>
           <div id="cf-split-rows"></div>
           <button type="button" class="btn btn-outline btn-sm" onclick="addSplitRow()" style="margin-top:6px">＋ 加協作者</button>
         </div>
@@ -5410,13 +5411,55 @@ function updateConfirmPool(){
   if(!base){prev.innerHTML='選正式編號後顯示預估池子';return;}
   const pool=A*base;
   prev.innerHTML=`預估池子 ＝ A值 ${A} × 基數 ${base} ＝ <strong>${pool.toLocaleString()}</strong>　→　主責 ${(pool*0.5).toLocaleString()}／打樣 ${(pool*0.3).toLocaleString()}／確樣 ${(pool*0.2).toLocaleString()}（一筆成交算一次，不乘件數）`;
+  renderSplitFormula(); // 池子金額變動 → 同步刷新拆分公式裡的實領金額
 }
 
-function onConfirmChangeLevel(){
+// 制度 v10 主責 50% 拆分表：比例是「占成交池」，但協作欄位存的是「占主責段」（主責段＝池子 50%），
+// 兩者差兩倍，課長照下拉字面填 25 會讓協作只拿到一半。故由系統換算後自動填，並把公式攤在畫面上。
+const COLLAB_PRESET={minor:{owner:50,collab:0}, medium_light:{owner:40,collab:10}, medium_heavy:{owner:35,collab:15}, co_dev:{owner:25,collab:25}};
+function onConfirmChangeLevel(fromUser){
   const lv=document.getElementById('cf-change-level').value;
   document.getElementById('cf-split-section').style.display=lv==='minor'?'none':'block';
   document.getElementById('cf-owner-override-wrap').style.display=lv==='major'?'block':'none';
+  // 只有使用者「主動改變動程度」才覆寫比例；載入既有確樣時不能動，否則會蓋掉當初存的值
+  if(fromUser) applyCollabPreset();
+  renderSplitFormula();
   syncOwnerSetField();
+}
+// 依變動程度把協作總占比（換算成占主責段）平均分配到各協作列
+function applyCollabPreset(){
+  const lv=document.getElementById('cf-change-level').value;
+  const pre=COLLAB_PRESET[lv]; if(!pre||!pre.collab) return;
+  const rows=[...document.querySelectorAll('.cf-split-row')]; if(!rows.length) return;
+  const ofSeg=pre.collab/50*100;            // 占池子 → 占主責段
+  const each=Math.round(ofSeg/rows.length*100)/100;
+  rows.forEach(r=>{ const i=r.querySelector('.cf-split-pct'); if(i) i.value=each; });
+}
+// 把「制度比例 → 該填多少 → 實際各領多少」三層一次講清楚，課長不必再問
+function renderSplitFormula(){
+  const box=document.getElementById('cf-split-formula'); if(!box) return;
+  const lv=document.getElementById('cf-change-level').value;
+  const lvName={minor:'輕微改動',medium_light:'中度偏輕',medium_heavy:'中度偏重',co_dev:'接近共同開發',major:'大幅改動'}[lv]||lv;
+  if(lv==='major'){
+    box.innerHTML=`<strong>${lvName}</strong>：重新認定主責，新主責拿滿主責段 50%，<strong>不需填協作拆分</strong>。`;
+    return;
+  }
+  const pre=COLLAB_PRESET[lv]; if(!pre){box.innerHTML='';return;}
+  const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
+  const ft=document.getElementById('cf-formula-override').value||p?.formula_type||cfState.sample?.formula_type;
+  const base=FORMULA_BASE[ft], A=appSettings.aValue||3000;
+  const ofSeg=pre.collab/50*100;
+  const n=[...document.querySelectorAll('.cf-split-row')].length||1;
+  let money='';
+  if(base){
+    const pool=A*base, seg=pool*0.5;
+    money=`<br>池子 ${pool.toLocaleString()} → 主責段 ${seg.toLocaleString()}　⇒　`+
+      `原主責實領 <strong>${Math.round(pool*pre.owner/100).toLocaleString()}</strong>、`+
+      `協作共 <strong>${Math.round(pool*pre.collab/100).toLocaleString()}</strong>${n>1?`（${n} 人平分，每人 ${Math.round(pool*pre.collab/100/n).toLocaleString()}）`:''}`;
+  }
+  box.innerHTML=`📐 <strong>${lvName}</strong>　制度：原主責 ${pre.owner}% ＋ 協作 ${pre.collab}%（占<u>成交池</u>）<br>`+
+    `下方欄位填的是<strong>占主責段</strong>的 %，主責段只有池子的一半，所以 ${pre.collab}% ÷ 50% ＝ <strong>應填 ${ofSeg}</strong>`+
+    `${n>1?`（${n} 人平分 → 每人 ${Math.round(ofSeg/n*100)/100}）`:''}　<span style="color:var(--ink-faint)">系統已自動帶入</span>${money}`;
 }
 
 function onConfirmArchChange(){
@@ -5432,9 +5475,12 @@ function addSplitRow(empId='', pct=''){
   div.className='cf-split-row';
   div.style.cssText='display:flex;gap:8px;margin-bottom:6px;align-items:center';
   div.innerHTML=`<select class="form-select cf-split-emp" style="flex:2"><option value="">協作者</option>${rdActive.map(e=>`<option value="${e.id}"${e.id===empId?' selected':''}>${e.name}</option>`).join('')}</select>`+
-    `<input class="form-input cf-split-pct" type="number" min="0" max="100" placeholder="% 占主責段" style="flex:1" value="${pct}" />`+
-    `<button type="button" class="btn btn-outline btn-sm" onclick="this.parentNode.remove()">✕</button>`;
+    `<input class="form-input cf-split-pct" type="number" min="0" max="100" placeholder="% 占主責段" style="flex:1" value="${pct}" oninput="renderSplitFormula()" />`+
+    `<button type="button" class="btn btn-outline btn-sm" onclick="this.parentNode.remove();applyCollabPreset();renderSplitFormula()">✕</button>`;
   document.getElementById('cf-split-rows').appendChild(div);
+  // 空白＝使用者新增的協作者 → 依制度重新平分；帶值＝載入既有確樣，不能動
+  if(pct==='') applyCollabPreset();
+  renderSplitFormula();
 }
 
 // 課長對「已確樣」紀錄：只重寫打樣 30% 分潤 + 備註，不動編號/確樣人/確樣狀態（那些走改綁申請）
@@ -5521,14 +5567,36 @@ async function saveConfirm(){
       ownerTxt+=collabs.map(r=>`協作者：<strong>${employees.find(e=>e.id===r.employee_id)?.name||''}</strong> 實領 <strong>${Math.round(ownerSeg*(Number(r.pct)||0)/100).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（主責段 ${r.pct}%）</span>`).join('<br>')+'<br>';
     }
   }
+  // 打樣段 30% 明細：與 computeDealSegments 同規則（助理不計分潤、其餘按打樣次數比例分）
+  let samplerTxt='';
+  if(!upd.is_oem && base){
+    const sampleSeg=A*base*0.3;
+    const picked=(cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id));
+    const byEmp={};
+    picked.forEach(x=>{ if(x.employees?.role_level==='assistant')return; const k=x.employee_id; if(!k)return; (byEmp[k]=byEmp[k]||{n:0,name:x.employees?.name||'-'}).n++; });
+    const tot=Object.values(byEmp).reduce((t,v)=>t+v.n,0);
+    const asst=[...new Set(picked.filter(x=>x.employees?.role_level==='assistant').map(x=>x.employees?.name).filter(Boolean))];
+    samplerTxt = tot
+      ? Object.values(byEmp).map(v=>`打樣　<strong>${v.name}</strong> 實領 <strong>${Math.round(sampleSeg*v.n/tot).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（${v.n} 次／共 ${tot} 次）</span>`).join('<br>')
+      : `打樣　<strong>歸主責</strong> 實領 <strong>${Math.round(sampleSeg).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（無非助理打樣人）</span>`;
+    if(asst.length) samplerTxt+=`<br><span style="color:#b3541e;font-size:11px">※ ${asst.join('、')}為研發助理，制度規定不計打樣分潤；助理另領「全團隊成交池 × 5%」，在團隊彙整結算</span>`;
+  }
+  const confirmTxt = (!upd.is_oem&&base) ? `確樣　<strong>${confName}</strong> 實領 <strong>${Math.round(A*base*0.2).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（誰確誰領）</span>` : `確樣人：<strong>${confName}</strong>`;
+  const basisTxt = (!upd.is_oem&&base) ? `<div style="font-size:11px;color:var(--ink-faint);border-top:1px dashed #ddd;margin-top:8px;padding-top:6px;line-height:1.7">`+
+      `<strong>計算依據</strong>（制度 v10）<br>`+
+      `池子 ＝ A值 ${A} × 劑型基數 ${base} ＝ ${(A*base).toLocaleString()}，一筆成交算一次、不乘件數<br>`+
+      `三段：主責 50%（配方撰寫者）／打樣 30%（實際打樣者，多人按次數分）／確樣 20%（誰確誰領）<br>`+
+      `主責段依變動程度拆分：輕微 50%｜中度偏輕 40+協作10｜中度偏重 35+協作15｜近共同開發 25+協作25｜大幅＝重新認定主責（以上為占成交池）`+
+      `</div>` : '';
   const okCard=await confirmCard('確認確樣內容',
     `<div style="border:1px solid #c99a2e;background:#fbf6ea;border-radius:6px;padding:10px;margin-bottom:10px">`+
     `打樣：<strong>${s.sample_code}</strong>${s.version?' '+s.version:''}<br>`+
     `<span style="color:#b3541e;font-weight:600;font-size:15px">打樣日 ${s.sample_date}</span><br>`+
     `品名：${s.item_name||'—'}</div>`+
-    `正式編號：<strong>${code}</strong> · ${prod?.product_name||''}<br>`+
-    ownerTxt+
-    `確樣人：<strong>${confName}</strong>　變動：${lvTxt}<br>${poolTxt}`,
+    `正式編號：<strong>${code}</strong> · ${prod?.product_name||''}　<span style="color:var(--ink-faint)">變動：${lvTxt}</span><br>`+
+    `<div style="border:1px solid #e0d3b0;border-radius:6px;padding:8px 10px;margin:8px 0;line-height:1.9">`+
+    ownerTxt+samplerTxt+(samplerTxt?'<br>':'')+confirmTxt+`</div>`+
+    poolTxt+basisTxt,
     '確認無誤、儲存');
   if(!okCard) return;
   const {error}=await sb.from('rd_sample_customers').update(upd).eq('id',scId);
