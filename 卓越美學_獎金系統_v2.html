@@ -3317,7 +3317,9 @@ async function saveRdSample(){
     const {error}=await sb.from('rd_samples').update({
       sample_date:date,employee_id:empId,formula_type:formula,
       version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
-      approval_reason:reason||null,
+      // DB 的 chk_d3plus_needs_reason 是 NOT VALID：舊資料（delay_days>=3 但 approval_reason 為空）建檔時沒被檢查，
+      // 一旦 UPDATE 就會整列重驗而失敗。編輯時若補登原因為空，改用「修改原因」補上，讓舊打樣改得動。
+      approval_reason:reason||editReason||null,
       assisted_for_employee_id:assistedFor,
       approval_status:'pending_review',
       approved_by:null,approved_at:null,rejection_note:null,
@@ -4632,7 +4634,7 @@ async function loadConfirmProgress(){
   const el=document.getElementById('cp-content'); if(!el)return;
   el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中…</div></div>';
   const {data,error}=await sb.from('rd_sample_customers')
-    .select('id, sample_id, confirm_status, official_product_code, confirmed_at, confirmed_by, formula_type_override, recognized_at, change_lock, owner_override_employee_id, rd_customers(short_name), rd_samples(sample_code, sample_date, item_name, employee_id, formula_type)');
+    .select('id, sample_id, confirm_status, official_product_code, confirmed_at, confirmed_by, formula_type_override, recognized_at, change_lock, owner_override_employee_id, change_level, rd_customers(short_name), rd_samples(sample_code, sample_date, item_name, employee_id, formula_type)');
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   _cpRows=(data||[]).filter(r=>r.rd_samples)
     .sort((a,b)=>(b.rd_samples.sample_date||'').localeCompare(a.rd_samples.sample_date||''));
@@ -4655,10 +4657,14 @@ function cpOwnerOf(row){
   const code=row.official_product_code;
   const p=products.find(x=>x.product_code===code);
   if(!p) return {name:'', missing:true, note:'主檔查無此編號'};
-  const fromMaster=!!p.primary_owner_employee_id;
-  const e=employees.find(x=>x.id===(p.primary_owner_employee_id||row.owner_override_employee_id));
+  // 大幅改動＝重新認定主責，必須優先取確樣時指定的新主責，否則畫面會顯示舊主責、與發獎計算（computeDealSegments）不一致
+  const useOverride = row.change_level==='major' && !!row.owner_override_employee_id;
+  const fromMaster = !useOverride && !!p.primary_owner_employee_id;
+  const e=employees.find(x=>x.id===(useOverride?row.owner_override_employee_id:(p.primary_owner_employee_id||row.owner_override_employee_id)));
   if(!e) return {name:'', missing:true, note:'未設研發主責'};
-  return {name:e.name+(e.is_active===false?' 🔴離職':'')+(fromMaster?'':'<div style="font-size:10px;color:var(--ink-faint)">確樣時指定</div>'), missing:false};
+  const tag = useOverride ? '<div style="font-size:10px;color:#b3541e">大幅改動·重新認定</div>'
+            : (fromMaster ? '' : '<div style="font-size:10px;color:var(--ink-faint)">確樣時指定</div>');
+  return {name:e.name+(e.is_active===false?' 🔴離職':'')+tag, missing:false};
 }
 function renderConfirmProgress(){
   const el=document.getElementById('cp-content'); if(!el)return;
@@ -5385,8 +5391,11 @@ function updateSamplerSummary(){
   const byEmp={};
   picked.forEach(x=>{ if(x.employees?.role_level==='assistant')return; const k=x.employee_id; if(!k)return; (byEmp[k]=byEmp[k]||{n:0,name:x.employees?.name||'-'}).n++; });
   const total=Object.values(byEmp).reduce((s,v)=>s+v.n,0);
-  if(!total){ sum.innerHTML='<span style="color:#b3541e">目前無「非助理」打樣人 → 打樣段 30% 將歸主責</span>'; return; }
-  sum.innerHTML='打樣 30% 分配：'+Object.values(byEmp).map(v=>`${v.name} ${v.n}次＝${Math.round(v.n/total*100)}%`).join('　');
+  // 助理被靜默濾掉時，畫面只剩另一人 100%，看起來像「勾了兩筆卻沒分」→ 明講排除了誰、為什麼
+  const asstNames=[...new Set(picked.filter(x=>x.employees?.role_level==='assistant').map(x=>x.employees?.name).filter(Boolean))];
+  const asstTip=asstNames.length?`<div style="color:#b3541e;font-size:11px;margin-top:4px">⚠ 已排除助理打樣：${asstNames.join('、')}　制度規定助理不計打樣分潤，該份額併入其餘打樣人</div>`:'';
+  if(!total){ sum.innerHTML='<span style="color:#b3541e">目前無「非助理」打樣人 → 打樣段 30% 將歸主責</span>'+asstTip; return; }
+  sum.innerHTML='打樣 30% 分配：'+Object.values(byEmp).map(v=>`${v.name} ${v.n}次＝${Math.round(v.n/total*100)}%`).join('　')+asstTip;
 }
 function updateConfirmPool(){
   const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
@@ -5497,13 +5506,28 @@ async function saveConfirm(){
   const A=appSettings.aValue||3000, ft=upd.formula_type_override||prod?.formula_type||s.formula_type, base=FORMULA_BASE[ft];
   const lvTxt={minor:'輕微（原主責滿50%）',medium_light:'中度偏輕',medium_heavy:'中度偏重',co_dev:'近共同開發',major:'大幅換主責'}[lv]||lv;
   const poolTxt=upd.is_oem?'代工：窗口領 100%（每件900）':(base?`池子 ${(A*base).toLocaleString()} → 主 ${(A*base*0.5).toLocaleString()}／打 ${(A*base*0.3).toLocaleString()}／確 ${(A*base*0.2).toLocaleString()}`:'—');
+  // 主責段實際分配：原本寫死「領主責 50%」，協作拆分後仍照舊顯示，看不出協作分走多少。
+  // 協作 pct 的定義是「占主責段的百分比」（見 computeDealSegments），與下拉文字「原主責25%+協作25%」是不同基準，
+  // 故在此把兩人各自實領金額算出來攤開，讓基準落差在按下儲存前就看得見。
+  let ownerTxt='';
+  if(!upd.is_oem && base){
+    const ownerSeg=A*base*0.5;
+    const collabs=(lv==='minor'?[]:splitRows);
+    const collabSum=collabs.reduce((t,r)=>t+(Number(r.pct)||0),0);
+    const primaryId=(lv==='major')?(document.getElementById('cf-owner-override').value||ownerSet):(prod?.primary_owner_employee_id||ownerSet);
+    const primaryName=employees.find(e=>e.id===primaryId)?.name||'（未指定）';
+    ownerTxt=`研發主責：<strong style="color:#b3541e">${primaryName}</strong> 實領 <strong>${Math.round(ownerSeg*(1-collabSum/100)).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（主責段 ${100-collabSum}%）</span>${ownerSet&&!prod?.primary_owner_employee_id?'　<span style="font-size:11px;color:var(--ink-faint)">主檔未設·本次指定</span>':''}<br>`;
+    if(collabs.length){
+      ownerTxt+=collabs.map(r=>`協作者：<strong>${employees.find(e=>e.id===r.employee_id)?.name||''}</strong> 實領 <strong>${Math.round(ownerSeg*(Number(r.pct)||0)/100).toLocaleString()}</strong>　<span style="color:var(--ink-faint)">（主責段 ${r.pct}%）</span>`).join('<br>')+'<br>';
+    }
+  }
   const okCard=await confirmCard('確認確樣內容',
     `<div style="border:1px solid #c99a2e;background:#fbf6ea;border-radius:6px;padding:10px;margin-bottom:10px">`+
     `打樣：<strong>${s.sample_code}</strong>${s.version?' '+s.version:''}<br>`+
     `<span style="color:#b3541e;font-weight:600;font-size:15px">打樣日 ${s.sample_date}</span><br>`+
     `品名：${s.item_name||'—'}</div>`+
     `正式編號：<strong>${code}</strong> · ${prod?.product_name||''}<br>`+
-    (ownerSet?`研發主責：<strong style="color:#b3541e">${employees.find(e=>e.id===ownerSet)?.name||''}</strong>（主檔未設，本次指定 → 領主責 50%）<br>`:'')+
+    ownerTxt+
     `確樣人：<strong>${confName}</strong>　變動：${lvTxt}<br>${poolTxt}`,
     '確認無誤、儲存');
   if(!okCard) return;
