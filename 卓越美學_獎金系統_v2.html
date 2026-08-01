@@ -593,9 +593,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="page" id="page-orders">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <div class="section-title" style="color:var(--orange)">📦 訂單管理</div>
-          <button class="btn btn-gold manager-only" onclick="openModal('newOrderModal')">＋ 新增訂單</button>
         </div>
-        <div class="section-desc">登記每筆訂單，系統自動追蹤出貨進度與獎金歸屬</div>
+        <div class="section-desc">資料來源＝「訂單匯入」的訂單明細，與獎金件數計算同一份；本頁為檢視，新增請走訂單匯入</div>
         <div id="orders-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="inner-tabs">
           <div class="inner-tab active" onclick="switchInner(this,'orders-active-section')">進行中</div>
@@ -618,10 +617,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- SHIPMENTS -->
       <div class="page" id="page-shipments">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <div class="section-title" style="color:var(--teal)">🚚 出貨登記</div>
-          <button class="btn btn-gold manager-only" onclick="openModal('newShipmentModal')">＋ 登記出貨</button>
+          <div class="section-title" style="color:var(--teal)">🚚 出貨紀錄</div>
         </div>
-        <div class="section-desc">每次出貨關聯到對應訂單，系統自動累計件數避免獎金計算錯誤</div>
+        <div class="section-desc">資料來源＝「銷貨匯入」的會計銷貨明細，與獎金認列同一份；本頁為檢視，新增請走銷貨匯入</div>
         <div id="shipments-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
@@ -2042,22 +2040,38 @@ async function saveEmployee() {
 }
 
 // ORDERS
+// 訂單與出貨的單一資料源是「匯入」的 order_lines / sales_records（獎金件數、研發認列、業務金額都吃它們）。
+// 舊的 orders / shipments 是早期手動登記路徑、實務未使用（皆 0 筆），故本頁改讀匯入資料，
+// 並在此映射成舊結構餵給既有畫面邏輯，避免改動 render 造成回歸。
+function mapLineToOrder(l){
+  const p = products.find(x => x.product_code === l.product_code);
+  const plannerId = l.planner_override_id || p?.planner_employee_id;
+  const ownerName = employees.find(e => e.id === p?.primary_owner_employee_id)?.name;
+  return {
+    id: l.id,
+    order_date: l.sign_date,
+    order_no: l.order_no,
+    customer_name: l.customer_name,
+    product_name: l.item_name_raw || p?.product_name || l.product_code || '—',
+    formula_type: p?.formula_type,
+    total_qty: l.order_qty || 0,
+    _shipped: l.shipped_qty || 0,
+    sales: { name: l.sales_person },
+    planning: { name: employees.find(e => e.id === plannerId)?.name },
+    order_rd_staff: ownerName ? [{ is_final_confirmer: true, employees: { name: ownerName } }] : [],
+    // 已結算件數＝該品項出貨已達門檻並計獎完畢，視為完成
+    status: l.bonus_settled_at ? 'completed' : 'active'
+  };
+}
 async function loadOrders() {
-  let data;
-  if (currentRole === 'rd_manager') {
-    // rd_manager 走 RPC 取剝離金額後的 orders
-    const r = await sb.rpc('get_orders_for_rd', { p_year: appSettings.year, p_quarter: appSettings.quarter });
-    data = r.data || [];
-  } else {
-    const r = await sb.from('orders').select('*, sales:employees!orders_sales_id_fkey(name), planning:employees!orders_planning_id_fkey(name), order_rd_staff(is_final_confirmer, sample_count, employees(name))').eq('year', appSettings.year).eq('quarter', appSettings.quarter).order('order_date', { ascending:false });
-    data = r.data;
-  }
-  const orders = data || [];
+  const { data: lines } = await sb.from('order_lines')
+    .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, unit_price, sales_person, planner_override_id, bonus_settled_at, year, quarter')
+    .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
+    .order('sign_date', { ascending: false });
+  const orders = (lines || []).map(mapLineToOrder);
 
-  // Get shipments for progress
-  const { data: shipData } = await sb.from('shipments').select('order_id, ship_qty').eq('year', appSettings.year).eq('quarter', appSettings.quarter);
   const shipMap = {};
-  (shipData||[]).forEach(s => { shipMap[s.order_id] = (shipMap[s.order_id]||0) + s.ship_qty; });
+  orders.forEach(o => { shipMap[o.id] = o._shipped; });
 
   const active = orders.filter(o => o.status !== 'completed');
   const completed = orders.filter(o => o.status === 'completed');
@@ -2553,25 +2567,36 @@ async function saveOrder() {
 
 // SHIPMENTS
 async function loadShipments() {
-  let data;
-  if (currentRole === 'rd_manager') {
-    // rd_manager 走 RPC（含 join orders 的客戶/品項，無金額）
-    const r = await sb.rpc('get_shipments_for_rd', { p_year: appSettings.year, p_quarter: appSettings.quarter });
-    data = r.data || [];
-  } else {
-    const r = await sb.from('shipments').select('*, order:orders(customer_name,product_name,total_qty)').eq('year',appSettings.year).eq('quarter',appSettings.quarter).order('ship_date',{ascending:false});
-    data = r.data;
-  }
+  // 同 loadOrders：出貨的真實來源是會計銷貨明細 sales_records（舊 shipments 表未使用）
+  const { data: recs } = await sb.from('sales_records')
+    .select('id, ship_date, invoice_no, customer_name, item_name_raw, product_code, qty, note')
+    .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
+    .order('ship_date', { ascending: false });
+  // 訂單量與累計出貨：以同季 order_lines 依「品號＋客戶」歸戶，用來顯示訂單進度
+  const { data: lines } = await sb.from('order_lines')
+    .select('product_code, customer_name, order_qty, shipped_qty')
+    .eq('year', appSettings.year).eq('quarter', appSettings.quarter);
+  const key = (c, n) => `${c||''}|${n||''}`;
+  const ordMap = {};
+  (lines || []).forEach(l => {
+    const k = key(l.product_code, l.customer_name);
+    const o = ordMap[k] = ordMap[k] || { total: 0, shipped: 0 };
+    o.total += l.order_qty || 0; o.shipped += l.shipped_qty || 0;
+  });
+  const data = (recs || []).map(r => {
+    const m = ordMap[key(r.product_code, r.customer_name)] || { total: 0, shipped: 0 };
+    return {
+      id: r.id, ship_date: r.ship_date, shipment_no: r.invoice_no,
+      ship_qty: r.qty || 0, is_on_time: true, is_refunded: (r.qty || 0) < 0,
+      _totalShipped: m.shipped, _total: m.total,
+      order: { customer_name: r.customer_name, product_name: r.item_name_raw, total_qty: m.total }
+    };
+  });
   const tbody = document.getElementById('shipments-tbody');
-  if (!data||!data.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">本季尚無出貨紀錄</td></tr>'; return; }
-
-  // Get all shipments per order for progress
-  const { data:allShip } = await sb.from('shipments').select('order_id,ship_qty').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
-  const shipMap = {};
-  (allShip||[]).forEach(s => { shipMap[s.order_id]=(shipMap[s.order_id]||0)+s.ship_qty; });
+  if (!data.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">本季尚無出貨紀錄</td></tr>'; return; }
 
   tbody.innerHTML = data.map(s => {
-    const totalShipped = shipMap[s.order_id]||0;
+    const totalShipped = s._totalShipped||0;
     const total = s.order?.total_qty||0;
     const pct = total>0?Math.round(totalShipped/total*100):0;
     return `<tr>
@@ -2581,8 +2606,8 @@ async function loadShipments() {
       <td>${s.order?.product_name||'—'}</td>
       <td class="td-right">${fmtNum(s.ship_qty)}</td>
       <td><div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">${fmtNum(totalShipped)}/${fmtNum(total)}（${pct}%）</div><div class="progress-bar" style="height:5px;width:100px"><div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--gold)'}"></div></div></td>
-      <td class="td-center"><span class="badge badge-${s.is_on_time?'green':'red'}">${s.is_on_time?'準時':'延遲'}</span>${s.is_refunded?' <span class="badge badge-red">退貨</span>':''}</td>
-      <td class="td-center manager-only"><button class="btn btn-outline btn-sm" onclick="toggleShipmentRefund('${s.id}',${!!s.is_refunded})" style="${s.is_refunded?'':'color:var(--red)'}">${s.is_refunded?'取消退貨':'標記退貨'}</button></td>
+      <td class="td-center">${s.shipment_no?`<span class="badge badge-blue">已開票 ${s.shipment_no}</span>`:'<span style="color:var(--ink-faint)">—</span>'}${s.is_refunded?' <span class="badge badge-red">退貨／折讓</span>':''}</td>
+      <td class="td-center"><span style="color:var(--ink-faint);font-size:11px">來自會計銷貨明細</span></td>
     </tr>`;
   }).join('');
 }
