@@ -5391,6 +5391,13 @@ function syncOwnerSetField(){
     sel.innerHTML='<option value="">請指定研發主責</option>'+employees.filter(e=>e.dept==='研發部'&&e.is_active).map(e=>`<option value="${e.id}">${e.name}</option>`).join('');
     sel.value=cur;
   }
+  // 這個欄位是「選定正式編號後」才出現的，開視窗當下還隱藏著，
+  // 所以預設帶入必須放在這裡而非 onConfirmCustomerChange，否則新確樣永遠帶不到。
+  const _rc=(cfState.scRows||[]).find(r=>r.id===cfState.activeScId);
+  if(!sel.value && _rc?.confirm_status!=='confirmed' && cfState.sample?.assisted_for_employee_id){
+    const _c=employees.find(e=>e.id===cfState.sample.assisted_for_employee_id);
+    if(_c && _c.dept==='研發部' && _c.is_active) sel.value=_c.id;
+  }
 }
 
 // 打樣 30% 多人分潤：候選勾選清單
