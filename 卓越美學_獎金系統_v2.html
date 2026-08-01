@@ -506,7 +506,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   <nav class="nav-tabs">
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
-    <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨登記</div>
+    <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨紀錄</div>
     <div class="nav-tab manager-only" onclick="switchPage('order-import')" id="tab-order-import"><span class="tab-dot" style="background:#8a6d3b"></span>訂單匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('products')" id="tab-products"><span class="tab-dot" style="background:#6b4f8a"></span>產品主檔</div>
@@ -542,8 +542,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-desc">新增及追蹤訂單</div>
         </div>
         <div class="sidebar-card" onclick="switchPage('shipments');setSidebarActive(this)">
-          <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>出貨登記</div>
-          <div class="sidebar-card-desc">登記分批出貨</div>
+          <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>出貨紀錄</div>
+          <div class="sidebar-card-desc">會計銷貨明細</div>
         </div>
         <div class="sidebar-card rdmgr-hide" onclick="switchPage('rd');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d6a8a"></span>研發部獎金</div>
@@ -624,7 +624,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>出貨日期</th><th>出貨單號</th><th>客戶</th><th>品名</th><th>本次件數</th><th>訂單進度</th><th class="td-center">準時/狀態</th><th class="td-center manager-only">動作</th></tr></thead>
+            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>品名</th><th>本次件數</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
             <tbody id="shipments-tbody"><tr><td colspan="8" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
@@ -2574,10 +2574,10 @@ async function loadShipments() {
     .select('id, ship_date, invoice_no, customer_name, item_name_raw, product_code, qty, note')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
     .order('ship_date', { ascending: false });
-  // 訂單量與累計出貨：以同季 order_lines 依「品號＋客戶」歸戶，用來顯示訂單進度
+  // 訂單量與累計出貨：依「品號＋客戶」歸戶。不可限本季——訂單常在前一季（甚至前一年）簽回、本季才出貨，
+  // 只撈本季會查無對應而顯示 0/0（例：金箔潔顏露 1 月簽單、6 月出貨）。
   const { data: lines } = await sb.from('order_lines')
-    .select('product_code, customer_name, order_qty, shipped_qty')
-    .eq('year', appSettings.year).eq('quarter', appSettings.quarter);
+    .select('product_code, customer_name, order_qty, shipped_qty');
   const key = (c, n) => `${c||''}|${n||''}`;
   const ordMap = {};
   (lines || []).forEach(l => {
@@ -2613,7 +2613,7 @@ async function loadShipments() {
       <td>${s.order?.product_name||'—'}</td>
       <td class="td-right">${fmtNum(s.ship_qty)}</td>
       <td><div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">${fmtNum(totalShipped)}/${fmtNum(total)}（${pct}%）</div><div class="progress-bar" style="height:5px;width:100px"><div class="progress-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--gold)'}"></div></div></td>
-      <td class="td-center">${s.shipment_no?`<span class="badge badge-blue">已開票 ${s.shipment_no}</span>`:'<span style="color:var(--ink-faint)">—</span>'}${s.is_refunded?' <span class="badge badge-red">退貨／折讓</span>':''}</td>
+      <td class="td-center">${s.shipment_no?'<span class="badge badge-blue">已開票</span>':'<span class="badge badge-gold">未開票</span>'}${s.is_refunded?' <span class="badge badge-red">退貨／折讓</span>':''}</td>
       <td class="td-center"><span style="color:var(--ink-faint);font-size:11px">來自會計銷貨明細</span></td>
     </tr>`;
   }).join('');
