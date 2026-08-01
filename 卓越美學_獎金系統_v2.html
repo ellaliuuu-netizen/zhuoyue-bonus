@@ -2064,8 +2064,10 @@ function mapLineToOrder(l){
   };
 }
 async function loadOrders() {
+  // 不取 unit_price／amount：本頁只顯示件數與進度，且 order_lines 的讀取政策對所有登入者開放，
+  // 取了金額等於送到研發課長的瀏覽器（原本走 RPC 剝離金額就是為了防這件事）。
   const { data: lines } = await sb.from('order_lines')
-    .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, unit_price, sales_person, planner_override_id, bonus_settled_at, year, quarter')
+    .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, sales_person, planner_override_id, bonus_settled_at')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
     .order('sign_date', { ascending: false });
   const orders = (lines || []).map(mapLineToOrder);
@@ -2593,7 +2595,12 @@ async function loadShipments() {
     };
   });
   const tbody = document.getElementById('shipments-tbody');
-  if (!data.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">本季尚無出貨紀錄</td></tr>'; return; }
+  if (!data.length) {
+    // 銷貨明細含金額，讀取政策僅開放經理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
+    const noPerm = currentRole === 'rd_manager';
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
+    return;
+  }
 
   tbody.innerHTML = data.map(s => {
     const totalShipped = s._totalShipped||0;
