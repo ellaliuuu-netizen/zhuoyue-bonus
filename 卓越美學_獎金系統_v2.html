@@ -5239,7 +5239,9 @@ async function openConfirmModal(sampleId){
   if(_ce)showToast('載入打樣候選失敗：'+_ce.message);
   cfState.allSamples=_cand||[];
   if(!cfState.scRows.length){showToast('這筆打樣還沒掛客戶，請先用「修改」加客戶再確樣');return;}
-  document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜<span style="color:#b3541e;font-weight:600">打樣日 ${s.sample_date}</span>｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
+  // 配方擬定者（assisted_for）＝制度 v10 的「主責＝配方撰寫者」候選，領 50%。登打時已填卻不顯示會讓課長憑記憶指定主責，故併列於此
+  const _conceptOwner=employees.find(e=>e.id===s.assisted_for_employee_id);
+  document.getElementById('cf-sample-info').innerHTML=`樣品 <strong>${s.sample_code}</strong>${s.version?' '+s.version:''}｜<span style="color:#b3541e;font-weight:600">打樣日 ${s.sample_date}</span>｜品項 ${s.item_name||'—'}｜打樣者 ${employees.find(e=>e.id===s.employee_id)?.name||'-'}｜<span style="color:#2e7d52;font-weight:600">配方擬定者 ${_conceptOwner?_conceptOwner.name:'—（登打時未填）'}</span>｜原打樣劑型 ${rdFormulaLabel(s.formula_type)}`;
   const custSel=document.getElementById('cf-customer');
   custSel.innerHTML=cfState.scRows.map(rc=>`<option value="${rc.id}">${rc.rd_customers?.short_name||'(未命名客戶)'}${rc.confirm_status==='confirmed'?' ✅已確樣':''}</option>`).join('');
   document.getElementById('cf-product').innerHTML='<option value="">請選擇正式編號</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code} · ${p.product_name}</option>`).join('');
@@ -5308,8 +5310,15 @@ function onConfirmCustomerChange(){
   onConfirmChangeLevel();
   onConfirmArchChange();
   // 重開已確樣：主檔無主責的編號，把當初指定的主責帶回來
+  // 尚未確樣且從未指定過 → 預設帶入該打樣登打時填的「配方擬定者」（制度 v10：主責＝配方撰寫者），課長仍可自行改選
   if(document.getElementById('cf-owner-set-wrap').style.display!=='none'){
-    document.getElementById('cf-owner-set').value=rc.owner_override_employee_id||'';
+    let _ownerVal=rc.owner_override_employee_id||'';
+    if(!_ownerVal && !isConfirmed && cfState.sample?.assisted_for_employee_id){
+      // 下拉只含研發部在職者，帶入前先確認人選在選項內，否則設值會落空
+      const _c=employees.find(e=>e.id===cfState.sample.assisted_for_employee_id);
+      if(_c && _c.dept==='研發部' && _c.is_active) _ownerVal=_c.id;
+    }
+    document.getElementById('cf-owner-set').value=_ownerVal;
   }
   // splitsOnly 模式：鎖住其餘欄位為唯讀，只留「打樣分潤勾選 + 備註」可編輯，避免課長誤以為改了編號/確樣人也會存
   const _lock=cfState.splitsOnly;
