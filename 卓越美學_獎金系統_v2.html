@@ -2578,18 +2578,20 @@ async function loadShipments() {
   // 只撈本季會查無對應而顯示 0/0（例：金箔潔顏露 1 月簽單、6 月出貨）。
   const { data: lines } = await sb.from('order_lines')
     .select('product_code, customer_name, order_qty, shipped_qty');
-  const key = (c, n) => `${c||''}|${n||''}`;
-  // 同一品項對同一客戶可能有多張訂單（不同訂購日）。會計銷貨沒有訂單編號，無法逐筆歸到某一張，
+  // 只用產品編號歸戶，與件數計算（matchSalesToOrders）一致：會計銷貨與訂單簿的客戶名寫法常不同
+  // （例：銷貨「飲美科」vs 訂單「飲美科妍」），若把客戶名納入比對鍵會查無對應而顯示 0/0。
+  const key = (c) => `${c||''}`;
+  // 同一品項可能有多張訂單（不同訂購日）。會計銷貨沒有訂單編號，無法逐筆歸到某一張，
   // 故此處累加呈現，但一併記錄張數與「已結清張數」，避免「兩張各 5,000、一張出滿」被顯示成 50% 而誤判為只出一半。
   const ordMap = {};
   (lines || []).forEach(l => {
-    const k = key(l.product_code, l.customer_name);
+    const k = key(l.product_code);
     const o = ordMap[k] = ordMap[k] || { total: 0, shipped: 0, n: 0, done: 0 };
     o.total += l.order_qty || 0; o.shipped += l.shipped_qty || 0; o.n += 1;
     if ((l.order_qty || 0) > 0 && (l.shipped_qty || 0) >= (l.order_qty || 0) * 0.8) o.done += 1;
   });
   const data = (recs || []).map(r => {
-    const m = ordMap[key(r.product_code, r.customer_name)] || { total: 0, shipped: 0, n: 0, done: 0 };
+    const m = ordMap[key(r.product_code)] || { total: 0, shipped: 0, n: 0, done: 0 };
     return {
       id: r.id, ship_date: r.ship_date, shipment_no: r.invoice_no,
       ship_qty: r.qty || 0, is_on_time: true, is_refunded: (r.qty || 0) < 0,
