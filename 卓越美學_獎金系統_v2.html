@@ -4808,23 +4808,23 @@ async function scanRecognizeDeals(){
 }
 
 // ===== 成交獎金覆核表單（B③ stage 3）=====
-// 紅字判定 v0.1（規格 6.1）：🔴必看 / 🟠抽查 / 🟡彙總
+// 覆核提示：🔴必看 / 🟠抽查 / 🟡彙總。措辭一律中性，僅描述金額結構，不對人做價值判斷。
 function dealFlags(rows, sc, cum){
   const flags=[];
   const mgrIds=employees.filter(e=>e.dept==='研發部'&&e.role_level==='manager').map(e=>e.id);
   const cb=sc?.confirmed_by;
   const recips=rows.map(r=>r.employee_id).filter(Boolean);
   if(cb&&mgrIds.includes(cb)&&rows.some(r=>r.employee_id===cb&&(r.segment==='primary'||r.segment==='sampling')))
-    flags.push({lv:'high',t:'課長自確自利（確樣人＝課長且同案領主責/打樣）'});
+    flags.push({lv:'high',t:'三段集中同一人（確樣人同時領主責/打樣）'});
   if(sc?.change_level==='major') flags.push({lv:'high',t:'主責被重新認定（大幅改動換主責）'});
   if(rows.some(r=>r.is_orphan_halved)) flags.push({lv:'high',t:'離職孤兒段折半（需指定接手人）'});
   const p=products.find(x=>x.product_code===rows[0].official_product_code);
   const ft=sc?.formula_type_override||p?.formula_type||sc?.rd_samples?.formula_type;
-  if(FORMULA_BASE[ft]>=0.8&&cb&&mgrIds.includes(cb)) flags.push({lv:'mid',t:`高基數劑型(${FORMULA_BASE[ft]})＋課長確樣`});
+  if(FORMULA_BASE[ft]>=0.8&&cb&&mgrIds.includes(cb)) flags.push({lv:'mid',t:`高基數劑型(${FORMULA_BASE[ft]})－池子較大，建議核對`});
   if(['medium_light','medium_heavy','co_dev'].includes(sc?.change_level)) flags.push({lv:'mid',t:'主責中度拆分（協作分主責段）'});
   if(sc?.is_oem) flags.push({lv:'mid',t:'代工配方 窗口領100%（確認窗口是誰）'});
   const over=[...new Set(recips.filter(id=>cum[id]>20000).map(id=>employees.find(e=>e.id===id)?.name))].filter(Boolean);
-  if(over.length) flags.push({lv:'low',t:`本季累計超 2 萬：${over.join('、')}`});
+  if(over.length) flags.push({lv:'low',t:`本季累計達 2 萬以上：${over.join('、')}`});
   return flags;
 }
 
