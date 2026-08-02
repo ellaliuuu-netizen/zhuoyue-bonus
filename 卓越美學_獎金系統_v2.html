@@ -2064,9 +2064,9 @@ function mapLineToOrder(l){
   };
 }
 async function loadOrders() {
-  // 不取 unit_price／amount：本頁只顯示件數與進度，且 order_lines 的讀取政策對所有登入者開放，
-  // 取了金額等於送到研發課長的瀏覽器（原本走 RPC 剝離金額就是為了防這件事）。
-  const { data: lines } = await sb.from('order_lines')
+  // 讀 order_lines_public（不含 unit_price／amount）：本頁只顯示件數與進度。
+  // order_lines 本表的讀取已限經理／財務，研發課長走這張檢視表，從資料層就拿不到金額。
+  const { data: lines } = await sb.from('order_lines_public')
     .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, sales_person, planner_override_id, bonus_settled_at')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
     .order('sign_date', { ascending: false });
@@ -2576,7 +2576,7 @@ async function loadShipments() {
     .order('ship_date', { ascending: false });
   // 訂單量與累計出貨：依「品號＋客戶」歸戶。不可限本季——訂單常在前一季（甚至前一年）簽回、本季才出貨，
   // 只撈本季會查無對應而顯示 0/0（例：金箔潔顏露 1 月簽單、6 月出貨）。
-  const { data: lines } = await sb.from('order_lines')
+  const { data: lines } = await sb.from('order_lines_public')
     .select('product_code, customer_name, order_qty, shipped_qty');
   // 只用產品編號歸戶，與件數計算（matchSalesToOrders）一致：會計銷貨與訂單簿的客戶名寫法常不同
   // （例：銷貨「飲美科」vs 訂單「飲美科妍」），若把客戶名納入比對鍵會查無對應而顯示 0/0。
