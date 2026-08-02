@@ -5162,9 +5162,14 @@ function saleExcludeReason(s){
   if(nm.includes('PIF')) return 'PIF不計';
   if(nm.includes('破損')) return '破損不計';
   if(nm.includes('開發票')) return '已開票不計';
+  // 代購（替客戶採買紙盒、瓶器等非自有產品）與同業間原料調度，均非本公司產品銷售，不計獎金
+  if(nm.includes('代購')) return '代購不計';
+  if(_RAW_MATERIAL_KEYWORDS.some(k=>nm.toLowerCase().includes(k))) return '原料調度不計';
   if(_EXCLUDE_CODES.includes(s.product_code)) return '非正式不計';
   return null;
 }
+// 同業間原料調度的品名關鍵字（少量、非成品）
+const _RAW_MATERIAL_KEYWORDS=['lipobelle','奈米冰川水'];
 // 把銷貨配對到訂單品項、累計、達80%結算（冪等，每次重算）
 // 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
