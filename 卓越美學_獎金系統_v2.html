@@ -4736,7 +4736,8 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
       const segs=computeDealSegments(sc);
       const d=new Date(shipDate), month=d.getMonth()+1, y=d.getFullYear();
       const q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
-      const now=new Date().toISOString();
+      // 認列時點＝出貨日，不是執行認列的當下。補跑舊月份時若用執行時間，獎金會被歸到錯的一季。
+      const now=d.toISOString();
       const rows=segs.map(seg=>({
         sample_customer_id:sc.id, official_product_code:sc.official_product_code,
         order_id:orderId, order_item_id:s.item_id, shipment_id:shipmentId,
@@ -4776,7 +4777,8 @@ async function recognizeFromSales(){
       const segs=computeDealSegments(sc);
       const d=shipDate?new Date(shipDate):new Date();
       const month=d.getMonth()+1, y=d.getFullYear(), q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
-      const now=new Date().toISOString();
+      // 認列時點＝出貨日（同上）；季度歸屬、試用期資格、打樣獎金 gate 都以此為準
+      const now=d.toISOString();
       const drows=segs.map(seg=>({
         sample_customer_id:sc.id, official_product_code:sc.official_product_code,
         order_id:null, order_item_id:null, shipment_id:null,
