@@ -1136,6 +1136,13 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;user-select:none">
                 <input type="checkbox" id="set-backfill" onchange="saveBackfillMode(this.checked)"> 允許補登舊打樣（目前：<strong id="set-backfill-state">關閉</strong>）
               </label>
+              <div style="border-top:1px dashed #ddd;margin-top:12px;padding-top:10px">
+                <label class="form-label">🛠️ 研發調整模式（課長可連續調整，不必逐筆送審）</label>
+                <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">開啟後，研發課長修改<strong>已確樣</strong>紀錄（改綁正式編號／確樣人／取消確樣）可直接生效，不必逐筆提申請、也不會凍結。所有變更仍全程記錄，供你事後一次總覆核。<strong>調整完畢請關閉</strong>。⚠️ 開關後課長需重整瀏覽器。</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;user-select:none">
+                  <input type="checkbox" id="set-rdadjust" onchange="saveRdAdjustMode(this.checked)"> 允許課長連續調整（目前：<strong id="set-rdadjust-state">關閉</strong>）
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -1736,6 +1743,7 @@ let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, p
 // 2026-05-18 ~ 2026-05-22 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣
 // 補完於 5/22；DB constraint 已用 NOT VALID 加回（既有 42 筆豁免、未來新 row 受限）
 let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，經理在設定頁開關
+let RD_ADJUST_MODE = false;       // 研發調整模式：開啟期間課長可連續調整已確樣紀錄，不必逐筆送審；關閉後由經理一次總覆核
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -1825,6 +1833,7 @@ async function loadSettings() {
     if (r.key === 'sales_new_client_bonus') appSettings.newClientBonus = parseInt(r.value);
     if (r.key === 'purchase_supplement') appSettings.purSupplement = parseInt(r.value);
     if (r.key === 'rds_backfill_relaxed') RDS_BACKFILL_RELAXED = (r.value === 'true');
+    if (r.key === 'rd_adjust_mode') RD_ADJUST_MODE = (r.value === 'true');
   });
   syncSettingsUI();
 }
@@ -1844,6 +1853,8 @@ function syncSettingsUI() {
   if (mSel) mSel.innerHTML = qMonths.map(m=>`<option value="${m}">${m}月</option>`).join('');
   const bf=document.getElementById('set-backfill'); if(bf) bf.checked=RDS_BACKFILL_RELAXED;
   const bfs=document.getElementById('set-backfill-state'); if(bfs){bfs.textContent=RDS_BACKFILL_RELAXED?'開啟':'關閉';bfs.style.color=RDS_BACKFILL_RELAXED?'#b3541e':'var(--ink-faint)';}
+  const ra=document.getElementById('set-rdadjust'); if(ra) ra.checked=RD_ADJUST_MODE;
+  const ras=document.getElementById('set-rdadjust-state'); if(ras){ras.textContent=RD_ADJUST_MODE?'開啟':'關閉';ras.style.color=RD_ADJUST_MODE?'#b3541e':'var(--ink-faint)';}
 }
 async function saveSetting(key, value) { await sb.from('system_settings').update({ value: String(value) }).eq('key', key); }
 async function saveBackfillMode(on){
@@ -1853,6 +1864,13 @@ async function saveBackfillMode(on){
   RDS_BACKFILL_RELAXED=on;
   syncSettingsUI();
   showToast(on?'🛠️ 補登模式已開啟——請通知課長重整瀏覽器後補登，補完記得關閉':'✓ 補登模式已關閉');
+}
+async function saveRdAdjustMode(on){
+  const {error}=await sb.from('system_settings').update({value:on?'true':'false'}).eq('key','rd_adjust_mode');
+  if(error){showToast('調整模式儲存失敗：'+error.message);const el=document.getElementById('set-rdadjust');if(el)el.checked=RD_ADJUST_MODE;return;}
+  RD_ADJUST_MODE=on;
+  syncSettingsUI();
+  showToast(on?'🛠️ 研發調整模式已開啟——請通知課長重整瀏覽器；調整完畢記得關閉並總覆核':'✓ 研發調整模式已關閉');
 }
 async function saveGeneralSettings() {
   const year = parseInt(document.getElementById('set-year').value);
@@ -5513,7 +5531,8 @@ function onConfirmCustomerChange(){
     document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是經理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
   }
   // 課長對已確樣：不再隱藏儲存鈕，改成「只更新打樣分潤+備註」模式（編號/確樣人/狀態仍鎖，走申請）
-  cfState.splitsOnly = isConfirmed && !isMgr;
+  // 調整模式開啟期間，課長對已確樣紀錄可直接修改（不必提申請、不凍結）；關閉後回復原本的申請流程
+  cfState.splitsOnly = isConfirmed && !isMgr && !RD_ADJUST_MODE;
   const _saveBtn=document.getElementById('cf-save-btn');
   _saveBtn.style.display='';
   _saveBtn.textContent = cfState.splitsOnly ? '更新打樣分潤' : '儲存確樣';
