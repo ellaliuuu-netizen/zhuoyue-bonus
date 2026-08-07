@@ -4557,37 +4557,57 @@ async function generateRdConfirmSheets(){
   const sampleBonus=n=>rdSamplingBonus(n); // 複用系統既有公式，確保與畫面一致
   // 2) 成交三段（現有確樣 → 依發獎引擎預估）
   const {data:scs,error:e2}=await sb.from('rd_sample_customers')
-    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
+    .select('id, official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
     .eq('confirm_status','confirmed');
   if(e2){showToast('讀取確樣失敗：'+e2.message);return;}
+  // 本季已認列的成交，一律以「發獎明細」為準（覆核台可改金額、可指定孤兒段接手人），不由引擎重算
+  const {data:paidRows,error:e2b}=await sb.from('rd_deal_bonuses')
+    .select('sample_customer_id, official_product_code, segment, employee_id, amount, is_orphan_halved, recognized_at')
+    .eq('year',yr).eq('quarter',appSettings.quarter);
+  if(e2b){showToast('讀取成交明細失敗：'+e2b.message);return;}
   const segLabel={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工窗口'};
   // 成交獎金跟著「出貨認列」走，不是跟確樣日：確樣落在本季但尚未出貨者，該筆獎金屬於日後出貨的那一季，
   // 不得計入本季合計（與其他部門「出貨才計獎」一致）。故此處分兩組：本季已認列＝計入；未認列＝僅列示。
   const qStart=`${yr}-${pad(qMonths[0])}-01`, qEnd=`${endY}-${pad(endM)}-01`;
   const inThisQ=sc=>sc.recognized_at && sc.recognized_at>=qStart && sc.recognized_at<qEnd;
   const deal={}, pendingDeal={}, probDeal={}, allRows=[];
+  const scById={}; (scs||[]).forEach(sc=>scById[sc.id]=sc);
+  const poolOf=sc=>sc?(sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0)):0;
+  const whoBySc={};
+  // 2a) 本季已認列＝讀發獎明細（實際歸屬與實際金額，含孤兒段接手人、含經理手改金額）
+  (paidRows||[]).forEach(r=>{
+    const sc=scById[r.sample_customer_id];
+    const p=products.find(x=>x.product_code===r.official_product_code);
+    const lb=(segLabel[r.segment]||r.segment)+(r.is_orphan_halved?'（孤兒段折半·接手）':'');
+    if(!r.employee_id) return;                    // 尚未指定接手人的孤兒段：放行時才會補上
+    const nm=employees.find(e=>e.id===r.employee_id)?.name||'';
+    const key=r.sample_customer_id||r.official_product_code;
+    (whoBySc[key]=whoBySc[key]||{});
+    whoBySc[key][lb]=(whoBySc[key][lb]?whoBySc[key][lb]+'、':'')+nm;
+    const pool=poolOf(sc);
+    const recAt=(r.recognized_at||'').slice(0,10);
+    const row={code:r.official_product_code||'—', name:p?.product_name||'', cust:sc?.rd_customers?.short_name||'',
+      label:lb, pct:pool?Math.round(Number(r.amount)/pool*100):null, amount:Number(r.amount)||0, recAt};
+    if(inProbation(r.employee_id, recAt)) (probDeal[r.employee_id]=probDeal[r.employee_id]||[]).push(row);
+    else (deal[r.employee_id]=deal[r.employee_id]||[]).push(row);
+  });
+  // 2b) 尚未出貨認列＝仍由引擎預估列示（還沒有發獎明細可讀）
   (scs||[]).forEach(sc=>{
     const p=products.find(x=>x.product_code===sc.official_product_code);
-    const segs=computeDealSegments(sc);
-    const pool=sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0);
     const recognized=inThisQ(sc);
-    const who={};
-    segs.forEach(x=>{
-      if(!x.employee_id)return;
-      const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
-      const lb=segLabel[x.segment]||x.segment;
-      who[lb]=(who[lb]?who[lb]+'、':'')+nm;
-      const pct=pool?Math.round(x.amount/pool*100):null;
-      const row={code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:lb, pct, amount:x.amount||0, recAt:(sc.recognized_at||'').slice(0,10)};
-      // 試用期資格以「出貨認列日」判定，非確樣日：成交獎金在出貨當下才發生，
-      // 試用期內確樣、轉正後才出貨者，該筆獎金產生於轉正之後，具領取資格。
-      // 尚未出貨者不在此判定，一律列待認列，屆時再依實際出貨日判斷。
-      if(!recognized){
-        (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push(row);
-      } else if(inProbation(x.employee_id, (sc.recognized_at||'').slice(0,10))){
-        (probDeal[x.employee_id]=probDeal[x.employee_id]||[]).push(row);
-      } else (deal[x.employee_id]=deal[x.employee_id]||[]).push(row);
-    });
+    const pool=poolOf(sc);
+    const who=whoBySc[sc.id]||{};
+    if(!sc.recognized_at){
+      computeDealSegments(sc).forEach(x=>{
+        if(!x.employee_id)return;
+        const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
+        const lb=segLabel[x.segment]||x.segment;
+        who[lb]=(who[lb]?who[lb]+'、':'')+nm;
+        (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push({
+          code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
+          label:lb, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
+      });
+    }
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
       confirmed:(sc.confirmed_at||'').slice(0,10), recognized, who});
   });
