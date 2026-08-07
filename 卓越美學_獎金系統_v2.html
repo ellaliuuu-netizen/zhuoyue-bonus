@@ -4809,15 +4809,20 @@ async function recognizeFromSales(){
   let count=0;
   for(const code of Object.keys(byCode)){
     const rows=byCode[code];
-    const totalQty=rows.reduce((s,r)=>s+(r.qty||0),0);
-    if(totalQty<500) continue;                                  // 尾數不計
+    if(rows.reduce((s,r)=>s+(r.qty||0),0)<500) continue;        // 全期間都不足 500 → 直接跳過
     const {data:scs}=await sb.from('rd_sample_customers')
       .select('*, rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(role_level)), rd_deal_owner_splits(employee_id,pct,role)')
       .eq('official_product_code', code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
-    const shipDate=rows.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
-    const cust=rows[0].customer_name||'';
     for(const sc of scs){
+      // 成交必發生於「確樣之後」：確樣日以前的出貨不是本次確樣促成的成交，不納入計算。
+      // 若不擋，舊品事後補確樣會回頭認列到已結算的舊季度
+      //（案例 JP000085：出貨 2025-04-25、確樣 2026-07-06，會被認列成 2025Q2）。
+      const eff=sc.confirmed_at?rows.filter(r=>r.ship_date&&r.ship_date>=sc.confirmed_at):rows;
+      const totalQty=eff.reduce((s,r)=>s+(r.qty||0),0);
+      if(totalQty<500) continue;                                // 確樣後累計未達 500：尾數不計
+      const shipDate=eff.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
+      const cust=eff[0]?.customer_name||'';
       const segs=computeDealSegments(sc);
       const d=shipDate?new Date(shipDate):new Date();
       const month=d.getMonth()+1, y=d.getFullYear(), q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
