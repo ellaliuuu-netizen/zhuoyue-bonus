@@ -4451,6 +4451,9 @@ function dealBaseInfo(sc){
 function computeDealSegments(sc){
   const A=appSettings.aValue||3000;
   const emp=id=>employees.find(e=>e.id===id);
+  // 已離職者所屬之段別＝孤兒段（制度第六章：原作者離職且無接手者之段別＝孤兒段）
+  // 不限主責段；打樣段、確樣段之執行者若已離職，同樣折半、另一半不發，待經理指定接手人
+  const gone=id=>{const e=emp(id);return !!e&&e.is_active===false;};
   const lines=[];
   if(sc.is_oem){
     const amt=Math.round(A*0.3);
@@ -4490,11 +4493,22 @@ function computeDealSegments(sc){
   const samplerSplits=(sc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id);
   if(samplerSplits.length){
     // 多人打樣：依確樣時勾選、按打樣次數存下的比例分（助理已於確樣排除）
-    samplerSplits.forEach(sp=>lines.push({segment:'sampling', employee_id:sp.employee_id, amount:Math.round(sampleSeg*Number(sp.pct)/100), is_orphan_halved:false, note:`多人打樣 占打樣段 ${sp.pct}%`}));
+    samplerSplits.forEach(sp=>{
+      const share=sampleSeg*Number(sp.pct)/100;
+      if(gone(sp.employee_id)){
+        lines.push({segment:'sampling', employee_id:null, amount:Math.round(share*0.5), is_orphan_halved:true,
+          pending_reason:'打樣者已離職，孤兒段待指定接手人', note:`多人打樣 占打樣段 ${sp.pct}%－打樣者離職→折半，另一半不發`});
+      }else{
+        lines.push({segment:'sampling', employee_id:sp.employee_id, amount:Math.round(share), is_orphan_halved:false, note:`多人打樣 占打樣段 ${sp.pct}%`});
+      }
+    });
   }else{
     const samplerId=sc.rd_samples?.employee_id;
     const samplerRole=sc.rd_samples?.employees?.role_level;
-    if(samplerId&&samplerRole!=='assistant'){
+    if(samplerId&&samplerRole!=='assistant'&&gone(samplerId)){
+      lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
+        pending_reason:'打樣者已離職，孤兒段待指定接手人', note:'打樣者離職→打樣段折半，另一半不發'});
+    }else if(samplerId&&samplerRole!=='assistant'){
       lines.push({segment:'sampling', employee_id:samplerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'打樣者領打樣段'});
     }else if(orphan){
       lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
@@ -4504,7 +4518,13 @@ function computeDealSegments(sc){
     }
   }
   // 確樣段 20%
-  lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(pool*0.2), is_orphan_halved:false, note:'確樣人領確樣段'});
+  const confirmSeg=pool*0.2;
+  if(gone(sc.confirmed_by)){
+    lines.push({segment:'confirm', employee_id:null, amount:Math.round(confirmSeg*0.5), is_orphan_halved:true,
+      pending_reason:'確樣人已離職，孤兒段待指定接手人', note:'確樣人離職→確樣段折半，另一半不發'});
+  }else{
+    lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(confirmSeg), is_orphan_halved:false, note:'確樣人領確樣段'});
+  }
   return lines;
 }
 
@@ -4776,9 +4796,13 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
 
 // 研發認列（吃銷貨明細 sales_records）：新品 + 同編號累計達 500 罐 → 算三段寫待覆核；認列具冪等
 async function recognizeFromSales(){
+  // 認列閘門＝「已確樣且尚未認列」（下方 rd_sample_customers 查詢），不再依賴會計銷貨的「新品／舊品追加」標記。
+  // 原因：該標記實際與「是否已開發票」連動，非產品新舊——同一支產品同一天出貨會同時出現兩種標記
+  //（案例 2026-05-08 JP000006：2,879 罐標舊品追加、7 罐標新品），據以過濾會讓真新品整支漏發。
+  // 重複發獎由 rd_sample_customers.recognized_at is null 的一次性保護把關。
   const {data:sales}=await sb.from('sales_records')
     .select('product_code, customer_name, qty, ship_date')
-    .eq('new_or_repeat','新品').not('product_code','is',null);
+    .not('product_code','is',null);
   if(!sales||!sales.length) return 0;
   const byCode={};
   sales.forEach(s=>{(byCode[s.product_code]=byCode[s.product_code]||[]).push(s);});
