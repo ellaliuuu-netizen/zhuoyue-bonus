@@ -837,7 +837,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- RD SAMPLING (研發打樣 - 對齊 PDF v6 雙軌制) -->
       <div class="page" id="page-rd-sampling">
         <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
-        <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
+        <div class="section-desc">月件數階梯獎金（合格件數：研發同仁 18 件、課長 13 件；達標 1,000 元，每多 1 件 +55，上限 88 件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
 
         <!-- Card -1: 確樣進度總表（跨月）— manager + rd_manager 都看得到 -->
         <div class="card rdmgr-show" style="border-color:var(--blue)">
@@ -3099,11 +3099,19 @@ let rdCustomers=[];           // 客戶主檔快取
 let rdsSelectedCustomers=[];  // 新增 modal 內已選的客戶
 let currentEditId=null;       // 編輯模式下的 row id；null=新增模式
 
-function rdSamplingBonus(count){
-  // v8 公式（2026/05 文件）：< 18 → 0；≥ 18 → 1,000 + (件數 − 18) × 55；上限 88 件
+// 合格件數門檻：研發同仁 18 件；研發課長 13 件
+// （協理 2026-08-07 裁示，自 2026 Q2 起適用；管理職產出時間被切分，門檻下修）
+const RD_QUALIFY_STAFF=18, RD_QUALIFY_MANAGER=13;
+function rdQualifyCount(empId){
+  const e=(typeof employees!=='undefined'?employees:[]).find(x=>x.id===empId);
+  return (e&&e.dept==='研發部'&&e.role_level==='manager')?RD_QUALIFY_MANAGER:RD_QUALIFY_STAFF;
+}
+function rdSamplingBonus(count, empId){
+  // 未達合格件數 → 0；達標 → 1,000 + (件數 − 合格件數) × 55；上限 88 件
   const eff=Math.min(count,88);
-  if(eff<18)return 0;
-  return 1000+(eff-18)*55;
+  const q=rdQualifyCount(empId);
+  if(eff<q)return 0;
+  return 1000+(eff-q)*55;
 }
 
 function rdFormulaLabel(t){const m={liquid:'液劑',essence:'精華液/凝膠/面膜',emulsion_ow:'乳劑(水包油)',emulsion_wo:'乳劑(油包水)',special:'特殊劑型'};return m[t]||t;}
@@ -3653,9 +3661,10 @@ async function settleRdMonth(){
     const {data:samples}=await sb.from('rd_samples').select('id').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
     const count=samples?.length||0;
     if(count===0){results.push({name:emp.name,count:0,bonus:0,status:'— 無打樣'});continue;}
-    const bonus=rdSamplingBonus(count);
-    const settleStatus=count<18?'expired':'pending_carryover';
-    const statusLabel=count<18?'未達門檻（不發）':'待回溯（等出貨完成）';
+    const bonus=rdSamplingBonus(count, emp.id);
+    const _q=rdQualifyCount(emp.id);
+    const settleStatus=count<_q?'expired':'pending_carryover';
+    const statusLabel=count<_q?`未達門檻（不發，合格 ${_q} 件）`:'待回溯（等出貨完成）';
     const {error}=await sb.from('rd_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,sample_count:count,base_bonus:bonus,
       status:settleStatus,carryover_deadline:dl,updated_at:new Date().toISOString()
@@ -4529,7 +4538,7 @@ function computeDealSegments(sc){
 }
 
 // ===== 研發個人確認表（每人一張、只出自己；打樣月結逐月 + 成交三段每品項）=====
-// 制度 v10：打樣 <18=0；≥18=1000+(件-18)×55、上限88；成交三段主責50/打樣30/確樣20（依實際占比算）
+// 制度：打樣未達合格件數=0；達標=1000+(件-合格件數)×55、上限88（合格件數 同仁18／課長13）；成交三段主責50/打樣30/確樣20
 async function generateRdConfirmSheets(){
   const A=appSettings.aValue||3000;
   const yr=appSettings.year;
@@ -4554,7 +4563,7 @@ async function generateRdConfirmSheets(){
     const m=Number(s.sample_date.slice(5,7));
     (cnt[k]=cnt[k]||{})[m]=(cnt[k][m]||0)+1;
   });
-  const sampleBonus=n=>rdSamplingBonus(n); // 複用系統既有公式，確保與畫面一致
+  const sampleBonus=(n,empId)=>rdSamplingBonus(n,empId); // 複用系統既有公式，確保與畫面一致
   // 2) 成交三段（現有確樣 → 依發獎引擎預估）
   const {data:scs,error:e2}=await sb.from('rd_sample_customers')
     .select('id, official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
@@ -4663,7 +4672,7 @@ async function generateRdConfirmSheets(){
       if(inProbation(empId,x.sample_date)) return;
       const m=Number(x.sample_date.slice(5,7)); byM[m]=(byM[m]||0)+1;
     });
-    return Object.values(byM).reduce((s,n)=>s+rdSamplingBonus(n),0);
+    return Object.values(byM).reduce((s,n)=>s+rdSamplingBonus(n,empId),0);
   };
   // 該季該人有無成交認列（任一段）
   const hasDealIn=(empId,qq)=>{
@@ -4700,7 +4709,7 @@ async function generateRdConfirmSheets(){
   let pages='';
   rd.forEach(e=>{
     const myCnt=cnt[e.id]||{}; let sTot=0;
-    const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
+    const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n,e.id);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
     const myDeal=deal[e.id]||[]; let dTot=0;
     const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無出貨認列的成交</td></tr>';
     // 已確樣但尚未出貨：列示但不計入本季合計
