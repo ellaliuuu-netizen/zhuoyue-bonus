@@ -4987,6 +4987,16 @@ async function loadDealBonuses(){
       const flagHtml=flags.map(f=>`<span style="display:inline-block;font-size:11px;color:${fColor[f.lv]};border:1px solid ${fColor[f.lv]};border-radius:4px;padding:1px 6px;margin:2px 4px 2px 0">${fIcon[f.lv]} ${f.t}</span>`).join('');
       body+=`<div class="card" style="margin-bottom:12px"><div class="card-header"><div class="card-title" style="font-size:14px">${code} · ${prod?.product_name||''}　<span style="color:var(--ink-faint);font-weight:400">客戶 ${cust}</span></div><div style="font-weight:600">小計 ${sub.toLocaleString()}</div></div>`;
       if(flagHtml) body+=`<div style="margin-bottom:8px">${flagHtml}</div>`;
+      // 劑型直接決定池子大小（0.3～1.2，相差 4 倍），且課長可手動覆寫 → 攤開來源與基數供核對
+      const _ovr=sc.formula_type_override, _mstr=prod?.formula_type, _smp=sc.rd_samples?.formula_type;
+      const _ft=_ovr||_mstr||_smp, _base=FORMULA_BASE[_ft], _A=appSettings.aValue||3000;
+      const _src=_ovr?'⚠️ 確樣時手動覆寫':(_mstr?'產品主檔':'原打樣登記');
+      body+=`<div style="margin-bottom:8px;font-size:12px;background:${_ovr?'#fbf0ea':'#f6f3ec'};border:1px solid ${_ovr?'#b3541e':'#e0d3b0'};border-radius:4px;padding:6px 9px;line-height:1.7">`+
+        `🧪 <strong>劑型：${_ft?rdFormulaLabel(_ft):'（未設定）'}</strong>　基數 ${_base??'?'}　來源：${_src}`+
+        (_base?`<br>池子 ＝ A值 ${_A} × ${_base} ＝ <strong>${(_A*_base).toLocaleString()}</strong>　→　主責 ${(_A*_base*0.5).toLocaleString()}／打樣 ${(_A*_base*0.3).toLocaleString()}／確樣 ${(_A*_base*0.2).toLocaleString()}`:'')+
+        (_ovr&&_mstr&&_ovr!==_mstr?`<br><span style="color:#b3541e">主檔原為「${rdFormulaLabel(_mstr)}」(基數 ${FORMULA_BASE[_mstr]??'?'})，已被改為「${rdFormulaLabel(_ovr)}」(基數 ${_base})——請確認是否正確</span>`:'')+
+        (_ovr&&!_mstr&&_smp&&_ovr!==_smp?`<br><span style="color:#b3541e">原打樣登記為「${rdFormulaLabel(_smp)}」(基數 ${FORMULA_BASE[_smp]??'?'})，已被改為「${rdFormulaLabel(_ovr)}」(基數 ${_base})——請確認是否正確</span>`:'')+
+        `</div>`;
       if(sc.sampler_note) body+=`<div style="margin-bottom:8px;font-size:12px;background:#f3ede0;border-radius:4px;padding:6px 8px">📝 打樣群組備註：${sc.sampler_note}</div>`;
       body+=`<table><thead><tr><th>段別</th><th>領取人</th><th class="td-right" style="width:120px">金額（可改）</th><th>說明</th></tr></thead><tbody>`;
       rows.forEach(r=>{
@@ -5000,6 +5010,26 @@ async function loadDealBonuses(){
     body=`<div class="info-box" style="font-size:13px;background:#f3ede0;margin-bottom:10px">共 ${data.length} 段待覆核，合計 <strong>${total.toLocaleString()}</strong>。先盯 🔴 紅字；可直接改金額、指定孤兒段接手人，按「放行」才轉財務。</div>`+body;
   }else{
     body=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>`;
+  }
+  // 已放行區：同仁對確認表提出疑慮時，經理可退回待覆核再修改（放行只是轉給財務、錢未發，故可逆）
+  const {data:released}=await sb.from('rd_deal_bonuses')
+    .select('*, employees(name), rd_sample_customers(rd_customers(short_name))')
+    .eq('status','released').order('recognized_at',{ascending:false});
+  if(released&&released.length){
+    const rg={};
+    released.forEach(r=>{(rg[r.sample_customer_id]=rg[r.sample_customer_id]||[]).push(r);});
+    let rBody='';
+    Object.values(rg).forEach(rows=>{
+      const code=rows[0].official_product_code, scId=rows[0].sample_customer_id;
+      const prod=products.find(p=>p.product_code===code);
+      const cust=rows[0].rd_sample_customers?.rd_customers?.short_name||'';
+      const sub=rows.reduce((t,r)=>t+Number(r.amount),0);
+      rBody+=`<div class="card" style="margin-bottom:10px;border-color:#2e7d52"><div class="card-header"><div class="card-title" style="font-size:13px">${code} · ${prod?.product_name||''}　<span style="color:var(--ink-faint);font-weight:400">客戶 ${cust}</span></div><div style="font-weight:600">小計 ${sub.toLocaleString()}</div></div>`;
+      rBody+=`<table><thead><tr><th>段別</th><th>領取人</th><th class="td-right">金額</th></tr></thead><tbody>`;
+      rows.forEach(r=>{ rBody+=`<tr><td>${segLabel[r.segment]||r.segment}</td><td>${r.employees?.name||'—'}</td><td class="td-right">${Number(r.amount).toLocaleString()}</td></tr>`; });
+      rBody+=`</tbody></table><div style="text-align:right;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="unreleaseDeal('${scId}','${code}')" style="color:#b3541e">↩ 退回待覆核（可再修改）</button></div></div>`;
+    });
+    body+=`<div class="card" style="margin-top:14px;border-color:#2e7d52"><div class="card-header"><div class="card-title" style="font-size:13px">✅ 已放行給財務（${released.length} 段）</div></div><div class="info-box" style="font-size:12px">已轉給財務、尚未實際發放。若研發同仁對確認表提出疑慮，可按「退回待覆核」把該筆收回來修改，改完再放行一次。</div>${rBody}</div>`;
   }
   if(notShipped&&notShipped.length){
     const nmOf=id=>employees.find(e=>e.id===id)?.name||'—';
@@ -5070,6 +5100,18 @@ async function rejectRequest(reqId){
 }
 
 // 放行：把這筆成交的所有段轉 released（財務才看得到）；孤兒段須先指定接手人
+async function unreleaseDeal(scId, code){
+  const ok=await confirmCard('退回待覆核',
+    `將 <strong>${code}</strong> 的成交獎金自「已放行」退回「待覆核」。<br><br>`+
+    `退回後財務端即看不到這筆，你可以重新調整金額與歸屬，改完再放行一次。<br>`+
+    `<span style="color:var(--ink-faint);font-size:12px">※ 若財務已實際發放，請先與財務確認後再退回。</span>`,
+    '確認退回');
+  if(!ok) return;
+  const {error}=await sb.from('rd_deal_bonuses').update({status:'pending_review'}).eq('sample_customer_id',scId).eq('status','released');
+  if(error){showToast('退回失敗：'+error.message);return;}
+  showToast('↩ 已退回待覆核，可重新修改');
+  loadDealBonuses(); loadTodoCenter();
+}
 async function releaseDeal(scId){
   const {data:lines,error:e0}=await sb.from('rd_deal_bonuses').select('id, employee_id').eq('sample_customer_id',scId).eq('status','pending_review');
   if(e0||!lines||!lines.length){showToast('沒有待放行的明細');return;}
