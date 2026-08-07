@@ -807,7 +807,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div class="card-title">🎯 研發成交獎金（三段式）— 待你覆核</div>
               <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="generateRdConfirmSheets()">🖨️ 產生個人確認表</button><button class="btn btn-outline btn-sm" onclick="scanRecognizeDeals()">🔄 重新掃描出貨認列</button></div>
             </div>
-            <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（經理）可見。</div>
+            <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（協理）可見。</div>
             <div id="rd-deal-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div></div>
           </div>
         </div>
@@ -1455,11 +1455,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
       </div>
       <div class="form-group" id="rds-reason-wrap" style="display:none">
-        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（3 天以上需填寫，會送 ELLA 經理審核）</label>
+        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（3 天以上需填寫，會送 ELLA 協理審核）</label>
         <textarea class="form-input" id="rds-reason" rows="2" placeholder="如：出差、連假、客戶緊急…"></textarea>
       </div>
       <div class="form-group" id="rds-edit-reason-wrap" style="display:none">
-        <label class="form-label" style="color:var(--red)">📝 修改原因 *（任何修改都會送 ELLA 經理審核）</label>
+        <label class="form-label" style="color:var(--red)">📝 修改原因 *（任何修改都會送 ELLA 協理審核）</label>
         <textarea class="form-input" id="rds-edit-reason" rows="2" placeholder="如：客戶名稱填錯、劑型分類錯誤、日期 typo…"></textarea>
       </div>
       <div class="info-box" id="rds-delay-info" style="display:none;font-size:13px"></div>
@@ -1492,7 +1492,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <tr><td><strong>特殊劑型 (1.2)</strong></td><td><strong>雙層液、三層劑型</strong>、視覺變化劑型（變色/變泡/顯色）、發泡型面膜、大顆顆粒 + 水相凝膠（難攪拌）、油珠劑型（包覆型活性成分）</td></tr>
         </tbody>
       </table>
-      <div class="info-box" style="font-size:12px;color:var(--ink-faint);margin-top:12px">⚠️ 歸屬錯誤直接影響獎金（基數 0.3 ~ 1.2 差 4 倍）。歸屬有疑問請先諮詢經理或課長，不要憑感覺選</div>
+      <div class="info-box" style="font-size:12px;color:var(--ink-faint);margin-top:12px">⚠️ 歸屬錯誤直接影響獎金（基數 0.3 ~ 1.2 差 4 倍）。歸屬有疑問請先諮詢協理或課長，不要憑感覺選</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-gold" onclick="closeModal('rdFormulaGuideModal')">了解</button>
@@ -1704,7 +1704,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
-<!-- 改綁／取消確樣（D：課長申請 / 經理直改）-->
+<!-- 改綁／取消確樣（D：課長申請 / 協理直改）-->
 <div class="modal-overlay" id="rebindModal">
   <div class="modal" style="max-width:560px">
     <div class="modal-header"><div class="modal-title" id="rb-title">🔁 改綁確樣</div><button class="modal-close" onclick="closeModal('rebindModal')">✕</button></div>
@@ -1742,8 +1742,8 @@ let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
 // 2026-05-18 ~ 2026-05-22 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣
 // 補完於 5/22；DB constraint 已用 NOT VALID 加回（既有 42 筆豁免、未來新 row 受限）
-let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，經理在設定頁開關
-let RD_ADJUST_MODE = false;       // 研發調整模式：開啟期間課長可連續調整已確樣紀錄，不必逐筆送審；關閉後由經理一次總覆核
+let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，協理在設定頁開關
+let RD_ADJUST_MODE = false;       // 研發調整模式：開啟期間課長可連續調整已確樣紀錄，不必逐筆送審；關閉後由協理一次總覆核
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -1781,7 +1781,7 @@ async function initApp(user) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-display-name').textContent = currentUserName;
-  const roleLabel = currentRole==='manager'?'｜ 經理':currentRole==='rd_manager'?'｜ 課長':'｜ 財務';
+  const roleLabel = currentRole==='manager'?'｜ 協理':currentRole==='rd_manager'?'｜ 課長':'｜ 財務';
   const roleColor = currentRole==='manager'?'#c8a96e':currentRole==='rd_manager'?'#5d8aa8':'#3d6a8a';
   document.getElementById('user-role-label').textContent = roleLabel;
   document.getElementById('role-dot').style.background = roleColor;
@@ -1795,7 +1795,7 @@ async function initApp(user) {
   initInnerTabs();
 }
 function applyRoleRestrictions() {
-  // 先清掉上一個角色留下的隱藏樣式：登出不會重載頁面，同一頁換帳號登入會殘留（經理登入卻只看到課長的 tab）
+  // 先清掉上一個角色留下的隱藏樣式：登出不會重載頁面，同一頁換帳號登入會殘留（協理登入卻只看到課長的 tab）
   document.querySelectorAll('.manager-only, .rdmgr-hide, .rdmgr-show').forEach(el => el.style.display = '');
   document.querySelectorAll('.read-only-notice').forEach(el => el.style.display = 'none');
   if (currentRole === 'manager') return;
@@ -2083,7 +2083,7 @@ function mapLineToOrder(l){
 }
 async function loadOrders() {
   // 讀 order_lines_public（不含 unit_price／amount）：本頁只顯示件數與進度。
-  // order_lines 本表的讀取已限經理／財務，研發課長走這張檢視表，從資料層就拿不到金額。
+  // order_lines 本表的讀取已限協理／財務，研發課長走這張檢視表，從資料層就拿不到金額。
   const { data: lines } = await sb.from('order_lines_public')
     .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, sales_person, planner_override_id, bonus_settled_at')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
@@ -2619,7 +2619,7 @@ async function loadShipments() {
   });
   const tbody = document.getElementById('shipments-tbody');
   if (!data.length) {
-    // 銷貨明細含金額，讀取政策僅開放經理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
+    // 銷貨明細含金額，讀取政策僅開放協理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
     const noPerm = currentRole === 'rd_manager';
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
     return;
@@ -3581,7 +3581,7 @@ async function loadPendingReviews(){
   loadTodoCenter(); // 同步更新表頭待辦鈕/紅點
 }
 
-// ===== 待辦中心（表頭鈕）：四類集中，只看清單＋跳頁處理（經理限定）=====
+// ===== 待辦中心（表頭鈕）：四類集中，只看清單＋跳頁處理（協理限定）=====
 async function loadTodoCenter(){
   const badge=document.getElementById('pending-review-badge'), dot=document.getElementById('pending-review-dot');
   const isMgr=(currentRole==='manager');
@@ -4452,7 +4452,7 @@ function computeDealSegments(sc){
   const A=appSettings.aValue||3000;
   const emp=id=>employees.find(e=>e.id===id);
   // 已離職者所屬之段別＝孤兒段（制度第六章：原作者離職且無接手者之段別＝孤兒段）
-  // 不限主責段；打樣段、確樣段之執行者若已離職，同樣折半、另一半不發，待經理指定接手人
+  // 不限主責段；打樣段、確樣段之執行者若已離職，同樣折半、另一半不發，待協理指定接手人
   const gone=id=>{const e=emp(id);return !!e&&e.is_active===false;};
   const lines=[];
   if(sc.is_oem){
@@ -5040,7 +5040,7 @@ async function loadDealBonuses(){
   }else{
     body=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>`;
   }
-  // 已放行區：同仁對確認表提出疑慮時，經理可退回待覆核再修改（放行只是轉給財務、錢未發，故可逆）
+  // 已放行區：同仁對確認表提出疑慮時，協理可退回待覆核再修改（放行只是轉給財務、錢未發，故可逆）
   const {data:released}=await sb.from('rd_deal_bonuses')
     .select('*, employees(name), rd_sample_customers(rd_customers(short_name))')
     .eq('status','released').order('recognized_at',{ascending:false});
@@ -5599,7 +5599,7 @@ function onConfirmCustomerChange(){
   if(isConfirmed){
     document.getElementById('cf-rebind-code').textContent=rc.official_product_code||'';
     document.querySelectorAll('.cf-rebind-verb').forEach(sp=>sp.textContent=isMgr?'':'申請');
-    document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是經理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
+    document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是協理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
   }
   // 課長對已確樣：不再隱藏儲存鈕，改成「只更新打樣分潤+備註」模式（編號/確樣人/狀態仍鎖，走申請）
   // 調整模式開啟期間，課長對已確樣紀錄可直接修改（不必提申請、不凍結）；關閉後回復原本的申請流程
@@ -5648,7 +5648,7 @@ function onConfirmProductChange(){
   updateConfirmPool();
 }
 
-// 主檔沒設主責的編號（新品都這樣）→ 確樣時由課長指定，寫在 rd_sample_customers（課長有權限；products 只有經理能寫）
+// 主檔沒設主責的編號（新品都這樣）→ 確樣時由課長指定，寫在 rd_sample_customers（課長有權限；products 只有協理能寫）
 function syncOwnerSetField(){
   const wrap=document.getElementById('cf-owner-set-wrap'); if(!wrap)return;
   const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
@@ -5939,7 +5939,7 @@ function confirmCard(title, bodyHtml, okText='確認'){
 }
 function gcDone(v){closeModal('genConfirmModal');const r=gcResolve;gcResolve=null;if(r)r(v);}
 
-// ===== 改綁／取消確樣（D）：經理直改、課長提申請 =====
+// ===== 改綁／取消確樣（D）：協理直改、課長提申請 =====
 let rbState=null;
 async function openRebind(action){
   const scId=cfState.activeScId;
