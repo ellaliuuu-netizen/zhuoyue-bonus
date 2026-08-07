@@ -4551,10 +4551,19 @@ async function generateRdConfirmSheets(){
     .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lt('sample_date',`${endY}-${pad(endM)}-01`)
     .in('approval_status',['approved','auto_approved']);
   if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
-  // 試用期（到職起三個月）內產生的打樣不計獎金——按「打樣日」逐筆判定，非按季度比例折算
+  // 試用期內不計獎金。⭐公司寬限（協理 2026-08-07 裁示）：轉正當月不按日切分，
+  // 該月整月計入獎金；僅「轉正月之前」的月份才視為試用期內。故以「年月」比較，非逐日比較。
   const inProbation=(empId, dateStr)=>{
     const e=employees.find(x=>x.id===empId);
-    return !!(e && e.probation_end_date && dateStr && dateStr < e.probation_end_date);
+    if(!e || !e.probation_end_date || !dateStr) return false;
+    return dateStr.slice(0,7) < e.probation_end_date.slice(0,7);
+  };
+  const probEndOf=empId=>(employees.find(x=>x.id===empId)||{}).probation_end_date||'';
+  // 該人的轉正月是否落在本季（用於在表上標示「公司寬限·整月計入」）
+  const graceMonth=empId=>{
+    const pe=probEndOf(empId); if(!pe) return 0;
+    const [gy,gm]=pe.split('-').map(Number);
+    return (gy===yr && qMonths.includes(gm))?gm:0;
   };
   const cnt={}, probSkip={}, cntAll={};
   (samples||[]).forEach(s=>{
@@ -4639,7 +4648,7 @@ async function generateRdConfirmSheets(){
   const _mgrEmp=rd.find(e=>e.role_level==='manager');
   const _asstEmp=rd.find(e=>e.role_level==='assistant');
   const _sumFor=emp=>Object.values(deal).flat().reduce((s,r)=>
-    s + ((!emp?.probation_end_date || (r.recAt||'') >= emp.probation_end_date) ? r.amount : 0), 0);
+    s + ((!emp?.probation_end_date || (r.recAt||'').slice(0,7) >= emp.probation_end_date.slice(0,7)) ? r.amount : 0), 0);
   const _staffForMgr=Object.entries(deal).reduce((s,[eid,rows])=>{
     const e2=employees.find(x=>x.id===eid);
     if(!(e2 && e2.dept==='研發部' && (e2.role_level==='staff'||e2.role_level==='senior'))) return s;
@@ -4764,15 +4773,15 @@ async function generateRdConfirmSheets(){
       <p class="note">最右欄為<b>參考值、不發放</b>：假設本季打樣全數計入時的金額，供你掌握自己的實際產出。實際發放以「計入獎金」件數為準（見第一區）。</p>`:''}
       <table><tbody>
       ${myProb.length?`<tr><td>試用期內出貨認列之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
-      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎</td></tr>
+      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎　<span style="color:#1a7f5a">（公司寬限：轉正當月整月計入）</span></td></tr>
       <tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>
       </tbody></table>
-      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
+      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司給予寬限：轉正當月不按日切分，該月打樣件數整月計入獎金</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       <h2>一、打樣獎金（每月）</h2>
       <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
-      <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。試用期內之打樣不列入件數。</p>
+      <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${graceMonth(e.id)?`<br><b style="color:#1a7f5a">公司寬限：你於 ${esc(probEndOf(e.id))} 轉正，${graceMonth(e.id)} 月不按日切分，公司給予寬限、該月打樣件數整月計入獎金。</b>`:''}</p>
       <h2>一之二、打樣獎金發放判定</h2>
       ${gateH}
       <h2>二、成交獎金三段（本季已出貨認列）</h2>
