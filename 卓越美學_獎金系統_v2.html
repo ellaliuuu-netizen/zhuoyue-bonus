@@ -634,7 +634,15 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="page" id="page-sales-import">
         <div class="section-title" style="color:#7a5c3d">📥 銷貨明細匯入</div>
         <div class="section-desc">匯入會計部每月銷貨 CSV → 自動對應正式編號 → 餵研發成交認列＋部門件數＋業務金額。對不上的品名列出來給你點一次、之後記住。</div>
-        <div class="card" style="border-color:#7a5c3d">
+        <div class="card" style="border-color:#3d7a7a">
+          <div class="card-header">
+            <div class="card-title">🤖 自動匯入待確認（NAS 排程）</div>
+            <div><button class="btn btn-outline btn-sm" onclick="loadSalesStaging()">🔄 重新整理</button></div>
+          </div>
+          <div class="info-box">NAS 每日自動讀取會計部銷貨明細，解析後放在此處等你確認。<b>按下「確認匯入」才會寫進正式資料、進入獎金計算</b>；未確認前不影響任何數字。</div>
+          <div id="staging-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">載入中…</div></div></div>
+        </div>
+<div class="card" style="border-color:#7a5c3d">
           <div class="card-header"><div class="card-title">① 選檔</div></div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <input type="file" id="si-file" accept=".csv" onchange="parseSalesCSV()" />
@@ -4420,6 +4428,7 @@ function switchPage(page){
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
   if(page==='reconcile')loadReconcile();
   if(page==='kpireview')loadKpiReview();
+  if(page==='sales-import')loadSalesStaging();
 }
 async function loadReconcile(){
   const sel=document.getElementById('rec-month');
@@ -5445,7 +5454,7 @@ function saleExcludeReason(s){
   const nm=s.item_name_raw||'';
   if(nm.includes('PIF')) return 'PIF不計';
   if(nm.includes('破損')) return '破損不計';
-  if(nm.includes('開發票')) return '已開票不計';
+  if(/開.{0,3}發票/.test(nm)) return '已開票不計';   // 涵蓋「已開發票／之前開過發票／開立發票」
   // 代購（替客戶採買紙盒、瓶器等非自有產品）與同業間原料調度，均非本公司產品銷售，不計獎金
   if(nm.includes('代購')) return '代購不計';
   if(_RAW_MATERIAL_KEYWORDS.some(k=>nm.toLowerCase().includes(k))) return '原料調度不計';
@@ -5522,6 +5531,111 @@ async function fillDeptAutoCount(inputId, noteId){
   }
 }
 
+// ===== 銷貨自動匯入：暫存區確認（NAS 排程寫入 sales_staging，協理確認後才進 sales_records）=====
+let _stgRows=[];
+async function loadSalesStaging(){
+  const el=document.getElementById('staging-content'); if(!el) return;
+  const {data,error}=await sb.from('sales_staging').select('*').eq('status','pending')
+    .order('batch',{ascending:false}).order('row_no');
+  if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
+  _stgRows=data||[];
+  renderSalesStaging();
+}
+function renderSalesStaging(){
+  const el=document.getElementById('staging-content');
+  if(!_stgRows.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">沒有待確認的自動匯入資料</div></div>';
+    return;
+  }
+  const byBatch={};
+  _stgRows.forEach(r=>{(byBatch[r.batch]=byBatch[r.batch]||[]).push(r);});
+  const opts='<option value="">（未對應）</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code}｜${p.product_name||''}</option>`).join('');
+  let html='';
+  for(const [batch,rows] of Object.entries(byBatch)){
+    const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
+    const exc=rows.filter(r=>r.exclude_reason).length;
+    const willCount=rows.length-exc;
+    html+=`<div style="margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div><b style="font-size:15px">${esc2(batch)}</b>
+          <span style="font-size:12px;color:var(--ink-faint);margin-left:8px">${esc2(rows[0].src_file||'')}</span>
+          <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">共 ${rows.length} 列　·　計入獎金 <b>${willCount}</b> 列　·　自動剔除 ${exc} 列${noCode?`　·　<b style="color:#b3541e">${noCode} 列未對應編號</b>`:''}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="rejectStaging('${esc2(batch)}')">✕ 全部退回</button>
+          <button class="btn btn-gold btn-sm" onclick="confirmImportStaging('${esc2(batch)}')">✅ 確認匯入</button>
+        </div>
+      </div>
+      <table><thead><tr><th>列</th><th>客戶</th><th>品名</th><th>正式編號</th><th class="td-right">數量</th><th>銷貨日</th><th>發票</th><th>判定</th></tr></thead><tbody>
+      ${rows.map(r=>{
+        const bad=!r.product_code && !r.exclude_reason;
+        return `<tr style="${bad?'background:#fdebd0':''}">
+          <td style="color:var(--ink-faint)">${r.row_no}</td>
+          <td>${esc2(r.customer_name)}</td>
+          <td style="font-size:12px">${esc2(r.item_name_raw)}</td>
+          <td><select class="form-select" style="min-width:190px;font-size:12px" id="stg-code-${r.id}" onchange="_stgSetCode('${r.id}',this.value)">${opts.replace(`value="${r.product_code}"`,`value="${r.product_code}" selected`)}</select>
+            <div style="font-size:10px;color:var(--ink-faint)">${r.match_method==='alias'?'別名對應':r.match_method==='exact'?'完全相符':r.match_method==='fuzzy'?`模糊 ${r.match_score}`:'—'}</div></td>
+          <td class="td-right">${Number(r.qty||0).toLocaleString()}</td>
+          <td style="font-size:12px">${esc2(r.ship_date||'')}</td>
+          <td style="font-size:11px;color:var(--ink-faint)">${esc2(r.invoice_no||'')}</td>
+          <td>${r.exclude_reason?`<span class="badge badge-gray">${esc2(r.exclude_reason)}</span>`:'<span class="badge badge-green">計入</span>'}</td>
+        </tr>`;}).join('')}
+      </tbody></table>
+      ${noCode?`<div style="font-size:12px;color:#b3541e;margin-top:6px">⚠️ 橘底列尚未對應正式編號：請於「正式編號」欄選擇，選過的會自動記入別名、日後同品名不必再選。未對應者匯入後不會進入研發認列與部門件數。</div>`:''}
+    </div>`;
+  }
+  el.innerHTML=html;
+}
+function esc2(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function _stgSetCode(id,code){
+  const r=_stgRows.find(x=>x.id===id); if(r){ r.product_code=code||null; r._manual=!!code; }
+}
+async function rejectStaging(batch){
+  const ok=await confirmCard('退回這批自動匯入',
+    `將 <b>${esc2(batch)}</b> 的待確認資料整批標記為「已退回」，<b>不會寫入正式資料</b>。<br><br>下次 NAS 排程仍會重新讀取該月檔案並再次送來待確認。`,'確認退回');
+  if(!ok) return;
+  const {error}=await sb.from('sales_staging').update({status:'rejected'}).eq('batch',batch).eq('status','pending');
+  if(error){showToast('退回失敗：'+error.message);return;}
+  showToast('已退回，未寫入正式資料'); loadSalesStaging();
+}
+async function confirmImportStaging(batch){
+  const rows=_stgRows.filter(r=>r.batch===batch);
+  if(!rows.length) return;
+  const exc=rows.filter(r=>r.exclude_reason).length;
+  const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
+  const ok=await confirmCard('確認匯入銷貨明細',
+    `<b>${esc2(batch)}</b>　共 ${rows.length} 列<br><br>`+
+    `・寫入正式銷貨紀錄：<b>${rows.length}</b> 列<br>`+
+    `・其中自動剔除不計獎金：${exc} 列（PIF／已開票／原料調度等）<br>`+
+    (noCode?`・<b style="color:#b3541e">尚有 ${noCode} 列未對應正式編號</b>，匯入後不會進入研發認列與部門件數<br>`:'')+
+    `<br>匯入後將自動重跑：研發成交認列、部門件數比對。`,'確認匯入');
+  if(!ok) return;
+  showToast('匯入中…');
+  // 1) 手動選過的編號寫回別名，日後同品名自動對應
+  for(const r of rows.filter(x=>x._manual && x.product_code)){
+    const norm=normName(r.item_name_raw);
+    if(norm) await sb.from('product_aliases').upsert({alias_norm:norm, alias_raw:r.item_name_raw, product_code:r.product_code},{onConflict:'alias_norm'});
+  }
+  // 2) 寫進正式銷貨紀錄
+  const recs=rows.map(r=>{
+    const d=r.ship_date||''; const mo=Number(d.slice(5,7))||0;
+    return {import_batch:'AUTO-'+batch, customer_name:r.customer_name, item_name_raw:r.item_name_raw,
+      product_code:r.product_code||null, qty:r.qty, unit_price:r.unit_price, amount:r.amount,
+      ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
+      year:Number(d.slice(0,4))||null, month:mo||null,
+      quarter:mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null};
+  });
+  const {error:e1}=await sb.from('sales_records').insert(recs);
+  if(e1){showToast('匯入失敗：'+e1.message);return;}
+  // 3) 標記已匯入（保留紀錄可追溯，不刪除）
+  await sb.from('sales_staging').update({status:'imported', imported_at:new Date().toISOString()})
+    .eq('batch',batch).eq('status','pending');
+  // 4) 重跑認列與件數
+  let n=0; try{ n=await recognizeFromSales(); }catch(err){ console.warn(err); }
+  try{ await matchSalesToOrders(); }catch(err){ console.warn(err); }
+  showToast(`✅ 已匯入 ${recs.length} 列${n?`，新認列 ${n} 筆成交（待覆核）`:''}`);
+  loadSalesStaging(); loadTodoCenter?.();
+}
 // ===== 銷貨 CSV 匯入（地基）=====
 let _salesAliases={};   // alias_norm -> code
 let _siRows=[];
