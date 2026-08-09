@@ -4696,7 +4696,7 @@ async function generateRdConfirmSheets(){
     const pool=poolOf(sc);
     const recAt=(r.recognized_at||'').slice(0,10);
     const row={code:r.official_product_code||'—', name:p?.product_name||'', cust:sc?.rd_customers?.short_name||'',
-      label:lb, pct:pool?Math.round(Number(r.amount)/pool*100):null, amount:Number(r.amount)||0, recAt};
+      seg:r.segment, label:lb, pct:pool?Math.round(Number(r.amount)/pool*100):null, amount:Number(r.amount)||0, recAt};
     if(inProbation(r.employee_id, recAt)) (probDeal[r.employee_id]=probDeal[r.employee_id]||[]).push(row);
     else (deal[r.employee_id]=deal[r.employee_id]||[]).push(row);
   });
@@ -4714,7 +4714,7 @@ async function generateRdConfirmSheets(){
         who[lb]=(who[lb]?who[lb]+'、':'')+nm;
         (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push({
           code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-          label:lb, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
+          seg:x.segment, label:lb, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
       });
     }
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
@@ -4809,14 +4809,18 @@ async function generateRdConfirmSheets(){
     ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':'待出貨'}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
     </tbody></table>
     <p class="note">本表列出全研發部所有確樣品項與三段歸屬，不含金額。<b>若你參與了其中某個品項，但該段別沒有列出你的名字，請在下方異議欄註明。</b></p>`:'';
+  // 同一品項的三段要排在一起，段內固定順序，避免同一支產品被別支插在中間
+  const SEG_ORDER={primary:1, collaborator:2, sampling:3, confirm:4, oem:5};
+  const sortDealRows=arr=>arr.slice().sort((a,b)=>
+    String(a.code).localeCompare(String(b.code)) || ((SEG_ORDER[a.seg]||9)-(SEG_ORDER[b.seg]||9)));
   let pages='';
   rd.forEach(e=>{
     const myCnt=cnt[e.id]||{}; let sTot=0;
     const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n,e.id);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
-    const myDeal=deal[e.id]||[]; let dTot=0;
+    const myDeal=sortDealRows(deal[e.id]||[]); let dTot=0;
     const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無出貨認列的成交</td></tr>';
     // 已確樣但尚未出貨：列示但不計入本季合計
-    const myPend=pendingDeal[e.id]||[]; let pTot=0;
+    const myPend=sortDealRows(pendingDeal[e.id]||[]); let pTot=0;
     const pRows=myPend.map(d=>{pTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('');
     const pendH=myPend.length?`<h2>二之二、已確樣但尚未出貨（<span style="color:#b3541e">不計入本季</span>）</h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我的段別</th><th class="r">屆時可領</th></tr></thead><tbody>${pRows}</tbody><tfoot><tr><td colspan="4" class="r">合計（待出貨）</td><td class="r">${pTot.toLocaleString()} 元</td></tr></tfoot></table>
