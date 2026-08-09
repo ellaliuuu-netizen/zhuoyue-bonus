@@ -4750,7 +4750,7 @@ async function generateRdConfirmSheets(){
            <tr><td>累計暫緩餘額（含本季，待日後出貨時一併發放）</td><td class="r">${g.deferredTotal.toLocaleString()} 元</td></tr>`}
       </tbody></table>
       <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金暫緩並累積遞延，待你有品項出貨的那一季，連同先前暫緩額一次發放。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
-    const grand=g.payNow+dTot+extra;
+    const grand=(e.role_level==='assistant'?0:g.payNow)+dTot+extra; // 助理不適用打樣件數獎金
     // 試用期揭露：講清楚哪些被排除、為什麼、何時起計，避免當事人以為系統漏算
     const probEnd=e.probation_end_date||'';
     const probP=probSkip[e.id]||{n:0,byM:{}};
@@ -4765,8 +4765,9 @@ async function generateRdConfirmSheets(){
       const est=sampleBonus(all,e.id); allTot+=all; estTot+=est; skipTot+=skip;
       return `<tr><td>${m} 月</td><td class="r">${all} 件</td><td class="r">${skip} 件</td><td class="r">${kept} 件</td><td class="r">${est.toLocaleString()} 元</td></tr>`;
     }).join('');
-    const probH=(probSkipN||myProb.length)?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
-      ${probSkipN?`<table><thead><tr><th>月份</th><th class="r">實際打樣</th><th class="r">試用期內不計</th><th class="r">計入獎金</th><th class="r">若全數計入之預估</th></tr></thead>
+    const isAsst=e.role_level==='assistant';
+    const probH=((probSkipN&&!isAsst)||myProb.length||(isAsst&&probEnd))?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
+      ${(probSkipN&&!isAsst)?`<table><thead><tr><th>月份</th><th class="r">實際打樣</th><th class="r">試用期內不計</th><th class="r">計入獎金</th><th class="r">若全數計入之預估</th></tr></thead>
       <tbody>${probRows}
       <tr><td><b>合計</b></td><td class="r"><b>${allTot} 件</b></td><td class="r"><b>${skipTot} 件</b></td><td class="r"><b>${allTot-skipTot} 件</b></td><td class="r"><b>${estTot.toLocaleString()} 元</b></td></tr>
       </tbody></table>
@@ -4779,11 +4780,15 @@ async function generateRdConfirmSheets(){
       <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司給予寬限：轉正當月不按日切分，該月打樣件數整月計入獎金</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
-      <h2>一、打樣獎金（每月）</h2>
+      ${e.role_level==='assistant'?`<h2>一、獎金計算方式</h2>
+      <table><tbody><tr><td>職務</td><td class="r"><b>研發助理</b></td></tr>
+      <tr><td>獎金基準</td><td class="r"><b>全團隊成交池 × 5% 分潤</b></td></tr></tbody></table>
+      <p class="note">研發助理不適用「月打樣件數階梯獎金」，獎金一律以全團隊成交池之 5% 分潤計算，故本表不列個人打樣件數。</p>`
+      :`<h2>一、打樣獎金（每月）</h2>
       <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
       <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${graceMonth(e.id)?`<br><b style="color:#1a7f5a">公司寬限：你於 ${esc(probEndOf(e.id))} 轉正，${graceMonth(e.id)} 月不按日切分，公司給予寬限、該月打樣件數整月計入獎金。</b>`:''}</p>
       <h2>一之二、打樣獎金發放判定</h2>
-      ${gateH}
+      ${gateH}`}
       <h2>二、成交獎金三段（本季已出貨認列）</h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
       <p class="note">成交獎金以「出貨認列」為計算時點：出貨落在哪一季，該筆獎金即計入哪一季。</p>
@@ -4792,7 +4797,7 @@ async function generateRdConfirmSheets(){
       ${probH}
       <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季實計合計：${grand.toLocaleString()} 元</div>
       ${allTable}
-      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':e.role_level==='assistant'?'與分潤':''}與實際情況相符；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
+      <div class="cbox"><p><b>本人確認：</b>${e.role_level==='assistant'?'以上全團隊成交池之 5% 分潤金額與實際情況相符':`以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':''}與實際情況相符`}；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
