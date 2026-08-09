@@ -506,7 +506,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   <nav class="nav-tabs">
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
-    <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨紀錄</div>
+    <div class="nav-tab rdmgr-hide" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨紀錄</div>
     <div class="nav-tab manager-only" onclick="switchPage('order-import')" id="tab-order-import"><span class="tab-dot" style="background:#8a6d3b"></span>訂單匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('products')" id="tab-products"><span class="tab-dot" style="background:#6b4f8a"></span>產品主檔</div>
@@ -541,7 +541,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#c87840"></span>訂單管理</div>
           <div class="sidebar-card-desc">新增及追蹤訂單</div>
         </div>
-        <div class="sidebar-card" onclick="switchPage('shipments');setSidebarActive(this)">
+        <div class="sidebar-card rdmgr-hide" onclick="switchPage('shipments');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>出貨紀錄</div>
           <div class="sidebar-card-desc">會計銷貨明細</div>
         </div>
