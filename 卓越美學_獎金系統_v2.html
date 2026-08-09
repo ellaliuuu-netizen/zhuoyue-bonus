@@ -2803,7 +2803,7 @@ async function settleSalesMonth(){
   const {data:priorOrders}=await sb.from('orders').select('customer_name').lt('order_date',start);
   const priorCustomers=new Set((priorOrders||[]).map(o=>o.customer_name));
   // 出貨金額：改吃會計銷貨明細 sales_records（按業務員名對應員工），取代舊 shipments
-  const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount').eq('year',y).eq('month',m);
+  const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount,item_name_raw,product_code').eq('year',y).eq('month',m);
   const salesAliasMap={};
   employees.filter(e=>e.dept==='業務部').forEach(e=>{
     if(e.name)salesAliasMap[e.name.trim()]=e.id;
@@ -2822,9 +2822,17 @@ async function settleSalesMonth(){
     if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
     ncByEmp[o.sales_id].add(o.customer_name);
   });
+  // 業務出貨金額同樣排除 PIF／已開票／代購／原料調度（協理 2026-07-04 裁示：PIF 全部門不計入獎金）
+  const excByEmp={}; let excTotal=0;
   (salesRecs||[]).forEach(r=>{
     const key=(r.sales_person||'').trim();
     const empId=salesAliasMap[key];
+    const ex=saleExcludeReason(r);
+    if(ex){
+      excTotal+=Number(r.amount||0);
+      if(empId) excByEmp[empId]=(excByEmp[empId]||0)+Number(r.amount||0);
+      return;
+    }
     if(empId)amtByEmp[empId]=(amtByEmp[empId]||0)+Number(r.amount||0);
     else if(key)unmatchedSales[key]=(unmatchedSales[key]||0)+Number(r.amount||0);
   });
@@ -2855,9 +2863,12 @@ async function settleSalesMonth(){
       note:pr.note||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
-    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
   }
-  document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額（計獎）</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}${r.exc?`<div style="font-size:10px;color:#b3541e">已排除 ${fmtNum(Math.round(r.exc))}</div>`:''}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
+  if(excTotal>0){
+    document.getElementById('sales-m-content').innerHTML+=`<div class="info-box" style="margin-top:10px;font-size:12px">ℹ️ 本月已排除不計獎金之銷貨 <b>${fmtNum(Math.round(excTotal))}</b> 元（PIF／已開發票／代購／同業原料調度），與研發成交、部門件數採同一套排除規則。</div>`;
+  }
   const unEntries=Object.entries(unmatchedSales);
   if(unEntries.length){
     document.getElementById('sales-m-content').innerHTML+=`<div class="info-box" style="margin-top:10px;border:1px solid #b3541e;color:#b3541e;font-size:12px">⚠ 銷貨明細有 ${unEntries.length} 個業務名對不到員工，金額未計入：${unEntries.map(([k,v])=>`${k}（${fmtNum(Math.round(v))}）`).join('、')}。請到「設定→員工」補該員工的銷貨別名後重算。</div>`;
