@@ -1096,7 +1096,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-danger btn-sm manager-only" onclick="clearQuarterData()">清除本季資料</button>
           </div>
         </div>
-        <div class="section-desc">所有已儲存的獎金計算記錄</div>
+        <div class="section-desc">所有已儲存的獎金計算記錄。<b>⚠️ 此區僅涵蓋各部門季獎金與團隊加成（bonus_records）</b>；研發部的成交獎金與打樣獎金存放於各自的表，請以上方「本季發放總表」為準。</div>
         <div class="card" style="border-color:var(--gold)">
           <div class="card-header">
             <div class="card-title">💰 本季發放總表（給財務）</div>
@@ -5617,21 +5617,22 @@ function renderPayoutSummary(){
   let html='';
   for(const [dept,rows] of Object.entries(byDept)){
     const sub=rows.reduce((s,r)=>s+r.total,0);
+    const isRd=dept==='研發部';   // 成交/打樣獎金為研發部專屬，其他部門不列這兩欄
     html+=`<div style="margin-bottom:14px">
       <div style="font-weight:600;margin-bottom:6px;color:var(--ink)">${esc2(dept)}　<span style="font-size:12px;color:var(--ink-faint)">小計 ${sub.toLocaleString()} 元　·　${rows.filter(r=>r.total>0).length}/${rows.length} 人有獎金</span></div>
-      <table><thead><tr><th>姓名</th><th>職稱</th><th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th><th class="td-right">部門季獎金</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
+      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}<th class="td-right">部門季獎金</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
       ${rows.map(r=>r.total>0?`<tr>
         <td style="font-weight:500">${esc2(r.name)}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
-        <td class="td-right">${r.deal?r.deal.toLocaleString():'—'}</td>
-        <td class="td-right">${r.sampling?r.sampling.toLocaleString():'—'}${r.defer?`<div style="font-size:10px;color:#b3541e">暫緩 ${r.defer.toLocaleString()}</div>`:''}</td>
+        ${isRd?`<td class="td-right">${r.deal?r.deal.toLocaleString():'—'}</td>
+        <td class="td-right">${r.sampling?r.sampling.toLocaleString():'—'}${r.defer?`<div style="font-size:10px;color:#b3541e">暫緩 ${r.defer.toLocaleString()}</div>`:''}</td>`:''}
         <td class="td-right">${r.dept_bonus?r.dept_bonus.toLocaleString():'—'}</td>
         <td class="td-right">${r.team?r.team.toLocaleString():'—'}</td>
         <td class="td-right"><b>${r.total.toLocaleString()}</b></td></tr>`
       :`<tr style="background:var(--surface-3)">
         <td style="font-weight:500;color:var(--ink-faint)">${esc2(r.name)}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
-        <td colspan="4" style="font-size:12px;color:var(--ink-faint)">${esc2(r.zeroReason||'')}</td>
+        <td colspan="${isRd?4:2}" style="font-size:12px;color:var(--ink-faint)">${esc2(r.zeroReason||'')}</td>
         <td class="td-right"><span class="badge badge-gray">本季無</span></td></tr>`).join('')}
       </tbody></table></div>`;
   }
