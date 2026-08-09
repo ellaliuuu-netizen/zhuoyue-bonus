@@ -4710,19 +4710,23 @@ async function generateRdConfirmSheets(){
     const recognized=inThisQ(sc);
     const pool=poolOf(sc);
     const who=whoBySc[sc.id]||{};
-    if(!sc.recognized_at){
+    // 附表的三段人名必須每一列都有：本季發獎明細只涵蓋本季，
+    // 已在其他季認列（或尚未認列）的品項要改由引擎推算補齊，否則整列顯示「—」看起來像漏登
+    const needWho=!Object.keys(who).length;
+    if(!sc.recognized_at || needWho){
       computeDealSegments(sc).forEach(x=>{
         if(!x.employee_id)return;
         const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
-        const lb=segLabel[x.segment]||x.segment;
-        who[lb]=(who[lb]?who[lb]+'、':'')+nm;
-        (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push({
+        const lb=x.segment==='oem'?'主責':(segLabel[x.segment]||x.segment);
+        const disp=nm+(x.segment==='oem'?'（代工窗口）':'');
+        if(needWho) who[lb]=(who[lb]?who[lb]+'、':'')+disp;
+        if(!sc.recognized_at) (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push({
           code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-          seg:x.segment, label:lb, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
+          seg:x.segment, label:segLabel[x.segment]||x.segment, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
       });
     }
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, who});
+      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, recAt:(sc.recognized_at||'').slice(0,10), who});
   });
   // 3) 每人一張
   const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
@@ -4810,7 +4814,7 @@ async function generateRdConfirmSheets(){
   const allSorted=allRows.slice().sort((a,b)=>(b.confirmed||'').localeCompare(a.confirmed||''));
   const allTable=allSorted.length?`<h2>附表、全研發部確樣品項一覽（供交叉核對）</h2>
     <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th><th class="c">出貨認列</th><th>主責</th><th>打樣</th><th>確樣</th></tr></thead><tbody>
-    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':'待出貨'}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
+    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':(r.recAt?`✅ 已認列<br><span style="font-size:10px;color:#777">${esc(r.recAt)}</span>`:'待出貨')}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
     </tbody></table>
     <p class="note">本表列出全研發部所有確樣品項與三段歸屬，不含金額。<b>若你參與了其中某個品項，但該段別沒有列出你的名字，請在下方異議欄註明。</b></p>`:'';
   // 同一品項的三段要排在一起，段內固定順序，避免同一支產品被別支插在中間
