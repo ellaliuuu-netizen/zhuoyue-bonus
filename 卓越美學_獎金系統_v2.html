@@ -2015,7 +2015,7 @@ async function toggleProbationGrace(id, cur){
   const ok=await confirmCard(cur?'取消轉正月寬限':'核給轉正月寬限',
     `<b>${e.name||''}</b>（轉正日 ${e.probation_end_date||'—'}）<br><br>`+
     (cur?'取消後，轉正當月將改為<b>自轉正日起按日計算</b>，該月轉正日之前的打樣不計入獎金。'
-        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上標示為「公司額外核給、非制度應發」。'),
+        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上說明：公司考量其整月投入而以整月計算，並列出因此多計入的件數與金額。'),
     cur?'確認取消':'確認核給');
   if(!ok) return;
   const {error}=await sb.from('employees').update({probation_grace_month:!cur}).eq('id',id);
@@ -4800,10 +4800,10 @@ async function generateRdConfirmSheets(){
       <p class="note">最右欄為<b>參考值、不發放</b>：假設本季打樣全數計入時的金額，供你掌握自己的實際產出。實際發放以「計入獎金」件數為準（見第一區）。</p>`:''}
       <table><tbody>
       ${myProb.length?`<tr><td>試用期內出貨認列之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
-      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎　<span style="color:#1a7f5a">（公司寬限：轉正當月整月計入）</span></td></tr>
+      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎${hasGrace(e.id)?`　<span style="color:#1a7f5a">（公司寬限：轉正當月以整月計算）</span>`:''}</td></tr>
       <tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>
       </tbody></table>
-      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司給予寬限：轉正當月不按日切分，該月打樣件數整月計入獎金</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
+      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       ${e.role_level==='assistant'?`<h2>一、獎金計算方式</h2>
@@ -4815,10 +4815,10 @@ async function generateRdConfirmSheets(){
       <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${(()=>{const gm=graceMonth(e.id); if(!gm) return '';
         const gN=((graceGain[e.id]||{})[gm])||0; const kept=(cnt[e.id]||{})[gm]||0;
         const diff=sampleBonus(kept,e.id)-sampleBonus(Math.max(0,kept-gN),e.id);
-        return `<br><b style="color:#1a7f5a">◆ 公司寬限：你於 ${esc(probEndOf(e.id))} 轉正，依制度 ${gm} 月應自轉正日起按日計算；`+
-          `公司放寬以<b>整月計算</b>，${gm} 月全月件數均計入。`+
+        return `<br><b style="color:#1a7f5a">◆ 公司寬限：你於 ${esc(probEndOf(e.id))} 轉正。依制度，${gm} 月原應自轉正日起計算件數；`+
+          `公司考量你整個月都在投入，決定 ${gm} 月<b>以整月計算</b>，全月件數都算給你。`+
           (gN?`本季因此多計入 <b>${gN}</b> 件、多發 <b>${diff.toLocaleString()}</b> 元。`:'')+
-          `此為公司額外核給，非制度應發。</b>`;})()}</p>
+          `</b>`;})()}</p>
       <h2>一之二、打樣獎金發放判定</h2>
       ${gateH}`}
       <h2>二、成交獎金三段（本季已出貨認列）</h2>
