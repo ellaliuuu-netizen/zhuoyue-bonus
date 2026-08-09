@@ -4891,7 +4891,7 @@ async function generateRdConfirmSheets(){
       <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎${hasGrace(e.id)?`　<span style="color:#1a7f5a">（公司寬限：轉正當月以整月計算）</span>`:''}</td></tr>
       ${isAsst?'':`<tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>`}
       </tbody></table>
-      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
+      <p class="note">依制度，試用期（到職起三個月）內不計獎金，<b>需經過試用期考核、評估適任與否後，才會納入公司營運季獎金鼓勵制度</b>。判定方式：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
       ${e.role_level==='assistant'?`<h2>一、獎金計算方式</h2>
