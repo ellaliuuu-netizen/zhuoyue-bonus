@@ -4738,7 +4738,7 @@ async function generateRdConfirmSheets(){
   const _staffForMgr=Object.entries(deal).reduce((s,[eid,rows])=>{
     const e2=employees.find(x=>x.id===eid);
     if(!(e2 && e2.dept==='研發部' && (e2.role_level==='staff'||e2.role_level==='senior'))) return s;
-    return s + rows.reduce((t,r)=>t + ((!_mgrEmp?.probation_end_date || (r.recAt||'') >= _mgrEmp.probation_end_date) ? r.amount : 0), 0);
+    return s + rows.reduce((t,r)=>t + ((!_mgrEmp?.probation_end_date || (r.recAt||'').slice(0,7) >= _mgrEmp.probation_end_date.slice(0,7)) ? r.amount : 0), 0);
   },0);
   const mgrAddon=Math.round(_staffForMgr*0.15);
   const asstShare=Math.round(_sumFor(_asstEmp)*0.05);
