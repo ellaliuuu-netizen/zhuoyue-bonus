@@ -1097,6 +1097,17 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
         </div>
         <div class="section-desc">所有已儲存的獎金計算記錄</div>
+        <div class="card" style="border-color:var(--gold)">
+          <div class="card-header">
+            <div class="card-title">💰 本季發放總表（給財務）</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" onclick="loadPayoutSummary()">🔄 重新整理</button>
+              <button class="btn btn-gold btn-sm" onclick="exportPayoutCSV()">📤 匯出給財務</button>
+            </div>
+          </div>
+          <div class="info-box">彙整<b>全部三個來源</b>：研發成交獎金（已放行）＋研發打樣獎金（已結算可發）＋各部門季獎金／團隊加成。這是實際要發放的金額，下方「獎金紀錄」僅為其中一個來源。</div>
+          <div id="payout-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">載入中…</div></div></div>
+        </div>
         <div class="card"><div id="history-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中...</div></div></div></div>
       </div>
 
@@ -4416,7 +4427,7 @@ function switchPage(page){
   document.getElementById('page-'+page)?.classList.add('active');
   document.getElementById('tab-'+page)?.classList.add('active');
   if(page==='dashboard')loadDashboard();
-  if(page==='history')loadDashboard();
+  if(page==='history'){loadDashboard();loadPayoutSummary();}
   if(page==='orders')loadOrders();
   if(page==='shipments')loadShipments();
   if(page==='settings')renderEmployeeList();
@@ -5531,6 +5542,89 @@ async function fillDeptAutoCount(inputId, noteId){
   }
 }
 
+// ===== 本季發放總表：把分散在三張表的錢合併成一張給財務的清單 =====
+// 研發成交在 rd_deal_bonuses(released)、研發打樣在 rd_monthly_settlement(paid)、
+// 其他部門季獎金與團隊加成在 bonus_records。只看任一張都會漏。
+let _payoutRows=[];
+async function loadPayoutSummary(){
+  const el=document.getElementById('payout-content'); if(!el) return;
+  const yr=appSettings.year, q=appSettings.quarter;
+  const qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[q]||[];
+  const agg={};   // name -> {dept, role, deal, sampling, dept_bonus, team, total, defer}
+  const put=(name,dept,role,field,amt)=>{
+    if(!name) return;
+    const a=agg[name]=agg[name]||{name,dept:dept||'',role:role||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
+    if(dept&&!a.dept)a.dept=dept; if(role&&!a.role)a.role=role;
+    a[field]+=Number(amt)||0;
+  };
+  // 1) 研發成交獎金（已放行才算要發）
+  const {data:deals}=await sb.from('rd_deal_bonuses')
+    .select('employee_id, amount, employees(name, dept, role_title)')
+    .eq('status','released').eq('year',yr).eq('quarter',q);
+  (deals||[]).forEach(d=>put(d.employees?.name, d.employees?.dept||'研發部', d.employees?.role_title, 'deal', d.amount));
+  // 2) 研發打樣獎金（paid＝當季有成交認列、gate 已解除）
+  const {data:samp}=await sb.from('rd_monthly_settlement')
+    .select('base_bonus, status, month, employees(name, dept, role_title)')
+    .eq('year',yr).in('month',qm);
+  (samp||[]).forEach(r=>{
+    const nm=r.employees?.name; if(!nm) return;
+    if(r.status==='paid') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'sampling', r.base_bonus);
+    else if(r.status==='pending_carryover') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'defer', r.base_bonus);
+  });
+  // 3) 其他部門季獎金／團隊加成
+  const {data:br}=await sb.from('bonus_records').select('*').eq('year',yr).eq('quarter',q);
+  (br||[]).forEach(r=>put(r.name, r.dept, r.role_title, r.record_type==='team_bonus'?'team':'dept_bonus', r.bonus));
+  _payoutRows=Object.values(agg).map(a=>({...a, total:a.deal+a.sampling+a.dept_bonus+a.team}))
+    .filter(a=>a.total>0||a.defer>0)
+    .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.total-a.total);
+  renderPayoutSummary();
+}
+function renderPayoutSummary(){
+  const el=document.getElementById('payout-content');
+  if(!_payoutRows.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">本季尚無可發放的獎金</div></div>';
+    return;
+  }
+  const byDept={}; _payoutRows.forEach(r=>{(byDept[r.dept||'—']=byDept[r.dept||'—']||[]).push(r);});
+  const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
+  const deferAll=_payoutRows.reduce((s,r)=>s+r.defer,0);
+  let html='';
+  for(const [dept,rows] of Object.entries(byDept)){
+    const sub=rows.reduce((s,r)=>s+r.total,0);
+    html+=`<div style="margin-bottom:14px">
+      <div style="font-weight:600;margin-bottom:6px;color:var(--ink)">${esc2(dept)}　<span style="font-size:12px;color:var(--ink-faint)">小計 ${sub.toLocaleString()} 元</span></div>
+      <table><thead><tr><th>姓名</th><th>職稱</th><th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th><th class="td-right">部門季獎金</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr>
+        <td style="font-weight:500">${esc2(r.name)}</td>
+        <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
+        <td class="td-right">${r.deal?r.deal.toLocaleString():'—'}</td>
+        <td class="td-right">${r.sampling?r.sampling.toLocaleString():'—'}${r.defer?`<div style="font-size:10px;color:#b3541e">暫緩 ${r.defer.toLocaleString()}</div>`:''}</td>
+        <td class="td-right">${r.dept_bonus?r.dept_bonus.toLocaleString():'—'}</td>
+        <td class="td-right">${r.team?r.team.toLocaleString():'—'}</td>
+        <td class="td-right"><b>${r.total.toLocaleString()}</b></td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+  html+=`<div style="text-align:right;border-top:2px solid var(--gold);padding-top:10px;margin-top:6px">
+    <div style="font-size:13px;color:var(--ink-faint)">${appSettings.year} ${appSettings.quarter}　共 ${_payoutRows.length} 人</div>
+    <div style="font-size:19px;font-weight:700">應發放總額：${grand.toLocaleString()} 元</div>
+    ${deferAll?`<div style="font-size:12px;color:#b3541e;margin-top:3px">另有暫緩累積 ${deferAll.toLocaleString()} 元（本季無成交認列，待日後出貨當季一併發放，不列入本次）</div>`:''}
+  </div>`;
+  el.innerHTML=html;
+}
+function exportPayoutCSV(){
+  if(!_payoutRows.length){showToast('本季無可發放獎金');return;}
+  const head=['部門','姓名','職稱','成交獎金','打樣獎金','部門季獎金','團隊加成／分潤','應發合計','暫緩累積'];
+  const lines=[head.join(',')].concat(_payoutRows.map(r=>
+    [r.dept,r.name,r.role,r.deal,r.sampling,r.dept_bonus,r.team,r.total,r.defer].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')));
+  const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
+  lines.push(['','','','','','','合計',grand,''].map(v=>`"${v}"`).join(','));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`獎金發放總表_${appSettings.year}${appSettings.quarter}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast('已匯出發放總表');
+}
 // ===== 銷貨自動匯入：暫存區確認（NAS 排程寫入 sales_staging，協理確認後才進 sales_records）=====
 let _stgRows=[];
 async function loadSalesStaging(){
