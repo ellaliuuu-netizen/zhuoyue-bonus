@@ -4796,7 +4796,10 @@ async function generateRdConfirmSheets(){
         if(ok) carry=0; else carry+=s;
       }
     });
-    return {payNow, deferredTotal:carry, thisQDeferred, released:qList.some(qq=>qq.k===curKey&&hasDealIn(empId,qq))};
+    const rel=qList.some(qq=>qq.k===curKey&&hasDealIn(empId,qq));
+    const carryBefore=rel?Math.max(0,payNow-samplingBonusOf(empId,{k:curKey,y:appSettings.year,q:appSettings.quarter}))
+                         :Math.max(0,carry-thisQDeferred);
+    return {payNow, deferredTotal:carry, thisQDeferred, carryBefore, released:rel};
   };
   // 全研發部確樣品項一覽：每個人都看得到「所有品項」與三段歸屬（不含金額，避免互比薪資）。
   // 個人表只列自己領到的，看不出「本該有我卻被登給別人」；有這張全覽才能由當事人自行發現遺漏。
@@ -4828,14 +4831,16 @@ async function generateRdConfirmSheets(){
       extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）<span class="est">＊預估</span></h2><table><tbody><tr><td>全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr><tr><td>× 5% 助理分潤</td><td class="r"><b>${asstShare.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">助理不走成交三段，改領全團隊成交池 5%。</p>`;
     }
     const g=gateOf(e.id);
-    const gateH=`<table><tbody>
+    const gBadge=g.released
+      ? `<div style="background:#e8f6f0;border:1px solid #2e7d52;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-weight:700;color:#2e7d52">✅ 本季<u>照常發放</u>　—　你本季有確樣品項完成出貨認列，發放條件成立</div>`
+      : `<div style="background:#fdebd0;border:1px solid #b3541e;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-weight:700;color:#b3541e">⏸️ 本季<u>暫緩發放</u>（非取消）　—　你本季沒有任何確樣品項完成出貨認列</div>`;
+    const gateH=gBadge+`<table><tbody>
       <tr><td>本季打樣獎金原額</td><td class="r">${sTot.toLocaleString()} 元</td></tr>
-      ${g.released
-        ? `<tr><td>本季有確樣品項出貨認列 → <b style="color:#2e7d52">解除暫緩</b>，連同先前累積一併發放</td><td class="r"><b>${g.payNow.toLocaleString()} 元</b></td></tr>`
-        : `<tr><td>本季無任何確樣品項出貨認列 → <b style="color:#b3541e">打樣獎金暫緩</b>（非取消）</td><td class="r"><b>0 元</b></td></tr>
-           <tr><td>累計暫緩餘額（含本季，待日後出貨時一併發放）</td><td class="r">${g.deferredTotal.toLocaleString()} 元</td></tr>`}
+      <tr><td>先前季度累積暫緩額</td><td class="r">${(g.carryBefore||0).toLocaleString()} 元</td></tr>
+      <tr style="background:${g.released?'#e8f6f0':'#fdebd0'}"><td><b>本季實際發放</b></td><td class="r"><b style="font-size:16px;color:${g.released?'#2e7d52':'#b3541e'}">${(g.released?g.payNow:0).toLocaleString()} 元</b></td></tr>
+      <tr><td>本季結束後仍累積暫緩（待日後出貨當季一併發放）</td><td class="r"><b>${(g.released?0:g.deferredTotal).toLocaleString()} 元</b></td></tr>
       </tbody></table>
-      <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金暫緩並累積遞延，待你有品項出貨的那一季，連同先前暫緩額一次發放。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
+      <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金<b>暫緩並累積遞延、不會消失也不設時效</b>，待你有品項出貨的那一季，連同先前暫緩額一次發清。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
     const grand=(e.role_level==='assistant'?0:g.payNow)+dTot+extra; // 助理不適用打樣件數獎金
     // 試用期揭露：講清楚哪些被排除、為什麼、何時起計，避免當事人以為系統漏算
     const probEnd=e.probation_end_date||'';
