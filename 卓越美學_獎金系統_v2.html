@@ -2015,7 +2015,7 @@ async function toggleProbationGrace(id, cur){
   const ok=await confirmCard(cur?'取消轉正月寬限':'核給轉正月寬限',
     `<b>${e.name||''}</b>（轉正日 ${e.probation_end_date||'—'}）<br><br>`+
     (cur?'取消後，轉正當月將改為<b>自轉正日起按日計算</b>，該月轉正日之前的打樣不計入獎金。'
-        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上說明：公司考量其整月投入而以整月計算，並列出因此多計入的件數與金額。'),
+        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上說明：公司考量其試用期努力積極、轉正月整月投入，故以整月計算，並列出因此多計入的件數。'),
     cur?'確認取消':'確認核給');
   if(!ok) return;
   const {error}=await sb.from('employees').update({probation_grace_month:!cur}).eq('id',id);
@@ -4813,11 +4813,10 @@ async function generateRdConfirmSheets(){
       :`<h2>一、打樣獎金（每月）</h2>
       <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
       <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${(()=>{const gm=graceMonth(e.id); if(!gm) return '';
-        const gN=((graceGain[e.id]||{})[gm])||0; const kept=(cnt[e.id]||{})[gm]||0;
-        const diff=sampleBonus(kept,e.id)-sampleBonus(Math.max(0,kept-gN),e.id);
+        const gN=((graceGain[e.id]||{})[gm])||0;
         return `<br><b style="color:#1a7f5a">◆ 公司寬限：你於 ${esc(probEndOf(e.id))} 轉正。依制度，${gm} 月原應自轉正日起計算件數；`+
-          `公司考量你整個月都在投入，決定 ${gm} 月<b>以整月計算</b>，全月件數都算給你。`+
-          (gN?`本季因此多計入 <b>${gN}</b> 件、多發 <b>${diff.toLocaleString()}</b> 元。`:'')+
+          `公司考量你試用期努力積極，轉正月整個月都積極投入，決定 ${gm} 月<b>以整月計算</b>，全月件數都算給你。`+
+          (gN?`本季因此多計入 <b>${gN}</b> 件。`:'')+
           `</b>`;})()}</p>
       <h2>一之二、打樣獎金發放判定</h2>
       ${gateH}`}
