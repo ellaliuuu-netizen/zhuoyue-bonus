@@ -4844,7 +4844,14 @@ async function generateRdConfirmSheets(){
       extraH=`<h2>三、團隊加成（研發同仁成交池 × 15%）<span class="est">＊預估</span></h2><table><tbody><tr><td>研發同仁成交池合計（不含課長自己）</td><td class="r">${staffTotal.toLocaleString()} 元</td></tr><tr><td>× 15% 團隊加成</td><td class="r"><b>${mgrAddon.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">課長總獎金＝個人（打樣＋成交）＋研發同仁成交池×15%；加成池不含課長自己已分得的段。</p>`;
     }else if(e.role_level==='assistant'){
       extra=asstShare;
-      extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）<span class="est">＊預估</span></h2><table><tbody><tr><td>全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr><tr><td>× 5% 助理分潤</td><td class="r"><b>${asstShare.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">助理不走成交三段，改領全團隊成交池 5%。</p>`;
+      const estShare=Math.round(poolTotal*0.05);          // 不受試用期限制的預估值
+      const inProbQ=estShare>asstShare;                    // 本季分潤被試用期擋掉
+      extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）</h2><table><tbody>`+
+        `<tr><td>本季全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr>`+
+        `<tr><td>× 5% 助理分潤（預估）</td><td class="r"><b>${estShare.toLocaleString()} 元</b></td></tr>`+
+        (inProbQ?`<tr style="background:#fdebd0"><td>本季狀態：<b style="color:#b3541e">試用期內（至 ${esc(e.probation_end_date||'—')}）</b>，依制度不計獎金</td><td class="r"><b style="font-size:16px;color:#b3541e">實發 ${asstShare.toLocaleString()} 元</b></td></tr>`
+                :`<tr style="background:#e8f6f0"><td><b>本季實發</b></td><td class="r"><b style="font-size:16px;color:#2e7d52">${asstShare.toLocaleString()} 元</b></td></tr>`)+
+        `</tbody></table><p class="note">研發助理不走成交三段、亦無合格打樣件數，獎金一律為全團隊成交池的 5% 分潤。${inProbQ?`上列預估為「若已轉正」之金額，供你掌握團隊產出規模；自 <b>${esc(e.probation_end_date||'')}</b> 起之出貨認列即開始計入你的分潤。`:''}</p>`;
     }
     const g=gateOf(e.id);
     const gBadge=g.released
@@ -4857,7 +4864,7 @@ async function generateRdConfirmSheets(){
       <tr><td>本季結束後仍累積暫緩（待日後出貨當季一併發放）</td><td class="r"><b>${(g.released?0:g.deferredTotal).toLocaleString()} 元</b></td></tr>
       </tbody></table>
       <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金<b>暫緩並累積遞延、不會消失也不設時效</b>，待你有品項出貨的那一季，連同先前暫緩額一次發清。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
-    const grand=(e.role_level==='assistant'?0:g.payNow)+dTot+extra; // 助理不適用打樣件數獎金
+    const grand=e.role_level==='assistant'?extra:(g.payNow+dTot+extra); // 助理不適用打樣件數獎金、不走成交三段
     // 試用期揭露：講清楚哪些被排除、為什麼、何時起計，避免當事人以為系統漏算
     const probEnd=e.probation_end_date||'';
     const probP=probSkip[e.id]||{n:0,byM:{}};
@@ -4882,7 +4889,7 @@ async function generateRdConfirmSheets(){
       <table><tbody>
       ${myProb.length?`<tr><td>試用期內出貨認列之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
       <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎${hasGrace(e.id)?`　<span style="color:#1a7f5a">（公司寬限：轉正當月以整月計算）</span>`:''}</td></tr>
-      <tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>
+      ${isAsst?'':`<tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>`}
       </tbody></table>
       <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
@@ -4901,21 +4908,23 @@ async function generateRdConfirmSheets(){
           `</b>`;})()}</p>
       <h2>一之二、打樣獎金發放判定</h2>
       ${gateH}`}
-      <h2>二、成交獎金三段（本季已出貨認列）</h2>
+      ${e.role_level==='assistant'?'':`<h2>二、成交獎金三段（本季已出貨認列）</h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
       <p class="note">成交獎金以「出貨認列」為計算時點：出貨落在哪一季，該筆獎金即計入哪一季。</p>
-      ${pendH}
+      ${pendH}`}
       ${extraH}
       ${probH}
       ${(()=>{const parts=[];
-        if(e.role_level!=='assistant') parts.push(`打樣獎金 ${(g.released?g.payNow:0).toLocaleString()}`);
-        parts.push(`成交獎金 ${dTot.toLocaleString()}`);
-        if(e.role_level==='manager') parts.push(`團隊加成 ${extra.toLocaleString()}`);
-        if(e.role_level==='assistant') parts.push(`助理分潤 ${extra.toLocaleString()}`);
+        if(e.role_level==='assistant'){ parts.push(`助理分潤 ${extra.toLocaleString()}`); }
+        else{
+          parts.push(`打樣獎金 ${(g.released?g.payNow:0).toLocaleString()}`);
+          parts.push(`成交獎金 ${dTot.toLocaleString()}`);
+          if(e.role_level==='manager') parts.push(`團隊加成 ${extra.toLocaleString()}`);
+        }
         return `<div style="text-align:right;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">`+
           `<div style="font-size:12px;color:#555;margin-bottom:2px">${parts.join('　＋　')}</div>`+
           `<div style="font-size:15px;font-weight:700">本季實計合計：${grand.toLocaleString()} 元</div></div>`;})()}
-      ${allTable}
+      ${e.role_level==='assistant'?'':allTable}
       <div class="cbox"><p><b>本人確認：</b>${e.role_level==='assistant'?'以上全團隊成交池之 5% 分潤金額與實際情況相符':`以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':''}與實際情況相符`}；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
