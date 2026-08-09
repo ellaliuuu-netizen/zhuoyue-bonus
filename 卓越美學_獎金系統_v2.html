@@ -721,7 +721,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- RD -->
       <div class="page" id="page-rd">
         <div class="section-title" style="color:var(--blue)">研發部獎金計算</div>
-        <div class="section-desc">個人獎金 = A值 × 劑型基數 × 確樣成交件數｜課長加計團隊總獎金15%｜助理5%</div>
+        <div class="section-desc">成交池 ＝ A值 × 劑型基數（制度 v10 起：一筆成交一個池，不乘出貨件數）｜三段：主責 50%／打樣 30%／確樣 20%｜課長加計同仁池 15%｜助理 5%</div>
         <div id="rd-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="inner-tabs">
           <div class="inner-tab active" onclick="switchInner(this,'rd-calc-sec')">個人試算</div>
@@ -752,7 +752,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div id="rd-items-container">
                 <div class="rd-row" style="display:grid;grid-template-columns:1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end">
                   <div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (基數 0.3)</option><option value="essence">精華液/凝膠/面膜 (基數 0.4)</option><option value="emulsion_ow">乳劑水包油 (基數 0.8)</option><option value="emulsion_wo">乳劑油包水 (基數 1.0)</option><option value="special">特殊劑型 (基數 1.2)</option></select></div>
-                  <div><label class="form-label">確樣成交件數</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div>
+                  <div><label class="form-label">成交筆數（不同正式編號）</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div>
                   <div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>
                 </div>
               </div>
@@ -778,7 +778,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="rd-collab-sec" style="display:none">
           <div class="card">
             <div class="card-header"><div class="card-title">多人協作獎金分配</div></div>
-            <div class="info-box">基礎分（50%）按打樣次數比例，成交加成（50%）由最終確認成交者獨得</div>
+            <div class="info-box">制度 v14 三段式：主責 50%（依配方架構變動程度拆分原主責／協作）、打樣 30%（按打樣次數比例，助理不計）、確樣 20%（誰確誰領）。本頁僅供試算，正式獎金走「確樣 → 出貨認列 → 覆核放行」。</div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">案件劑型</label>
                 <select class="form-select" id="collab-type">
@@ -786,13 +786,22 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                   <option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option>
                   <option value="special">特殊劑型 (1.2)</option>
                 </select>
-              </div><div></div>
+              </div>
+        <div class="form-group"><label class="form-label">配方架構變動程度</label>
+          <select class="form-select" id="collab-level">
+            <option value="minor">輕微（改 0~1 項）— 原主責滿 50%</option>
+            <option value="medium_light">中度偏輕（改 2 項）— 原主責 40% ＋ 協作 10%</option>
+            <option value="medium_heavy" selected>中度偏重（改 3 項）— 原主責 35% ＋ 協作 15%</option>
+            <option value="co_dev">接近共同開發（四項全改）— 原主責 25% ＋ 協作 25%</option>
+            <option value="major">大幅（動到劑型）— 重新認定主責，新主責滿 50%</option>
+          </select>
+        </div>
             </div>
             <div id="collab-persons">
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end">
+              <div style="display:grid;grid-template-columns:1fr .8fr 1fr .8fr 80px;gap:10px;margin-bottom:10px;align-items:end">
                 <div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div>
                 <div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div>
-                <div><label class="form-label">成交確認者</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div>
+                <div><label class="form-label">主責角色</label><select class="form-select collab-role"><option value="owner">原主責／新主責</option><option value="collab">協作</option><option value="none">僅打樣</option></select></div><div><label class="form-label">確樣人</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div>
                 <div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>
               </div>
             </div>
@@ -2883,7 +2892,7 @@ function addRdRow() {
   const c=document.getElementById('rd-items-container');
   const d=document.createElement('div');d.className='rd-row';
   d.style.cssText='display:grid;grid-template-columns:1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end';
-  d.innerHTML=`<div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (0.3)</option><option value="essence">精華液/凝膠/面膜 (0.4)</option><option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option><option value="special">特殊劑型 (1.2)</option></select></div><div><label class="form-label">確樣件數</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div><div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>`;
+  d.innerHTML=`<div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (0.3)</option><option value="essence">精華液/凝膠/面膜 (0.4)</option><option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option><option value="special">特殊劑型 (1.2)</option></select></div><div><label class="form-label">成交筆數（不同正式編號）</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div><div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>`;
   c.appendChild(d);
 }
 function removeRdRow(btn){if(document.querySelectorAll('.rd-row').length>1)btn.closest('.rd-row').remove();}
@@ -2902,12 +2911,13 @@ function calcRd() {
     const capped=eb<info.base?`（上限 ${appSettings.rdMaxBase}）`:'';
     if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}${capped}`);base+=b;}
   });
-  const pr=probationRatio(emp);
-  const total=Math.round(base*pr.ratio);
+  // 制度 v14：研發試用期以「打樣日／出貨認列日」逐筆判定，不套季度天數比例，故此處不乘 probationRatio
+  const total=base;
   show('rd-result');
   document.getElementById('rd-total').textContent=fmt(total);
   let html=breakdown.map(b=>`<div class="res-item"><span class="res-item-dot"></span>${b}</div>`).join('');
-  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>三段拆分：</strong>主責 50% ${fmt(Math.round(base*.5))}／打樣 30% ${fmt(Math.round(base*.3))}／確樣 20% ${fmt(Math.round(base*.2))}</div>`;
+  html+=`<div class="res-item" style="color:var(--ink-faint);font-size:12px"><span class="res-item-dot"></span>本頁為試算：正式成交獎金一律由「確樣 → 出貨認列 → 協理覆核放行」產生，不由此頁入帳。試用期資格於認列當下依出貨日判定。</div>`;
   document.getElementById('rd-breakdown').innerHTML=html;
 }
 async function saveRd() {
@@ -2924,10 +2934,9 @@ async function saveRd() {
     base+=Math.round(appSettings.aValue*eb*qty);
     if (qty>0) items.push(`${info.name}×${qty}`);
   });
-  const pr=probationRatio(emp);
-  const total=Math.round(base*pr.ratio);
-  const ok=await saveRecord({dept:'研發部',name:emp.name,bonus:total,role_title:emp.role_title,detail:`${emp.role_title}｜${items.join(', ')}｜A值${appSettings.aValue}｜上限${appSettings.rdMaxBase}${pr.note}`,record_type:'quarterly'});
-  if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(total)}`);
+  // 制度 v10 起成交獎金改三段式，一律由「確樣→出貨認列→協理覆核放行」產生。
+  // 本頁若再寫入 bonus_records 會與三段式重複入帳，故停止寫入、僅保留試算。
+  showToast('本頁僅供試算：正式成交獎金請至「🎯 成交獎金（三段）」覆核放行，不由此頁入帳');
 }
 // 制度 v10：課長加成＝研發同仁「成交獎金」×15%（不含課長自己）；助理＝全團隊（含課長）「成交獎金」×5%。
 // 三段式上線後成交獎金存在 rd_deal_bonuses，放行（released）不會寫回 bonus_records，
@@ -2938,7 +2947,7 @@ async function fetchRdTeamBase(){
   const pad=m=>String(m).padStart(2,'0');
   const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
   const {data:deals}=await sb.from('rd_deal_bonuses')
-    .select('employee_id, amount, employees(name, role_title)')
+    .select('employee_id, amount, recognized_at, employees(name, role_title)')
     .eq('status','released')
     .gte('recognized_at',`${yr}-${pad(qMonths[0])}-01`).lt('recognized_at',`${endY}-${pad(endM)}-01`);
   if(deals&&deals.length){
@@ -2946,19 +2955,21 @@ async function fetchRdTeamBase(){
     deals.forEach(d=>{ if(!d.employee_id)return;
       const k=d.employee_id;
       (by[k]=by[k]||{name:d.employees?.name||'-', role_title:d.employees?.role_title||'研發', bonus:0}).bonus+=Number(d.amount)||0; });
-    return {rows:Object.values(by), source:'三段式成交獎金（已放行）'};
+    return {rows:Object.values(by), source:'三段式成交獎金（已放行）', deals};
   }
   const {data}=await sb.from('bonus_records').select('*')
     .eq('dept','研發部').eq('year',yr).eq('quarter',appSettings.quarter).eq('record_type','quarterly');
   return {rows:(data||[]).map(r=>({name:r.name, role_title:r.role_title, bonus:r.bonus})), source:'手動輸入的季獎金'};
 }
 async function calcRdTeam() {
-  const {rows,source}=await fetchRdTeamBase();
+  const {rows,source,deals}=await fetchRdTeamBase();
   const el=document.getElementById('rd-team-content');
   if (!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">本季尚無研發成交獎金（放行後才計入加成基數）</div></div>';return;}
   const allBase=rows.reduce((s,r)=>s+r.bonus,0);
   const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
-  const assistantBonus=Math.round(allBase*.05);
+  const _asst=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
+  const _asstBase=(deals&&_asst)?rdAssistantBase(deals,_asst):allBase;
+  const assistantBonus=Math.round(_asstBase*.05);
   el.innerHTML=`<div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px">加成基數來源：<strong>${source}</strong>　｜　全團隊池 ${fmt(allBase)}（含課長）、同仁池 ${fmt(mgrBase)}（不含課長）</div>`+
     `<table><thead><tr><th>姓名</th><th>職稱</th><th>成交獎金</th><th class="td-right">加成後</th></tr></thead><tbody>
     ${rows.map(r=>{
@@ -2967,12 +2978,22 @@ async function calcRdTeam() {
       if (isMgr){final=Math.round(r.bonus+mgrBase*.15);note='＋同仁池15%';}
       return `<tr><td>${r.name}</td><td>${r.role_title||'研發'}</td><td>${fmt(r.bonus)}</td><td class="td-right"><strong>${fmt(final)}</strong>${note?`<span style="font-size:11px;color:var(--ink-faint);margin-left:4px">${note}</span>`:''}</td></tr>`;
     }).join('')}
-    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（全團隊池 ${fmt(allBase)} × 5%）</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
+    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（成交池 ${fmt(_asstBase)} × 5%）${_asstBase<allBase?`<span style="font-size:11px;color:var(--ink-faint)">　已排除試用期內認列 ${fmt(allBase-_asstBase)}</span>`:''}</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
   </tbody></table>`;
+}
+// 助理分潤基數：只計「轉正月起認列」的成交（制度 v14，與個人確認表同一判定；不套季度天數比例）
+function rdAssistantBase(deals, assistant){
+  if(!deals) return null;
+  const pe=assistant?.probation_end_date;
+  return deals.reduce((s,d)=>{
+    const rm=(d.recognized_at||'').slice(0,7);
+    if(pe && rm && rm < pe.slice(0,7)) return s;      // 認列月早於轉正月 → 試用期內，不計
+    return s+(Number(d.amount)||0);
+  },0);
 }
 async function saveRdTeam(){
   // 基數與 calcRdTeam 同源（優先三段式成交明細），避免畫面顯示與實際入帳不一致
-  const {rows,source}=await fetchRdTeamBase();
+  const {rows,source,deals}=await fetchRdTeamBase();
   if (!rows.length){ showToast('尚無研發本季成交獎金，請先放行成交明細或儲存各人獎金'); return; }
   const allBase=rows.reduce((s,r)=>s+r.bonus,0);
   const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
@@ -2980,16 +3001,17 @@ async function saveRdTeam(){
     || (()=>{const m=employees.find(e=>e.dept==='研發部'&&e.is_active&&(e.role_title||'').includes('課長')); return m?{name:m.name,role_title:m.role_title}:null;})();
   const assistant=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
   const mgrAdd=mgr?Math.round(mgrBase*.15):0;
-  const asstBonus=assistant?Math.round(allBase*.05):0;
+  const asstBase=(deals&&assistant)?rdAssistantBase(deals,assistant):allBase;
+  const asstBonus=assistant?Math.round(asstBase*.05):0;
   let count=0;
   if (mgr && mgrAdd>0){
     const ok=await saveRecord({dept:'研發部',name:mgr.name,bonus:mgrAdd,role_title:mgr.role_title,detail:`課長加成 15% × 同仁成交池 ${fmt(mgrBase)}（基數：${source}）`,record_type:'team_bonus'});
     if (ok) count++;
   }
   if (assistant && asstBonus>0){
-    const pr=probationRatio(assistant);
-    const asstFinal=Math.round(asstBonus*pr.ratio);
-    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstFinal,role_title:assistant.role_title,detail:`助理獎金 5% × 全團隊成交池 ${fmt(allBase)}（含課長；基數：${source}）${pr.note}`,record_type:'team_bonus'});
+    // 制度 v14：研發試用期以「出貨認列日」判定，不套季度天數比例
+    const excl=allBase-asstBase;
+    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstBonus,role_title:assistant.role_title,detail:`助理獎金 5% × 成交池 ${fmt(asstBase)}（含課長；基數：${source}）${excl>0?`｜已排除試用期內認列 ${fmt(excl)}`:''}`,record_type:'team_bonus'});
     if (ok) count++;
   }
   showToast(`✓ 已寫入 ${count} 筆團隊加成`);
@@ -2997,8 +3019,8 @@ async function saveRdTeam(){
 }
 function addCollabRow(){
   const c=document.getElementById('collab-persons');const d=document.createElement('div');
-  d.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end';
-  d.innerHTML=`<div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div><div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div><div><label class="form-label">成交確認者</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div><div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>`;
+  d.style.cssText='display:grid;grid-template-columns:1fr .8fr 1fr .8fr 80px;gap:10px;margin-bottom:10px;align-items:end';
+  d.innerHTML=`<div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div><div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div><div><label class="form-label">主責角色</label><select class="form-select collab-role"><option value="owner">原主責／新主責</option><option value="collab">協作</option><option value="none">僅打樣</option></select></div><div><label class="form-label">確樣人</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div><div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>`;
   c.appendChild(d);
 }
 function removeCollabRow(btn){if(document.getElementById('collab-persons').children.length>1)btn.closest('div[style]').remove();}
@@ -3074,9 +3096,9 @@ async function saveRdAllFromOrders(empArr){
   for(const e of empArr){
     const emp=employees.find(x=>x.id===e.id);
     if(!emp){fail++;continue;}
-    const pr=probationRatio(emp);
-    const finalBonus=Math.round(e.total*pr.ratio);
-    const detail=`自動帶入｜${e.items.length} 張訂單｜${e.items.map(i=>`${i.order_no}(${i.samples}件)`).join(', ')}${pr.note}`;
+    // 制度 v14：研發試用期以打樣日／出貨認列日逐筆判定，不套季度天數比例
+    const finalBonus=Math.round(e.total);
+    const detail=`自動帶入｜${e.items.length} 張訂單｜${e.items.map(i=>`${i.order_no}(${i.samples}件)`).join(', ')}`;
     const r=await saveRecord({dept:'研發部', name:e.name, bonus:finalBonus, role_title:e.role_title, detail, record_type:'quarterly'});
     if(r) ok++; else fail++;
   }
@@ -3087,26 +3109,51 @@ async function saveRdAllFromOrders(empArr){
 // ===== 自動算研發部獎金 END =====
 
 function calcCollab(){
+  // 制度 v14 三段式：主責 50%（依變動程度拆原主責／協作）＋ 打樣 30%（按次數）＋ 確樣 20%（誰確誰領）
   const type=document.getElementById('collab-type').value;
+  const lv=document.getElementById('collab-level').value;
   const info=rdTypes[type];
-  const totalBonus=Math.round(appSettings.aValue*info.base);
+  const pool=Math.round(appSettings.aValue*info.base);
   const persons=[];
   document.querySelectorAll('#collab-persons > div').forEach(row=>{
-    const name=row.querySelector('.collab-name').value.trim();
-    const samples=parseInt(row.querySelector('.collab-samples').value)||0;
-    const isWinner=row.querySelector('.collab-winner').value==='1';
-    if (name) persons.push({name,samples,isWinner});
+    const name=row.querySelector('.collab-name')?.value.trim();
+    const samples=parseInt(row.querySelector('.collab-samples')?.value)||0;
+    const role=row.querySelector('.collab-role')?.value||'none';
+    const isConf=row.querySelector('.collab-winner')?.value==='1';
+    if (name) persons.push({name,samples,role,isConf,owner:0,sampling:0,confirm:0});
   });
+  if(!persons.length){showToast('請先填入人員');return;}
+  const pre=COLLAB_PRESET[lv]||{owner:50,collab:0};
+  const owners=persons.filter(p=>p.role==='owner');
+  const collabs=persons.filter(p=>p.role==='collab');
+  // 主責段 50%
+  if(lv==='major'){
+    owners.forEach(p=>p.owner=Math.round(pool*0.5/Math.max(1,owners.length)));
+  }else{
+    const ownerAmt=pool*pre.owner/100, collabAmt=pool*pre.collab/100;
+    owners.forEach(p=>p.owner=Math.round(ownerAmt/Math.max(1,owners.length)));
+    if(collabs.length) collabs.forEach(p=>p.owner=Math.round(collabAmt/collabs.length));
+  }
+  // 打樣段 30%：按打樣次數比例
   const totalSamples=persons.reduce((s,p)=>s+p.samples,0);
-  const results=persons.map(p=>{
-    const base=totalSamples>0?Math.round(totalBonus*.5*(p.samples/totalSamples)):0;
-    const extra=p.isWinner?Math.round(totalBonus*.5):0;
-    return{...p,base,extra,total:base+extra};
-  });
+  if(totalSamples>0) persons.forEach(p=>p.sampling=Math.round(pool*0.3*(p.samples/totalSamples)));
+  // 確樣段 20%：誰確誰領（多人則平分）
+  const confs=persons.filter(p=>p.isConf);
+  if(confs.length) confs.forEach(p=>p.confirm=Math.round(pool*0.2/confs.length));
+  const lvName={minor:'輕微',medium_light:'中度偏輕',medium_heavy:'中度偏重',co_dev:'接近共同開發',major:'大幅（換主責）'}[lv];
+  const sum=persons.reduce((s,p)=>s+p.owner+p.sampling+p.confirm,0);
   show('collab-result');
-  document.getElementById('collab-result-content').innerHTML=`<p style="margin-bottom:10px"><strong>案件總獎金：${fmt(totalBonus)}</strong>（${info.name}）</p>
-    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎50%</th><th class="td-right">成交50%</th><th class="td-right">合計</th></tr></thead>
-    <tbody>${results.map(r=>`<tr><td>${r.name}${r.isWinner?' <span class="badge badge-gold">確認者</span>':''}</td><td class="td-right">${r.samples}</td><td class="td-right">${fmt(r.base)}</td><td class="td-right">${r.extra?fmt(r.extra):'—'}</td><td class="td-right"><strong>${fmt(r.total)}</strong></td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('collab-result-content').innerHTML=
+    `<p style="margin-bottom:6px"><strong>成交池：${fmt(pool)}</strong>（${info.name} 基數 ${info.base}　×　A值 ${fmt(appSettings.aValue)}）</p>`+
+    `<p style="margin-bottom:10px;font-size:12px;color:var(--ink-faint)">變動程度：<b>${lvName}</b>　｜　主責段 ${fmt(Math.round(pool*.5))}／打樣段 ${fmt(Math.round(pool*.3))}／確樣段 ${fmt(Math.round(pool*.2))}</p>`+
+    `<table><thead><tr><th>姓名</th><th>角色</th><th class="td-right">打樣次數</th><th class="td-right">主責段</th><th class="td-right">打樣段</th><th class="td-right">確樣段</th><th class="td-right">合計</th></tr></thead>`+
+    `<tbody>${persons.map(p=>`<tr><td>${p.name}${p.isConf?' <span class="badge badge-gold">確樣</span>':''}</td>`+
+      `<td>${({owner:'主責',collab:'協作',none:'僅打樣'})[p.role]}</td>`+
+      `<td class="td-right">${p.samples}</td><td class="td-right">${p.owner?fmt(p.owner):'—'}</td>`+
+      `<td class="td-right">${p.sampling?fmt(p.sampling):'—'}</td><td class="td-right">${p.confirm?fmt(p.confirm):'—'}</td>`+
+      `<td class="td-right"><strong>${fmt(p.owner+p.sampling+p.confirm)}</strong></td></tr>`).join('')}`+
+    `<tr style="background:var(--gold-pale);font-weight:600"><td colspan="6">合計</td><td class="td-right">${fmt(sum)}</td></tr></tbody></table>`+
+    `<p class="note" style="font-size:11px;color:#777;margin-top:6px">本頁僅供試算，不寫入獎金紀錄。代工配方不走三段拆分（窗口領 900 元 100%）。</p>`;
 }
 
 // ==================== RD SAMPLING (打樣模組 v5) ====================
@@ -4880,6 +4927,8 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
       .eq('official_product_code', s.code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
     for(const sc of scs){
+      // 成交必發生於確樣之後：確樣日之後的出貨才屬本次確樣所促成之成交（與 recognizeFromSales 一致）
+      if(sc.confirmed_at && shipDate && String(shipDate).slice(0,10) < sc.confirmed_at) continue;
       const segs=computeDealSegments(sc);
       const d=new Date(shipDate), month=d.getMonth()+1, y=d.getFullYear();
       const q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
