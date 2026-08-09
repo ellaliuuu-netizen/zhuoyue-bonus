@@ -3668,26 +3668,39 @@ async function settleRdMonth(){
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const rdEmps=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
-  // deadline = 打樣月 + 6 個月後的月底（用 local string 避時區）
-  const dlD=new Date(y,m+6,0);
-  const dl=`${dlD.getFullYear()}-${String(dlD.getMonth()+1).padStart(2,'0')}-${String(dlD.getDate()).padStart(2,'0')}`;
+  // 試用期判定（與個人確認表一致）：預設按日；經協理核給「轉正月寬限」者，轉正當月以整月計算
+  const _inProb=(emp,d)=>{
+    if(!emp.probation_end_date||!d) return false;
+    return emp.probation_grace_month ? (d.slice(0,7) < emp.probation_end_date.slice(0,7))
+                                     : (d < emp.probation_end_date);
+  };
+  // 打樣獎金 gate（制度 v11 附錄）：當季若無自己參與之成交完成出貨認列 → 暫緩累積，且不設時效
+  const _q4=m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
+  const {data:_qd}=await sb.from('rd_deal_bonuses').select('employee_id').eq('year',y).eq('quarter',_q4);
+  const _hasDeal=new Set((_qd||[]).map(r=>r.employee_id).filter(Boolean));
   let results=[];
   for(const emp of rdEmps){
-    const {data:samples}=await sb.from('rd_samples').select('id').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
-    const count=samples?.length||0;
-    if(count===0){results.push({name:emp.name,count:0,bonus:0,status:'— 無打樣'});continue;}
+    const {data:samples}=await sb.from('rd_samples').select('id, sample_date').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
+    const rawCount=samples?.length||0;
+    const count=(samples||[]).filter(x=>!_inProb(emp,x.sample_date)).length;
+    const probN=rawCount-count;
+    if(rawCount===0){results.push({name:emp.name,count:0,raw:0,probN:0,bonus:0,status:'— 無打樣'});continue;}
     const bonus=rdSamplingBonus(count, emp.id);
     const _q=rdQualifyCount(emp.id);
-    const settleStatus=count<_q?'expired':'pending_carryover';
-    const statusLabel=count<_q?`未達門檻（不發，合格 ${_q} 件）`:'待回溯（等出貨完成）';
+    let settleStatus, statusLabel;
+    if(count<_q){ settleStatus='expired'; statusLabel=`未達門檻（不發，合格 ${_q} 件）`; }
+    else if(_hasDeal.has(emp.id)){ settleStatus='paid'; statusLabel='✅ 可發放（本季有成交認列）'; }
+    else { settleStatus='pending_carryover'; statusLabel='暫緩累積（本季無成交認列·不設時效）'; }
+    const noteTxt=probN?`本月打樣 ${rawCount} 件，其中 ${probN} 件在試用期內不計獎金`:null;
     const {error}=await sb.from('rd_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,sample_count:count,base_bonus:bonus,
-      status:settleStatus,carryover_deadline:dl,updated_at:new Date().toISOString()
+      status:settleStatus,has_shipped_order:_hasDeal.has(emp.id),
+      carryover_deadline:null,note:noteTxt,updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
     if(error)showToast('結算失敗('+emp.name+'): '+error.message);
-    results.push({name:emp.name,count,bonus,status:statusLabel});
+    results.push({name:emp.name,count,raw:rawCount,probN,bonus,status:statusLabel});
   }
-  document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th>件數</th><th>階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.count}</td><td>${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th class="td-right">實際打樣</th><th class="td-right">試用期不計</th><th class="td-right">計獎件數</th><th class="td-right">階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td class="td-right">${r.raw} 件</td><td class="td-right">${r.probN?r.probN+' 件':'—'}</td><td class="td-right">${r.count} 件</td><td class="td-right">${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table><p class="note" style="font-size:11px;color:#777;margin-top:6px">試用期內之打樣不列入件數（經核給轉正月寬限者，轉正當月以整月計算）。達門檻者若當季無成交認列，暫緩累積、不設時效，待有認列之季度一併發放。</p>`;
   showToast(`✓ ${ym} 結算完成`);
   loadCarryover();
 }
