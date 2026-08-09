@@ -1997,16 +1997,31 @@ function renderEmployeeList() {
     const daysLeft = Math.ceil((pEnd - today) / 86400000);
     return `<span class="badge" style="background:#fff4e0;color:#a86b1a" title="試用期至 ${emp.probation_end_date}，獎金按比例派發">⏳ 試用中</span><div style="font-size:10px;color:#a86b1a;margin-top:2px">至 ${emp.probation_end_date}<br>剩 ${daysLeft} 天</div>`;
   };
-  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th class="td-center">試用期</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
+  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th class="td-center">試用期</th><th class="td-center manager-only">轉正月寬限</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
     <tbody>${employees.map(e => `<tr>
       <td style="font-weight:500">${e.name}</td>
       <td><span class="badge badge-${deptColor(e.dept)}">${e.dept}</span></td>
       <td>${e.role_title}</td>
       <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'離職/停薪'}</span></td>
       <td class="td-center">${probationBadge(e)}</td>
+      <td class="td-center manager-only">${e.probation_end_date?`<button class="btn btn-sm ${e.probation_grace_month?'btn-primary':'btn-outline'}" onclick="toggleProbationGrace('${e.id}',${!!e.probation_grace_month})" title="開啟後：轉正當月整月計入獎金，並於個人對帳明細標示為公司額外核給">${e.probation_grace_month?'✅ 已核給':'未核給'}</button>`:'<span style="color:var(--ink-faint);font-size:11px">—</span>'}</td>
       <td style="font-size:12px;color:var(--ink-faint)">${e.note||''}</td>
       <td class="td-center manager-only" style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button> <button class="btn btn-danger btn-sm" onclick="hardDeleteEmployee('${e.id}')" title="僅限誤填可用；有歷史紀錄會被擋下">永久刪除</button></td>
     </tr>`).join('')}</tbody></table>`;
+}
+// 轉正月寬限：協理逐案核給。開啟＝轉正當月整月計入獎金，並於個人對帳明細揭露為公司額外核給
+async function toggleProbationGrace(id, cur){
+  const e=employees.find(x=>x.id===id)||{};
+  const ok=await confirmCard(cur?'取消轉正月寬限':'核給轉正月寬限',
+    `<b>${e.name||''}</b>（轉正日 ${e.probation_end_date||'—'}）<br><br>`+
+    (cur?'取消後，轉正當月將改為<b>自轉正日起按日計算</b>，該月轉正日之前的打樣不計入獎金。'
+        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上標示為「公司額外核給、非制度應發」。'),
+    cur?'確認取消':'確認核給');
+  if(!ok) return;
+  const {error}=await sb.from('employees').update({probation_grace_month:!cur}).eq('id',id);
+  if(error){showToast('更新失敗：'+error.message);return;}
+  showToast(cur?'已取消寬限':'✅ 已核給轉正月寬限');
+  await loadEmployees();
 }
 async function toggleEmployeeStatus(empId, currentActive) {
   const emp = employees.find(e=>e.id===empId);
@@ -4551,26 +4566,37 @@ async function generateRdConfirmSheets(){
     .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lt('sample_date',`${endY}-${pad(endM)}-01`)
     .in('approval_status',['approved','auto_approved']);
   if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
-  // 試用期內不計獎金。⭐公司寬限（協理 2026-08-07 裁示）：轉正當月不按日切分，
-  // 該月整月計入獎金；僅「轉正月之前」的月份才視為試用期內。故以「年月」比較，非逐日比較。
+  // 試用期內不計獎金。⭐公司寬限（協理逐案核給，employees.probation_grace_month）：
+  // 開啟時，轉正當月不按日切分、整月計入；未開啟則維持按日判定。核給者須於個人對帳明細揭露。
+  const inProbDay=(empId, dateStr)=>{
+    const e=employees.find(x=>x.id===empId);
+    return !!(e && e.probation_end_date && dateStr && dateStr < e.probation_end_date);
+  };
+  const hasGrace=empId=>!!(employees.find(x=>x.id===empId)||{}).probation_grace_month;
   const inProbation=(empId, dateStr)=>{
     const e=employees.find(x=>x.id===empId);
     if(!e || !e.probation_end_date || !dateStr) return false;
-    return dateStr.slice(0,7) < e.probation_end_date.slice(0,7);
+    return e.probation_grace_month ? (dateStr.slice(0,7) < e.probation_end_date.slice(0,7))
+                                   : (dateStr < e.probation_end_date);
   };
   const probEndOf=empId=>(employees.find(x=>x.id===empId)||{}).probation_end_date||'';
   // 該人的轉正月是否落在本季（用於在表上標示「公司寬限·整月計入」）
   const graceMonth=empId=>{
+    if(!hasGrace(empId)) return 0;
     const pe=probEndOf(empId); if(!pe) return 0;
     const [gy,gm]=pe.split('-').map(Number);
     return (gy===yr && qMonths.includes(gm))?gm:0;
   };
-  const cnt={}, probSkip={}, cntAll={};
+  const cnt={}, probSkip={}, cntAll={}, graceGain={};
   (samples||[]).forEach(s=>{
     const k=s.employee_id; if(!k)return;
     const m=Number(s.sample_date.slice(5,7));
     // cntAll＝含試用期的全部件數，供「試用期未計入」區揭露實際產出與預估獎金
     (cntAll[k]=cntAll[k]||{})[m]=(cntAll[k][m]||0)+1;
+    // 因公司寬限而多計入的件數（按日判定會被排除、按整月則計入）
+    if(!inProbation(k,s.sample_date) && inProbDay(k,s.sample_date)){
+      (graceGain[k]=graceGain[k]||{})[m]=((graceGain[k]||{})[m]||0)+1;
+    }
     if(inProbation(k, s.sample_date)){
       const p=(probSkip[k]=probSkip[k]||{n:0,byM:{}});
       p.n++; p.byM[m]=(p.byM[m]||0)+1; return;
@@ -4786,7 +4812,13 @@ async function generateRdConfirmSheets(){
       <p class="note">研發助理不適用「月打樣件數階梯獎金」，獎金一律以全團隊成交池之 5% 分潤計算，故本表不列個人打樣件數。</p>`
       :`<h2>一、打樣獎金（每月）</h2>
       <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
-      <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${graceMonth(e.id)?`<br><b style="color:#1a7f5a">公司寬限：你於 ${esc(probEndOf(e.id))} 轉正，${graceMonth(e.id)} 月不按日切分，公司給予寬限、該月打樣件數整月計入獎金。</b>`:''}</p>
+      <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。本職級合格件數 <b>${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${(()=>{const gm=graceMonth(e.id); if(!gm) return '';
+        const gN=((graceGain[e.id]||{})[gm])||0; const kept=(cnt[e.id]||{})[gm]||0;
+        const diff=sampleBonus(kept,e.id)-sampleBonus(Math.max(0,kept-gN),e.id);
+        return `<br><b style="color:#1a7f5a">◆ 公司寬限：你於 ${esc(probEndOf(e.id))} 轉正，依制度 ${gm} 月應自轉正日起按日計算；`+
+          `公司放寬以<b>整月計算</b>，${gm} 月全月件數均計入。`+
+          (gN?`本季因此多計入 <b>${gN}</b> 件、多發 <b>${diff.toLocaleString()}</b> 元。`:'')+
+          `此為公司額外核給，非制度應發。</b>`;})()}</p>
       <h2>一之二、打樣獎金發放判定</h2>
       ${gateH}`}
       <h2>二、成交獎金三段（本季已出貨認列）</h2>
