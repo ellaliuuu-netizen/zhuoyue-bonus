@@ -4895,7 +4895,14 @@ async function generateRdConfirmSheets(){
       ${pendH}
       ${extraH}
       ${probH}
-      <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季實計合計：${grand.toLocaleString()} 元</div>
+      ${(()=>{const parts=[];
+        if(e.role_level!=='assistant') parts.push(`打樣獎金 ${(g.released?g.payNow:0).toLocaleString()}`);
+        parts.push(`成交獎金 ${dTot.toLocaleString()}`);
+        if(e.role_level==='manager') parts.push(`團隊加成 ${extra.toLocaleString()}`);
+        if(e.role_level==='assistant') parts.push(`助理分潤 ${extra.toLocaleString()}`);
+        return `<div style="text-align:right;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">`+
+          `<div style="font-size:12px;color:#555;margin-bottom:2px">${parts.join('　＋　')}</div>`+
+          `<div style="font-size:15px;font-weight:700">本季實計合計：${grand.toLocaleString()} 元</div></div>`;})()}
       ${allTable}
       <div class="cbox"><p><b>本人確認：</b>${e.role_level==='assistant'?'以上全團隊成交池之 5% 分潤金額與實際情況相符':`以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':''}與實際情況相符`}；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
