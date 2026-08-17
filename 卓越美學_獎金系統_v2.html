@@ -3714,7 +3714,8 @@ async function loadOverdueLogs(){
   const data=(all||[]).filter(s=>(s.delay_days||0)>0);
   const sameDay=total-data.length;
   const rate=total?Math.round(sameDay/total*100):100;
-  const rateColor=rate>=90?'var(--green)':rate>=70?'#a68a3a':'var(--red)';
+  // 合格線 90%（ELLA 2026-08-17 定）：>=90 綠、80-89 黃、<80 紅
+  const rateColor=rate>=90?'var(--green)':rate>=80?'#a68a3a':'var(--red)';
   if(cnt)cnt.innerHTML=`本月 ${total} 筆　當天登打率 <strong style="color:${rateColor}">${rate}%</strong>　延遲 ${data.length} 筆`;
   if(!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月全數當天登打</div></div>';return;}
   // 依打樣負責人彙總，看出延遲集中在誰身上
