@@ -921,7 +921,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="card-title">📊 本月登打紀律</div>
             <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">本月 0 筆</span></div>
           </div>
-          <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">2026-09-01 起：延遲 0–1 天自動通過｜2–3 天須填原因送審｜<strong>逾 3 日該筆不計入打樣獎金</strong>。跨週末、國定假日不得作為延遲理由。<br>⚠ 登打作業集中於研發課長，延遲扣減的是<strong>打樣負責人</strong>的獎金。</div>
+          <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">2026-09-01 起：延遲 0–1 天自動通過｜2–3 天須填原因送審｜<strong>逾 3 日該筆不計入打樣獎金</strong>。以週末、國定假日為由申請延遲者不予核准。<br>登錄時點影響該筆<strong>打樣負責人</strong>的獎金計算，請於打樣當日完成登錄。</div>
           <div id="rds-overdue-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲登打</div></div></div>
         </div>
       </div>
@@ -3345,7 +3345,7 @@ function updateRdsDelayInfo(){
   if(delay===0){info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(delay===1){info.innerHTML='🟢 延遲 1 天，自動通過（無需原因）';info.style.color='var(--green)';reasonWrap.style.display='none';}
   else if(delay<=3){info.innerHTML=`⚠ 延遲 ${delay} 天，<strong>必須填寫原因</strong>送 ELLA 審核<br><span style="font-size:11px">※ 跨週末、國定假日不得作為延遲理由</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
-  else{info.innerHTML=`🚫 逾期 ${delay} 天 — 仍可登錄留存件數紀錄，但<strong>本筆不計入打樣獎金</strong>（原因必填）<br><span style="font-size:11px">※ 受影響的是打樣負責人的獎金，非登打者</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+  else{info.innerHTML=`逾期 ${delay} 天 — 仍可登錄以保全件數紀錄，惟<strong>本筆不計入打樣獎金</strong>（原因必填）<br><span style="font-size:11px">※ 影響對象為該筆之打樣負責人</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
 }
 
 function addRdSampleCustomer(){
@@ -3394,7 +3394,7 @@ async function saveRdSample(){
       if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因（跨假日不得作為理由）');return;}
       if(delay>3){
         const emp=employees.find(e=>e.id===empId);
-        if(!confirm(`⚠ 逾期 ${delay} 天登打\n\n本筆仍會建檔（保留件數與確樣對應），但「${emp?.name||'該打樣負責人'}」的這筆打樣獎金將不予計入。\n\n確定送出？`))return;
+        if(!confirm(`逾期 ${delay} 天登錄\n\n本筆仍會建檔（保留件數與確樣對應），惟依制度不計入「${emp?.name||'該打樣負責人'}」的打樣獎金。\n\n確定送出？`))return;
       }
     }else{
       // 生效日前的舊打樣沿用舊制
