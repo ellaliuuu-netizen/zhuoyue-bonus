@@ -506,7 +506,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   <nav class="nav-tabs">
     <div class="nav-tab active" onclick="switchPage('dashboard')" id="tab-dashboard"><span class="tab-dot" style="background:#c8a96e"></span>總覽</div>
     <div class="nav-tab" onclick="switchPage('orders')" id="tab-orders"><span class="tab-dot" style="background:#c87840"></span>訂單管理</div>
-    <div class="nav-tab rdmgr-hide" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨紀錄</div>
+    <div class="nav-tab" onclick="switchPage('shipments')" id="tab-shipments"><span class="tab-dot" style="background:#3d7a7a"></span>出貨紀錄</div>
     <div class="nav-tab manager-only" onclick="switchPage('order-import')" id="tab-order-import"><span class="tab-dot" style="background:#8a6d3b"></span>訂單匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('sales-import')" id="tab-sales-import"><span class="tab-dot" style="background:#7a5c3d"></span>銷貨匯入</div>
     <div class="nav-tab manager-only" onclick="switchPage('products')" id="tab-products"><span class="tab-dot" style="background:#6b4f8a"></span>產品主檔</div>
@@ -541,7 +541,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#c87840"></span>訂單管理</div>
           <div class="sidebar-card-desc">新增及追蹤訂單</div>
         </div>
-        <div class="sidebar-card rdmgr-hide" onclick="switchPage('shipments');setSidebarActive(this)">
+        <div class="sidebar-card" onclick="switchPage('shipments');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#3d7a7a"></span>出貨紀錄</div>
           <div class="sidebar-card-desc">會計銷貨明細</div>
         </div>
@@ -634,15 +634,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="page" id="page-sales-import">
         <div class="section-title" style="color:#7a5c3d">📥 銷貨明細匯入</div>
         <div class="section-desc">匯入會計部每月銷貨 CSV → 自動對應正式編號 → 餵研發成交認列＋部門件數＋業務金額。對不上的品名列出來給你點一次、之後記住。</div>
-        <div class="card" style="border-color:#3d7a7a">
-          <div class="card-header">
-            <div class="card-title">🤖 自動匯入待確認（NAS 排程）</div>
-            <div><button class="btn btn-outline btn-sm" onclick="loadSalesStaging()">🔄 重新整理</button></div>
-          </div>
-          <div class="info-box">NAS 每日自動讀取會計部銷貨明細，解析後放在此處等你確認。<b>按下「確認匯入」才會寫進正式資料、進入獎金計算</b>；未確認前不影響任何數字。</div>
-          <div id="staging-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">載入中…</div></div></div>
-        </div>
-<div class="card" style="border-color:#7a5c3d">
+        <div class="card" style="border-color:#7a5c3d">
           <div class="card-header"><div class="card-title">① 選檔</div></div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <input type="file" id="si-file" accept=".csv" onchange="parseSalesCSV()" />
@@ -729,7 +721,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- RD -->
       <div class="page" id="page-rd">
         <div class="section-title" style="color:var(--blue)">研發部獎金計算</div>
-        <div class="section-desc">成交池 ＝ A值 × 劑型基數（制度 v10 起：一筆成交一個池，不乘出貨件數）｜三段：主責 50%／打樣 30%／確樣 20%｜課長加計同仁池 15%｜助理 5%</div>
+        <div class="section-desc">個人獎金 = A值 × 劑型基數 × 確樣成交件數｜課長加計團隊總獎金15%｜助理5%</div>
         <div id="rd-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="inner-tabs">
           <div class="inner-tab active" onclick="switchInner(this,'rd-calc-sec')">個人試算</div>
@@ -760,7 +752,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div id="rd-items-container">
                 <div class="rd-row" style="display:grid;grid-template-columns:1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end">
                   <div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (基數 0.3)</option><option value="essence">精華液/凝膠/面膜 (基數 0.4)</option><option value="emulsion_ow">乳劑水包油 (基數 0.8)</option><option value="emulsion_wo">乳劑油包水 (基數 1.0)</option><option value="special">特殊劑型 (基數 1.2)</option></select></div>
-                  <div><label class="form-label">成交筆數（不同正式編號）</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div>
+                  <div><label class="form-label">確樣成交件數</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div>
                   <div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>
                 </div>
               </div>
@@ -786,7 +778,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div id="rd-collab-sec" style="display:none">
           <div class="card">
             <div class="card-header"><div class="card-title">多人協作獎金分配</div></div>
-            <div class="info-box">制度 v14 三段式：主責 50%（依配方架構變動程度拆分原主責／協作）、打樣 30%（按打樣次數比例，助理不計）、確樣 20%（誰確誰領）。本頁僅供試算，正式獎金走「確樣 → 出貨認列 → 覆核放行」。</div>
+            <div class="info-box">基礎分（50%）按打樣次數比例，成交加成（50%）由最終確認成交者獨得</div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">案件劑型</label>
                 <select class="form-select" id="collab-type">
@@ -794,22 +786,13 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                   <option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option>
                   <option value="special">特殊劑型 (1.2)</option>
                 </select>
-              </div>
-        <div class="form-group"><label class="form-label">配方架構變動程度</label>
-          <select class="form-select" id="collab-level">
-            <option value="minor">輕微（改 0~1 項）— 原主責滿 50%</option>
-            <option value="medium_light">中度偏輕（改 2 項）— 原主責 40% ＋ 協作 10%</option>
-            <option value="medium_heavy" selected>中度偏重（改 3 項）— 原主責 35% ＋ 協作 15%</option>
-            <option value="co_dev">接近共同開發（四項全改）— 原主責 25% ＋ 協作 25%</option>
-            <option value="major">大幅（動到劑型）— 重新認定主責，新主責滿 50%</option>
-          </select>
-        </div>
+              </div><div></div>
             </div>
             <div id="collab-persons">
-              <div style="display:grid;grid-template-columns:1fr .8fr 1fr .8fr 80px;gap:10px;margin-bottom:10px;align-items:end">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end">
                 <div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div>
                 <div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div>
-                <div><label class="form-label">主責角色</label><select class="form-select collab-role"><option value="owner">原主責／新主責</option><option value="collab">協作</option><option value="none">僅打樣</option></select></div><div><label class="form-label">確樣人</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div>
+                <div><label class="form-label">成交確認者</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div>
                 <div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>
               </div>
             </div>
@@ -824,7 +807,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div class="card-title">🎯 研發成交獎金（三段式）— 待你覆核</div>
               <div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="generateRdConfirmSheets()">🖨️ 產生個人確認表</button><button class="btn btn-outline btn-sm" onclick="scanRecognizeDeals()">🔄 重新掃描出貨認列</button></div>
             </div>
-            <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（協理）可見。</div>
+            <div class="info-box" style="font-size:12px">出貨時系統自動把「新品第一次出貨」認列成三段（主責50%/打樣30%/確樣20%），列在這裡等你覆核。確認後才轉財務頒發。此區僅你（經理）可見。</div>
             <div id="rd-deal-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div></div>
           </div>
         </div>
@@ -854,7 +837,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- RD SAMPLING (研發打樣 - 對齊 PDF v6 雙軌制) -->
       <div class="page" id="page-rd-sampling">
         <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
-        <div class="section-desc">月件數階梯獎金（合格件數：研發同仁 18 件、課長 13 件；達標 1,000 元，每多 1 件 +55，上限 88 件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
+        <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
 
         <!-- Card -1: 確樣進度總表（跨月）— manager + rd_manager 都看得到 -->
         <div class="card rdmgr-show" style="border-color:var(--blue)">
@@ -932,13 +915,14 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div id="rds-carryover-content"><div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">沒有暫緩中的打樣獎金</div></div></div>
         </div>
 
-        <!-- Card 5: 課長補登明細（manager + rd_manager 都可看） -->
+        <!-- Card 5: 本月登打紀律（manager + rd_manager 都可看）— v20 改版：全研發延遲明細＋當天登打率 -->
         <div class="card manager-only rdmgr-show">
           <div class="card-header">
-            <div class="card-title">📊 本月課長補登明細</div>
-            <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">0 筆延遲</span></div>
+            <div class="card-title">📊 本月登打紀律</div>
+            <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">本月 0 筆</span></div>
           </div>
-          <div id="rds-overdue-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲補登</div></div></div>
+          <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">2026-09-01 起：延遲 0–1 天自動通過｜2–3 天須填原因送審｜<strong>逾 3 日該筆不計入打樣獎金</strong>。跨週末、國定假日不得作為延遲理由。<br>⚠ 登打作業集中於研發課長，延遲扣減的是<strong>打樣負責人</strong>的獎金。</div>
+          <div id="rds-overdue-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲登打</div></div></div>
         </div>
       </div>
 
@@ -1096,18 +1080,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-danger btn-sm manager-only" onclick="clearQuarterData()">清除本季資料</button>
           </div>
         </div>
-        <div class="section-desc">所有已儲存的獎金計算記錄。<b>⚠️ 此區僅涵蓋各部門季獎金與團隊加成（bonus_records）</b>；研發部的成交獎金與打樣獎金存放於各自的表，請以上方「本季發放總表」為準。</div>
-        <div class="card" style="border-color:var(--gold)">
-          <div class="card-header">
-            <div class="card-title">💰 本季發放總表（給財務）</div>
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-outline btn-sm" onclick="loadPayoutSummary()">🔄 重新整理</button>
-              <button class="btn btn-gold btn-sm" onclick="exportPayoutCSV()">📤 匯出給財務</button>
-            </div>
-          </div>
-          <div class="info-box">彙整<b>全部三個來源</b>：研發成交獎金（已放行）＋研發打樣獎金（已結算可發）＋各部門季獎金／團隊加成。這是實際要發放的金額，下方「獎金紀錄」僅為其中一個來源。</div>
-          <div id="payout-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">載入中…</div></div></div>
-        </div>
+        <div class="section-desc">所有已儲存的獎金計算記錄</div>
         <div class="card"><div id="history-content"><div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">載入中...</div></div></div></div>
       </div>
 
@@ -1483,11 +1456,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
       </div>
       <div class="form-group" id="rds-reason-wrap" style="display:none">
-        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（3 天以上需填寫，會送 ELLA 協理審核）</label>
+        <label class="form-label" style="color:var(--red)">⚠ 延遲補登原因 *（3 天以上需填寫，會送 ELLA 經理審核）</label>
         <textarea class="form-input" id="rds-reason" rows="2" placeholder="如：出差、連假、客戶緊急…"></textarea>
       </div>
       <div class="form-group" id="rds-edit-reason-wrap" style="display:none">
-        <label class="form-label" style="color:var(--red)">📝 修改原因 *（任何修改都會送 ELLA 協理審核）</label>
+        <label class="form-label" style="color:var(--red)">📝 修改原因 *（任何修改都會送 ELLA 經理審核）</label>
         <textarea class="form-input" id="rds-edit-reason" rows="2" placeholder="如：客戶名稱填錯、劑型分類錯誤、日期 typo…"></textarea>
       </div>
       <div class="info-box" id="rds-delay-info" style="display:none;font-size:13px"></div>
@@ -1520,7 +1493,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <tr><td><strong>特殊劑型 (1.2)</strong></td><td><strong>雙層液、三層劑型</strong>、視覺變化劑型（變色/變泡/顯色）、發泡型面膜、大顆顆粒 + 水相凝膠（難攪拌）、油珠劑型（包覆型活性成分）</td></tr>
         </tbody>
       </table>
-      <div class="info-box" style="font-size:12px;color:var(--ink-faint);margin-top:12px">⚠️ 歸屬錯誤直接影響獎金（基數 0.3 ~ 1.2 差 4 倍）。歸屬有疑問請先諮詢協理或課長，不要憑感覺選</div>
+      <div class="info-box" style="font-size:12px;color:var(--ink-faint);margin-top:12px">⚠️ 歸屬錯誤直接影響獎金（基數 0.3 ~ 1.2 差 4 倍）。歸屬有疑問請先諮詢經理或課長，不要憑感覺選</div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-gold" onclick="closeModal('rdFormulaGuideModal')">了解</button>
@@ -1732,7 +1705,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   </div>
 </div>
 
-<!-- 改綁／取消確樣（D：課長申請 / 協理直改）-->
+<!-- 改綁／取消確樣（D：課長申請 / 經理直改）-->
 <div class="modal-overlay" id="rebindModal">
   <div class="modal" style="max-width:560px">
     <div class="modal-header"><div class="modal-title" id="rb-title">🔁 改綁確樣</div><button class="modal-close" onclick="closeModal('rebindModal')">✕</button></div>
@@ -1770,8 +1743,10 @@ let orderItemRow = 0;
 let appSettings = { year:2026, quarter:'Q2', aValue:3000, newClientBonus:1500, purSupplement:2000, rdMaxBase:1.2 };
 // 2026-05-18 ~ 2026-05-22 ELLA 暫時放寬：研發課長一次性補登五月份既有打樣
 // 補完於 5/22；DB constraint 已用 NOT VALID 加回（既有 42 筆豁免、未來新 row 受限）
-let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，協理在設定頁開關
-let RD_ADJUST_MODE = false;       // 研發調整模式：開啟期間課長可連續調整已確樣紀錄，不必逐筆送審；關閉後由協理一次總覆核
+let RDS_BACKFILL_RELAXED = false; // 由 system_settings.rds_backfill_relaxed 控制，經理在設定頁開關
+// 打樣登打時效新制生效日（v20, 2026-08-14）：此日之後的 sample_date 適用 0–1 自動／2–3 送審／逾 3 日不計獎金
+let RDS_DEADLINE_EFFECTIVE = '2026-09-01'; // 由 system_settings.rds_deadline_effective_date 控制
+let RD_ADJUST_MODE = false;       // 研發調整模式：開啟期間課長可連續調整已確樣紀錄，不必逐筆送審；關閉後由經理一次總覆核
 const rdTypes = { liquid:{name:'液劑',base:.3}, essence:{name:'精華液/凝膠/面膜',base:.4}, emulsion_ow:{name:'乳劑（水包油）',base:.8}, emulsion_wo:{name:'乳劑（油包水）',base:1.0}, special:{name:'特殊劑型',base:1.2} };
 const formulaLabels = { liquid:'液劑', essence:'精華液/凝膠/面膜', emulsion_ow:'乳劑（水包油）', emulsion_wo:'乳劑（油包水）', special:'特殊劑型' };
 // 研發 A值升級路線（規範書 2026/05 版）
@@ -1809,7 +1784,7 @@ async function initApp(user) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('user-display-name').textContent = currentUserName;
-  const roleLabel = currentRole==='manager'?'｜ 協理':currentRole==='rd_manager'?'｜ 課長':'｜ 財務';
+  const roleLabel = currentRole==='manager'?'｜ 經理':currentRole==='rd_manager'?'｜ 課長':'｜ 財務';
   const roleColor = currentRole==='manager'?'#c8a96e':currentRole==='rd_manager'?'#5d8aa8':'#3d6a8a';
   document.getElementById('user-role-label').textContent = roleLabel;
   document.getElementById('role-dot').style.background = roleColor;
@@ -1823,7 +1798,7 @@ async function initApp(user) {
   initInnerTabs();
 }
 function applyRoleRestrictions() {
-  // 先清掉上一個角色留下的隱藏樣式：登出不會重載頁面，同一頁換帳號登入會殘留（協理登入卻只看到課長的 tab）
+  // 先清掉上一個角色留下的隱藏樣式：登出不會重載頁面，同一頁換帳號登入會殘留（經理登入卻只看到課長的 tab）
   document.querySelectorAll('.manager-only, .rdmgr-hide, .rdmgr-show').forEach(el => el.style.display = '');
   document.querySelectorAll('.read-only-notice').forEach(el => el.style.display = 'none');
   if (currentRole === 'manager') return;
@@ -1861,6 +1836,7 @@ async function loadSettings() {
     if (r.key === 'sales_new_client_bonus') appSettings.newClientBonus = parseInt(r.value);
     if (r.key === 'purchase_supplement') appSettings.purSupplement = parseInt(r.value);
     if (r.key === 'rds_backfill_relaxed') RDS_BACKFILL_RELAXED = (r.value === 'true');
+    if (r.key === 'rds_deadline_effective_date' && r.value) RDS_DEADLINE_EFFECTIVE = r.value;
     if (r.key === 'rd_adjust_mode') RD_ADJUST_MODE = (r.value === 'true');
   });
   syncSettingsUI();
@@ -2025,31 +2001,16 @@ function renderEmployeeList() {
     const daysLeft = Math.ceil((pEnd - today) / 86400000);
     return `<span class="badge" style="background:#fff4e0;color:#a86b1a" title="試用期至 ${emp.probation_end_date}，獎金按比例派發">⏳ 試用中</span><div style="font-size:10px;color:#a86b1a;margin-top:2px">至 ${emp.probation_end_date}<br>剩 ${daysLeft} 天</div>`;
   };
-  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th class="td-center">試用期</th><th class="td-center manager-only">轉正月寬限</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
+  el.innerHTML = `<table><thead><tr><th>姓名</th><th>部門</th><th>職稱</th><th class="td-center">狀態</th><th class="td-center">試用期</th><th>備註</th><th class="td-center manager-only">動作</th></tr></thead>
     <tbody>${employees.map(e => `<tr>
       <td style="font-weight:500">${e.name}</td>
       <td><span class="badge badge-${deptColor(e.dept)}">${e.dept}</span></td>
       <td>${e.role_title}</td>
       <td class="td-center"><span class="badge badge-${e.is_active?'green':'gray'}">${e.is_active?'在職':'離職/停薪'}</span></td>
       <td class="td-center">${probationBadge(e)}</td>
-      <td class="td-center manager-only">${e.probation_end_date?`<button class="btn btn-sm ${e.probation_grace_month?'btn-primary':'btn-outline'}" onclick="toggleProbationGrace('${e.id}',${!!e.probation_grace_month})" title="開啟後：轉正當月整月計入獎金，並於個人對帳明細標示為公司額外核給">${e.probation_grace_month?'✅ 已核給':'未核給'}</button>`:'<span style="color:var(--ink-faint);font-size:11px">—</span>'}</td>
       <td style="font-size:12px;color:var(--ink-faint)">${e.note||''}</td>
       <td class="td-center manager-only" style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="toggleEmployeeStatus('${e.id}', ${e.is_active})">${e.is_active?'設為離職':'恢復在職'}</button> <button class="btn btn-danger btn-sm" onclick="hardDeleteEmployee('${e.id}')" title="僅限誤填可用；有歷史紀錄會被擋下">永久刪除</button></td>
     </tr>`).join('')}</tbody></table>`;
-}
-// 轉正月寬限：協理逐案核給。開啟＝轉正當月整月計入獎金，並於個人對帳明細揭露為公司額外核給
-async function toggleProbationGrace(id, cur){
-  const e=employees.find(x=>x.id===id)||{};
-  const ok=await confirmCard(cur?'取消轉正月寬限':'核給轉正月寬限',
-    `<b>${e.name||''}</b>（轉正日 ${e.probation_end_date||'—'}）<br><br>`+
-    (cur?'取消後，轉正當月將改為<b>自轉正日起按日計算</b>，該月轉正日之前的打樣不計入獎金。'
-        :'核給後，轉正當月<b>整月計入</b>獎金（不按日切分），並會在該員個人對帳明細上說明：公司考量其試用期努力積極、轉正月整月投入，故以整月計算，並列出因此多計入的件數。'),
-    cur?'確認取消':'確認核給');
-  if(!ok) return;
-  const {error}=await sb.from('employees').update({probation_grace_month:!cur}).eq('id',id);
-  if(error){showToast('更新失敗：'+error.message);return;}
-  showToast(cur?'已取消寬限':'✅ 已核給轉正月寬限');
-  await loadEmployees();
 }
 async function toggleEmployeeStatus(empId, currentActive) {
   const emp = employees.find(e=>e.id===empId);
@@ -2126,7 +2087,7 @@ function mapLineToOrder(l){
 }
 async function loadOrders() {
   // 讀 order_lines_public（不含 unit_price／amount）：本頁只顯示件數與進度。
-  // order_lines 本表的讀取已限協理／財務，研發課長走這張檢視表，從資料層就拿不到金額。
+  // order_lines 本表的讀取已限經理／財務，研發課長走這張檢視表，從資料層就拿不到金額。
   const { data: lines } = await sb.from('order_lines_public')
     .select('id, order_no, sign_date, customer_name, product_code, item_name_raw, order_qty, shipped_qty, sales_person, planner_override_id, bonus_settled_at')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
@@ -2662,7 +2623,7 @@ async function loadShipments() {
   });
   const tbody = document.getElementById('shipments-tbody');
   if (!data.length) {
-    // 銷貨明細含金額，讀取政策僅開放協理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
+    // 銷貨明細含金額，讀取政策僅開放經理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
     const noPerm = currentRole === 'rd_manager';
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
     return;
@@ -2803,7 +2764,7 @@ async function settleSalesMonth(){
   const {data:priorOrders}=await sb.from('orders').select('customer_name').lt('order_date',start);
   const priorCustomers=new Set((priorOrders||[]).map(o=>o.customer_name));
   // 出貨金額：改吃會計銷貨明細 sales_records（按業務員名對應員工），取代舊 shipments
-  const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount,item_name_raw,product_code').eq('year',y).eq('month',m);
+  const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount').eq('year',y).eq('month',m);
   const salesAliasMap={};
   employees.filter(e=>e.dept==='業務部').forEach(e=>{
     if(e.name)salesAliasMap[e.name.trim()]=e.id;
@@ -2822,17 +2783,9 @@ async function settleSalesMonth(){
     if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
     ncByEmp[o.sales_id].add(o.customer_name);
   });
-  // 業務出貨金額同樣排除 PIF／已開票／代購／原料調度（協理 2026-07-04 裁示：PIF 全部門不計入獎金）
-  const excByEmp={}; let excTotal=0;
   (salesRecs||[]).forEach(r=>{
     const key=(r.sales_person||'').trim();
     const empId=salesAliasMap[key];
-    const ex=saleExcludeReason(r);
-    if(ex){
-      excTotal+=Number(r.amount||0);
-      if(empId) excByEmp[empId]=(excByEmp[empId]||0)+Number(r.amount||0);
-      return;
-    }
     if(empId)amtByEmp[empId]=(amtByEmp[empId]||0)+Number(r.amount||0);
     else if(key)unmatchedSales[key]=(unmatchedSales[key]||0)+Number(r.amount||0);
   });
@@ -2863,12 +2816,9 @@ async function settleSalesMonth(){
       note:pr.note||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
-    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
   }
-  document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額（計獎）</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}${r.exc?`<div style="font-size:10px;color:#b3541e">已排除 ${fmtNum(Math.round(r.exc))}</div>`:''}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
-  if(excTotal>0){
-    document.getElementById('sales-m-content').innerHTML+=`<div class="info-box" style="margin-top:10px;font-size:12px">ℹ️ 本月已排除不計獎金之銷貨 <b>${fmtNum(Math.round(excTotal))}</b> 元（PIF／已開發票／代購／同業原料調度），與研發成交、部門件數採同一套排除規則。</div>`;
-  }
+  document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
   const unEntries=Object.entries(unmatchedSales);
   if(unEntries.length){
     document.getElementById('sales-m-content').innerHTML+=`<div class="info-box" style="margin-top:10px;border:1px solid #b3541e;color:#b3541e;font-size:12px">⚠ 銷貨明細有 ${unEntries.length} 個業務名對不到員工，金額未計入：${unEntries.map(([k,v])=>`${k}（${fmtNum(Math.round(v))}）`).join('、')}。請到「設定→員工」補該員工的銷貨別名後重算。</div>`;
@@ -2922,7 +2872,7 @@ function addRdRow() {
   const c=document.getElementById('rd-items-container');
   const d=document.createElement('div');d.className='rd-row';
   d.style.cssText='display:grid;grid-template-columns:1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end';
-  d.innerHTML=`<div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (0.3)</option><option value="essence">精華液/凝膠/面膜 (0.4)</option><option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option><option value="special">特殊劑型 (1.2)</option></select></div><div><label class="form-label">成交筆數（不同正式編號）</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div><div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>`;
+  d.innerHTML=`<div><label class="form-label">劑型</label><select class="form-select rd-type"><option value="liquid">液劑 (0.3)</option><option value="essence">精華液/凝膠/面膜 (0.4)</option><option value="emulsion_ow">乳劑水包油 (0.8)</option><option value="emulsion_wo">乳劑油包水 (1.0)</option><option value="special">特殊劑型 (1.2)</option></select></div><div><label class="form-label">確樣件數</label><input class="form-input rd-qty" type="number" placeholder="0" min="0" /></div><div><button class="btn btn-outline btn-sm" onclick="removeRdRow(this)" style="margin-top:18px">移除</button></div>`;
   c.appendChild(d);
 }
 function removeRdRow(btn){if(document.querySelectorAll('.rd-row').length>1)btn.closest('.rd-row').remove();}
@@ -2941,13 +2891,12 @@ function calcRd() {
     const capped=eb<info.base?`（上限 ${appSettings.rdMaxBase}）`:'';
     if (qty>0){breakdown.push(`${info.name} × ${qty}件 = ${fmt(b)}${capped}`);base+=b;}
   });
-  // 制度 v14：研發試用期以「打樣日／出貨認列日」逐筆判定，不套季度天數比例，故此處不乘 probationRatio
-  const total=base;
+  const pr=probationRatio(emp);
+  const total=Math.round(base*pr.ratio);
   show('rd-result');
   document.getElementById('rd-total').textContent=fmt(total);
   let html=breakdown.map(b=>`<div class="res-item"><span class="res-item-dot"></span>${b}</div>`).join('');
-  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>三段拆分：</strong>主責 50% ${fmt(Math.round(base*.5))}／打樣 30% ${fmt(Math.round(base*.3))}／確樣 20% ${fmt(Math.round(base*.2))}</div>`;
-  html+=`<div class="res-item" style="color:var(--ink-faint);font-size:12px"><span class="res-item-dot"></span>本頁為試算：正式成交獎金一律由「確樣 → 出貨認列 → 協理覆核放行」產生，不由此頁入帳。試用期資格於認列當下依出貨日判定。</div>`;
+  if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
   document.getElementById('rd-breakdown').innerHTML=html;
 }
 async function saveRd() {
@@ -2964,9 +2913,10 @@ async function saveRd() {
     base+=Math.round(appSettings.aValue*eb*qty);
     if (qty>0) items.push(`${info.name}×${qty}`);
   });
-  // 制度 v10 起成交獎金改三段式，一律由「確樣→出貨認列→協理覆核放行」產生。
-  // 本頁若再寫入 bonus_records 會與三段式重複入帳，故停止寫入、僅保留試算。
-  showToast('本頁僅供試算：正式成交獎金請至「🎯 成交獎金（三段）」覆核放行，不由此頁入帳');
+  const pr=probationRatio(emp);
+  const total=Math.round(base*pr.ratio);
+  const ok=await saveRecord({dept:'研發部',name:emp.name,bonus:total,role_title:emp.role_title,detail:`${emp.role_title}｜${items.join(', ')}｜A值${appSettings.aValue}｜上限${appSettings.rdMaxBase}${pr.note}`,record_type:'quarterly'});
+  if (ok) showToast(`✓ 已儲存 ${emp.name} ${fmt(total)}`);
 }
 // 制度 v10：課長加成＝研發同仁「成交獎金」×15%（不含課長自己）；助理＝全團隊（含課長）「成交獎金」×5%。
 // 三段式上線後成交獎金存在 rd_deal_bonuses，放行（released）不會寫回 bonus_records，
@@ -2977,7 +2927,7 @@ async function fetchRdTeamBase(){
   const pad=m=>String(m).padStart(2,'0');
   const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
   const {data:deals}=await sb.from('rd_deal_bonuses')
-    .select('employee_id, amount, recognized_at, employees(name, role_title)')
+    .select('employee_id, amount, employees(name, role_title)')
     .eq('status','released')
     .gte('recognized_at',`${yr}-${pad(qMonths[0])}-01`).lt('recognized_at',`${endY}-${pad(endM)}-01`);
   if(deals&&deals.length){
@@ -2985,21 +2935,19 @@ async function fetchRdTeamBase(){
     deals.forEach(d=>{ if(!d.employee_id)return;
       const k=d.employee_id;
       (by[k]=by[k]||{name:d.employees?.name||'-', role_title:d.employees?.role_title||'研發', bonus:0}).bonus+=Number(d.amount)||0; });
-    return {rows:Object.values(by), source:'三段式成交獎金（已放行）', deals};
+    return {rows:Object.values(by), source:'三段式成交獎金（已放行）'};
   }
   const {data}=await sb.from('bonus_records').select('*')
     .eq('dept','研發部').eq('year',yr).eq('quarter',appSettings.quarter).eq('record_type','quarterly');
   return {rows:(data||[]).map(r=>({name:r.name, role_title:r.role_title, bonus:r.bonus})), source:'手動輸入的季獎金'};
 }
 async function calcRdTeam() {
-  const {rows,source,deals}=await fetchRdTeamBase();
+  const {rows,source}=await fetchRdTeamBase();
   const el=document.getElementById('rd-team-content');
   if (!rows.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><div style="font-size:14px">本季尚無研發成交獎金（放行後才計入加成基數）</div></div>';return;}
   const allBase=rows.reduce((s,r)=>s+r.bonus,0);
   const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
-  const _asst=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
-  const _asstBase=(deals&&_asst)?rdAssistantBase(deals,_asst):allBase;
-  const assistantBonus=Math.round(_asstBase*.05);
+  const assistantBonus=Math.round(allBase*.05);
   el.innerHTML=`<div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px">加成基數來源：<strong>${source}</strong>　｜　全團隊池 ${fmt(allBase)}（含課長）、同仁池 ${fmt(mgrBase)}（不含課長）</div>`+
     `<table><thead><tr><th>姓名</th><th>職稱</th><th>成交獎金</th><th class="td-right">加成後</th></tr></thead><tbody>
     ${rows.map(r=>{
@@ -3008,22 +2956,12 @@ async function calcRdTeam() {
       if (isMgr){final=Math.round(r.bonus+mgrBase*.15);note='＋同仁池15%';}
       return `<tr><td>${r.name}</td><td>${r.role_title||'研發'}</td><td>${fmt(r.bonus)}</td><td class="td-right"><strong>${fmt(final)}</strong>${note?`<span style="font-size:11px;color:var(--ink-faint);margin-left:4px">${note}</span>`:''}</td></tr>`;
     }).join('')}
-    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（成交池 ${fmt(_asstBase)} × 5%）${_asstBase<allBase?`<span style="font-size:11px;color:var(--ink-faint)">　已排除試用期內認列 ${fmt(allBase-_asstBase)}</span>`:''}</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
+    <tr style="background:var(--gold-pale)"><td colspan="3" style="font-weight:500;padding:10px 13px">助理獎金（全團隊池 ${fmt(allBase)} × 5%）</td><td class="td-right" style="font-weight:500;padding:10px 13px">${fmt(assistantBonus)}</td></tr>
   </tbody></table>`;
-}
-// 助理分潤基數：只計「轉正月起認列」的成交（制度 v14，與個人確認表同一判定；不套季度天數比例）
-function rdAssistantBase(deals, assistant){
-  if(!deals) return null;
-  const pe=assistant?.probation_end_date;
-  return deals.reduce((s,d)=>{
-    const rm=(d.recognized_at||'').slice(0,7);
-    if(pe && rm && rm < pe.slice(0,7)) return s;      // 認列月早於轉正月 → 試用期內，不計
-    return s+(Number(d.amount)||0);
-  },0);
 }
 async function saveRdTeam(){
   // 基數與 calcRdTeam 同源（優先三段式成交明細），避免畫面顯示與實際入帳不一致
-  const {rows,source,deals}=await fetchRdTeamBase();
+  const {rows,source}=await fetchRdTeamBase();
   if (!rows.length){ showToast('尚無研發本季成交獎金，請先放行成交明細或儲存各人獎金'); return; }
   const allBase=rows.reduce((s,r)=>s+r.bonus,0);
   const mgrBase=rows.filter(r=>!r.role_title?.includes('課長')).reduce((s,r)=>s+r.bonus,0);
@@ -3031,17 +2969,16 @@ async function saveRdTeam(){
     || (()=>{const m=employees.find(e=>e.dept==='研發部'&&e.is_active&&(e.role_title||'').includes('課長')); return m?{name:m.name,role_title:m.role_title}:null;})();
   const assistant=employees.find(e=>e.dept==='研發部'&&e.role_level==='assistant'&&e.is_active);
   const mgrAdd=mgr?Math.round(mgrBase*.15):0;
-  const asstBase=(deals&&assistant)?rdAssistantBase(deals,assistant):allBase;
-  const asstBonus=assistant?Math.round(asstBase*.05):0;
+  const asstBonus=assistant?Math.round(allBase*.05):0;
   let count=0;
   if (mgr && mgrAdd>0){
     const ok=await saveRecord({dept:'研發部',name:mgr.name,bonus:mgrAdd,role_title:mgr.role_title,detail:`課長加成 15% × 同仁成交池 ${fmt(mgrBase)}（基數：${source}）`,record_type:'team_bonus'});
     if (ok) count++;
   }
   if (assistant && asstBonus>0){
-    // 制度 v14：研發試用期以「出貨認列日」判定，不套季度天數比例
-    const excl=allBase-asstBase;
-    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstBonus,role_title:assistant.role_title,detail:`助理獎金 5% × 成交池 ${fmt(asstBase)}（含課長；基數：${source}）${excl>0?`｜已排除試用期內認列 ${fmt(excl)}`:''}`,record_type:'team_bonus'});
+    const pr=probationRatio(assistant);
+    const asstFinal=Math.round(asstBonus*pr.ratio);
+    const ok=await saveRecord({dept:'研發部',name:assistant.name,bonus:asstFinal,role_title:assistant.role_title,detail:`助理獎金 5% × 全團隊成交池 ${fmt(allBase)}（含課長；基數：${source}）${pr.note}`,record_type:'team_bonus'});
     if (ok) count++;
   }
   showToast(`✓ 已寫入 ${count} 筆團隊加成`);
@@ -3049,8 +2986,8 @@ async function saveRdTeam(){
 }
 function addCollabRow(){
   const c=document.getElementById('collab-persons');const d=document.createElement('div');
-  d.style.cssText='display:grid;grid-template-columns:1fr .8fr 1fr .8fr 80px;gap:10px;margin-bottom:10px;align-items:end';
-  d.innerHTML=`<div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div><div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div><div><label class="form-label">主責角色</label><select class="form-select collab-role"><option value="owner">原主責／新主責</option><option value="collab">協作</option><option value="none">僅打樣</option></select></div><div><label class="form-label">確樣人</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div><div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>`;
+  d.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:10px;margin-bottom:10px;align-items:end';
+  d.innerHTML=`<div><label class="form-label">姓名</label><input class="form-input collab-name" placeholder="姓名" /></div><div><label class="form-label">打樣次數</label><input class="form-input collab-samples" type="number" placeholder="0" min="0" /></div><div><label class="form-label">成交確認者</label><select class="form-select collab-winner"><option value="0">否</option><option value="1">是</option></select></div><div><button class="btn btn-outline btn-sm" onclick="removeCollabRow(this)" style="margin-top:18px">移除</button></div>`;
   c.appendChild(d);
 }
 function removeCollabRow(btn){if(document.getElementById('collab-persons').children.length>1)btn.closest('div[style]').remove();}
@@ -3126,9 +3063,9 @@ async function saveRdAllFromOrders(empArr){
   for(const e of empArr){
     const emp=employees.find(x=>x.id===e.id);
     if(!emp){fail++;continue;}
-    // 制度 v14：研發試用期以打樣日／出貨認列日逐筆判定，不套季度天數比例
-    const finalBonus=Math.round(e.total);
-    const detail=`自動帶入｜${e.items.length} 張訂單｜${e.items.map(i=>`${i.order_no}(${i.samples}件)`).join(', ')}`;
+    const pr=probationRatio(emp);
+    const finalBonus=Math.round(e.total*pr.ratio);
+    const detail=`自動帶入｜${e.items.length} 張訂單｜${e.items.map(i=>`${i.order_no}(${i.samples}件)`).join(', ')}${pr.note}`;
     const r=await saveRecord({dept:'研發部', name:e.name, bonus:finalBonus, role_title:e.role_title, detail, record_type:'quarterly'});
     if(r) ok++; else fail++;
   }
@@ -3139,51 +3076,26 @@ async function saveRdAllFromOrders(empArr){
 // ===== 自動算研發部獎金 END =====
 
 function calcCollab(){
-  // 制度 v14 三段式：主責 50%（依變動程度拆原主責／協作）＋ 打樣 30%（按次數）＋ 確樣 20%（誰確誰領）
   const type=document.getElementById('collab-type').value;
-  const lv=document.getElementById('collab-level').value;
   const info=rdTypes[type];
-  const pool=Math.round(appSettings.aValue*info.base);
+  const totalBonus=Math.round(appSettings.aValue*info.base);
   const persons=[];
   document.querySelectorAll('#collab-persons > div').forEach(row=>{
-    const name=row.querySelector('.collab-name')?.value.trim();
-    const samples=parseInt(row.querySelector('.collab-samples')?.value)||0;
-    const role=row.querySelector('.collab-role')?.value||'none';
-    const isConf=row.querySelector('.collab-winner')?.value==='1';
-    if (name) persons.push({name,samples,role,isConf,owner:0,sampling:0,confirm:0});
+    const name=row.querySelector('.collab-name').value.trim();
+    const samples=parseInt(row.querySelector('.collab-samples').value)||0;
+    const isWinner=row.querySelector('.collab-winner').value==='1';
+    if (name) persons.push({name,samples,isWinner});
   });
-  if(!persons.length){showToast('請先填入人員');return;}
-  const pre=COLLAB_PRESET[lv]||{owner:50,collab:0};
-  const owners=persons.filter(p=>p.role==='owner');
-  const collabs=persons.filter(p=>p.role==='collab');
-  // 主責段 50%
-  if(lv==='major'){
-    owners.forEach(p=>p.owner=Math.round(pool*0.5/Math.max(1,owners.length)));
-  }else{
-    const ownerAmt=pool*pre.owner/100, collabAmt=pool*pre.collab/100;
-    owners.forEach(p=>p.owner=Math.round(ownerAmt/Math.max(1,owners.length)));
-    if(collabs.length) collabs.forEach(p=>p.owner=Math.round(collabAmt/collabs.length));
-  }
-  // 打樣段 30%：按打樣次數比例
   const totalSamples=persons.reduce((s,p)=>s+p.samples,0);
-  if(totalSamples>0) persons.forEach(p=>p.sampling=Math.round(pool*0.3*(p.samples/totalSamples)));
-  // 確樣段 20%：誰確誰領（多人則平分）
-  const confs=persons.filter(p=>p.isConf);
-  if(confs.length) confs.forEach(p=>p.confirm=Math.round(pool*0.2/confs.length));
-  const lvName={minor:'輕微',medium_light:'中度偏輕',medium_heavy:'中度偏重',co_dev:'接近共同開發',major:'大幅（換主責）'}[lv];
-  const sum=persons.reduce((s,p)=>s+p.owner+p.sampling+p.confirm,0);
+  const results=persons.map(p=>{
+    const base=totalSamples>0?Math.round(totalBonus*.5*(p.samples/totalSamples)):0;
+    const extra=p.isWinner?Math.round(totalBonus*.5):0;
+    return{...p,base,extra,total:base+extra};
+  });
   show('collab-result');
-  document.getElementById('collab-result-content').innerHTML=
-    `<p style="margin-bottom:6px"><strong>成交池：${fmt(pool)}</strong>（${info.name} 基數 ${info.base}　×　A值 ${fmt(appSettings.aValue)}）</p>`+
-    `<p style="margin-bottom:10px;font-size:12px;color:var(--ink-faint)">變動程度：<b>${lvName}</b>　｜　主責段 ${fmt(Math.round(pool*.5))}／打樣段 ${fmt(Math.round(pool*.3))}／確樣段 ${fmt(Math.round(pool*.2))}</p>`+
-    `<table><thead><tr><th>姓名</th><th>角色</th><th class="td-right">打樣次數</th><th class="td-right">主責段</th><th class="td-right">打樣段</th><th class="td-right">確樣段</th><th class="td-right">合計</th></tr></thead>`+
-    `<tbody>${persons.map(p=>`<tr><td>${p.name}${p.isConf?' <span class="badge badge-gold">確樣</span>':''}</td>`+
-      `<td>${({owner:'主責',collab:'協作',none:'僅打樣'})[p.role]}</td>`+
-      `<td class="td-right">${p.samples}</td><td class="td-right">${p.owner?fmt(p.owner):'—'}</td>`+
-      `<td class="td-right">${p.sampling?fmt(p.sampling):'—'}</td><td class="td-right">${p.confirm?fmt(p.confirm):'—'}</td>`+
-      `<td class="td-right"><strong>${fmt(p.owner+p.sampling+p.confirm)}</strong></td></tr>`).join('')}`+
-    `<tr style="background:var(--gold-pale);font-weight:600"><td colspan="6">合計</td><td class="td-right">${fmt(sum)}</td></tr></tbody></table>`+
-    `<p class="note" style="font-size:11px;color:#777;margin-top:6px">本頁僅供試算，不寫入獎金紀錄。代工配方不走三段拆分（窗口領 900 元 100%）。</p>`;
+  document.getElementById('collab-result-content').innerHTML=`<p style="margin-bottom:10px"><strong>案件總獎金：${fmt(totalBonus)}</strong>（${info.name}）</p>
+    <table><thead><tr><th>姓名</th><th class="td-right">打樣</th><th class="td-right">基礎50%</th><th class="td-right">成交50%</th><th class="td-right">合計</th></tr></thead>
+    <tbody>${results.map(r=>`<tr><td>${r.name}${r.isWinner?' <span class="badge badge-gold">確認者</span>':''}</td><td class="td-right">${r.samples}</td><td class="td-right">${fmt(r.base)}</td><td class="td-right">${r.extra?fmt(r.extra):'—'}</td><td class="td-right"><strong>${fmt(r.total)}</strong></td></tr>`).join('')}</tbody></table>`;
 }
 
 // ==================== RD SAMPLING (打樣模組 v5) ====================
@@ -3191,19 +3103,11 @@ let rdCustomers=[];           // 客戶主檔快取
 let rdsSelectedCustomers=[];  // 新增 modal 內已選的客戶
 let currentEditId=null;       // 編輯模式下的 row id；null=新增模式
 
-// 合格件數門檻：研發同仁 18 件；研發課長 13 件
-// （協理 2026-08-07 裁示，自 2026 Q2 起適用；管理職產出時間被切分，門檻下修）
-const RD_QUALIFY_STAFF=18, RD_QUALIFY_MANAGER=13;
-function rdQualifyCount(empId){
-  const e=(typeof employees!=='undefined'?employees:[]).find(x=>x.id===empId);
-  return (e&&e.dept==='研發部'&&e.role_level==='manager')?RD_QUALIFY_MANAGER:RD_QUALIFY_STAFF;
-}
-function rdSamplingBonus(count, empId){
-  // 未達合格件數 → 0；達標 → 1,000 + (件數 − 合格件數) × 55；上限 88 件
+function rdSamplingBonus(count){
+  // v8 公式（2026/05 文件）：< 18 → 0；≥ 18 → 1,000 + (件數 − 18) × 55；上限 88 件
   const eff=Math.min(count,88);
-  const q=rdQualifyCount(empId);
-  if(eff<q)return 0;
-  return 1000+(eff-q)*55;
+  if(eff<18)return 0;
+  return 1000+(eff-18)*55;
 }
 
 function rdFormulaLabel(t){const m={liquid:'液劑',essence:'精華液/凝膠/面膜',emulsion_ow:'乳劑(水包油)',emulsion_wo:'乳劑(油包水)',special:'特殊劑型'};return m[t]||t;}
@@ -3429,11 +3333,19 @@ function updateRdsDelayInfo(){
   if(delay<0){info.style.display='block';info.innerHTML='⚠ 未來日期，請改正';info.style.color='var(--red)';reasonWrap.style.display='none';return;}
   // 修改既有 row 永遠放行；UI 只顯示參考資訊不擋
   if(currentEditId){info.style.display='block';info.innerHTML=`✏️ 修改模式：延遲 ${delay} 天可直接送審`;info.style.color='#5d8aa8';reasonWrap.style.display='none';return;}
-  if(delay===0){info.style.display='block';info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(delay<=2){info.style.display='block';info.innerHTML=`🟢 延遲 ${delay} 天，自動通過（無需原因、無需審核）`;info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(RDS_BACKFILL_RELAXED){info.style.display='block';info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（<strong>原因必填</strong>，例如「系統上線前舊打樣補登」）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
-  else if(delay<=7){info.style.display='block';info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因送 ELLA 審核`;info.style.color='var(--red)';reasonWrap.style.display='block';}
-  else{info.style.display='block';info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
+  info.style.display='block';
+  // 2026-09-01 起適用新制（0–1 自動／2–3 送審／逾 3 日不計獎金）；此日之前的打樣沿用舊制，不溯及
+  if(d < RDS_DEADLINE_EFFECTIVE){
+    if(delay<=2){info.innerHTML=`🟢 延遲 ${delay} 天，自動通過（${d} 為新制生效日前，沿用舊制）`;info.style.color='var(--green)';reasonWrap.style.display='none';}
+    else if(RDS_BACKFILL_RELAXED){info.innerHTML=`🛠️ 補登模式：延遲 ${delay} 天仍可登錄（<strong>原因必填</strong>）`;info.style.color='#a68a3a';reasonWrap.style.display='block';}
+    else if(delay<=7){info.innerHTML=`⚠ 延遲 ${delay} 天，必須填寫原因送 ELLA 審核（舊制）`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+    else{info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（舊制限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
+    return;
+  }
+  if(delay===0){info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay===1){info.innerHTML='🟢 延遲 1 天，自動通過（無需原因）';info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay<=3){info.innerHTML=`⚠ 延遲 ${delay} 天，<strong>必須填寫原因</strong>送 ELLA 審核<br><span style="font-size:11px">※ 跨週末、國定假日不得作為延遲理由</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+  else{info.innerHTML=`🚫 逾期 ${delay} 天 — 仍可登錄留存件數紀錄，但<strong>本筆不計入打樣獎金</strong>（原因必填）<br><span style="font-size:11px">※ 受影響的是打樣負責人的獎金，非登打者</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
 }
 
 function addRdSampleCustomer(){
@@ -3475,11 +3387,20 @@ async function saveRdSample(){
   if(!rdsSelectedCustomers.length){showToast('請至少選 1 個客戶');return;}
   const delay=Math.floor((new Date()-new Date(date))/86400000);
   if(delay<0){showToast('打樣日期不能是未來');return;}
-  // 7 天/3 天原因限制僅對「新增模式 + 非補登放寬」生效；修改既有 row 永遠放行
+  // 時效檢核僅對「新增模式」生效；修改既有 row 永遠放行
+  // 新制（sample_date >= RDS_DEADLINE_EFFECTIVE）：2 天以上必填原因、逾 3 日可登錄但不計獎金（DB trigger 為最終判定者）
   if(!currentEditId){
-    // 「超過 7 天禁止」只在非補登模式擋；補登模式放行超過 7 天，但「3 天以上要填原因」一律保留（供 ELLA 覆核留軌跡，且對應 DB 的 chk_d3plus_needs_reason）
-    if(!RDS_BACKFILL_RELAXED && delay>7){showToast('延遲超過 7 天，系統禁止登打');return;}
-    if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因（補登舊打樣也要填，供 ELLA 覆核）');return;}
+    if(date >= RDS_DEADLINE_EFFECTIVE){
+      if(delay>=2&&!reason){showToast('延遲 2 天以上必須填寫原因（跨假日不得作為理由）');return;}
+      if(delay>3){
+        const emp=employees.find(e=>e.id===empId);
+        if(!confirm(`⚠ 逾期 ${delay} 天登打\n\n本筆仍會建檔（保留件數與確樣對應），但「${emp?.name||'該打樣負責人'}」的這筆打樣獎金將不予計入。\n\n確定送出？`))return;
+      }
+    }else{
+      // 生效日前的舊打樣沿用舊制
+      if(!RDS_BACKFILL_RELAXED && delay>7){showToast('延遲超過 7 天，系統禁止登打（舊制）');return;}
+      if(delay>=3&&!reason){showToast('延遲 3 天以上必須填寫原因，供 ELLA 覆核');return;}
+    }
   }
 
   // 配方擬定者驗證
@@ -3681,7 +3602,7 @@ async function loadPendingReviews(){
   loadTodoCenter(); // 同步更新表頭待辦鈕/紅點
 }
 
-// ===== 待辦中心（表頭鈕）：四類集中，只看清單＋跳頁處理（協理限定）=====
+// ===== 待辦中心（表頭鈕）：四類集中，只看清單＋跳頁處理（經理限定）=====
 async function loadTodoCenter(){
   const badge=document.getElementById('pending-review-badge'), dot=document.getElementById('pending-review-dot');
   const isMgr=(currentRole==='manager');
@@ -3745,39 +3666,26 @@ async function settleRdMonth(){
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const rdEmps=employees.filter(e=>e.dept==='研發部'&&e.is_active&&e.role_level!=='assistant');
-  // 試用期判定（與個人確認表一致）：預設按日；經協理核給「轉正月寬限」者，轉正當月以整月計算
-  const _inProb=(emp,d)=>{
-    if(!emp.probation_end_date||!d) return false;
-    return emp.probation_grace_month ? (d.slice(0,7) < emp.probation_end_date.slice(0,7))
-                                     : (d < emp.probation_end_date);
-  };
-  // 打樣獎金 gate（制度 v11 附錄）：當季若無自己參與之成交完成出貨認列 → 暫緩累積，且不設時效
-  const _q4=m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
-  const {data:_qd}=await sb.from('rd_deal_bonuses').select('employee_id').eq('year',y).eq('quarter',_q4);
-  const _hasDeal=new Set((_qd||[]).map(r=>r.employee_id).filter(Boolean));
+  // deadline = 打樣月 + 6 個月後的月底（用 local string 避時區）
+  const dlD=new Date(y,m+6,0);
+  const dl=`${dlD.getFullYear()}-${String(dlD.getMonth()+1).padStart(2,'0')}-${String(dlD.getDate()).padStart(2,'0')}`;
   let results=[];
   for(const emp of rdEmps){
-    const {data:samples}=await sb.from('rd_samples').select('id, sample_date').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']);
-    const rawCount=samples?.length||0;
-    const count=(samples||[]).filter(x=>!_inProb(emp,x.sample_date)).length;
-    const probN=rawCount-count;
-    if(rawCount===0){results.push({name:emp.name,count:0,raw:0,probN:0,bonus:0,status:'— 無打樣'});continue;}
-    const bonus=rdSamplingBonus(count, emp.id);
-    const _q=rdQualifyCount(emp.id);
-    let settleStatus, statusLabel;
-    if(count<_q){ settleStatus='expired'; statusLabel=`未達門檻（不發，合格 ${_q} 件）`; }
-    else if(_hasDeal.has(emp.id)){ settleStatus='paid'; statusLabel='✅ 可發放（本季有成交認列）'; }
-    else { settleStatus='pending_carryover'; statusLabel='暫緩累積（本季無成交認列·不設時效）'; }
-    const noteTxt=probN?`本月打樣 ${rawCount} 件，其中 ${probN} 件在試用期內不計獎金`:null;
+    // v20：逾期登打（bonus_eligible=false）不計入打樣件數與獎金
+    const {data:samples}=await sb.from('rd_samples').select('id').eq('employee_id',emp.id).gte('sample_date',start).lt('sample_date',nm).in('approval_status',['auto_approved','approved']).eq('bonus_eligible',true);
+    const count=samples?.length||0;
+    if(count===0){results.push({name:emp.name,count:0,bonus:0,status:'— 無打樣'});continue;}
+    const bonus=rdSamplingBonus(count);
+    const settleStatus=count<18?'expired':'pending_carryover';
+    const statusLabel=count<18?'未達門檻（不發）':'待回溯（等出貨完成）';
     const {error}=await sb.from('rd_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,sample_count:count,base_bonus:bonus,
-      status:settleStatus,has_shipped_order:_hasDeal.has(emp.id),
-      carryover_deadline:null,note:noteTxt,updated_at:new Date().toISOString()
+      status:settleStatus,carryover_deadline:dl,updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
     if(error)showToast('結算失敗('+emp.name+'): '+error.message);
-    results.push({name:emp.name,count,raw:rawCount,probN,bonus,status:statusLabel});
+    results.push({name:emp.name,count,bonus,status:statusLabel});
   }
-  document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th class="td-right">實際打樣</th><th class="td-right">試用期不計</th><th class="td-right">計獎件數</th><th class="td-right">階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td class="td-right">${r.raw} 件</td><td class="td-right">${r.probN?r.probN+' 件':'—'}</td><td class="td-right">${r.count} 件</td><td class="td-right">${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table><p class="note" style="font-size:11px;color:#777;margin-top:6px">試用期內之打樣不列入件數（經核給轉正月寬限者，轉正當月以整月計算）。達門檻者若當季無成交認列，暫緩累積、不設時效，待有認列之季度一併發放。</p>`;
+  document.getElementById('rds-settle-content').innerHTML=`<table><thead><tr><th>研發</th><th>件數</th><th>階梯獎金</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.count}</td><td>${fmt(r.bonus)}</td><td>${r.status}</td></tr>`).join('')}</tbody></table>`;
   showToast(`✓ ${ym} 結算完成`);
   loadCarryover();
 }
@@ -3795,15 +3703,30 @@ async function loadCarryover(){
 }
 
 async function loadOverdueLogs(){
-  // 本月課長補登明細：delay_days >= 1 的當月紀錄
+  // 本月全研發延遲登打：撈當月全部紀錄，算出「當天登打率」（v20 起）
+  // 註：登打者實務上集中在研發課長，故此表同時是課長的登打紀律指標
   const now=new Date();const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const start=ym+'-01';
-  const {data}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').gte('logged_at',start).gt('delay_days',0).order('logged_at',{ascending:false});
+  const {data:all}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').gte('logged_at',start).order('logged_at',{ascending:false});
   const el=document.getElementById('rds-overdue-content');
   const cnt=document.getElementById('rds-overdue-count');
-  if(cnt)cnt.textContent=`${data?.length||0} 筆延遲`;
-  if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲補登</div></div>';return;}
-  el.innerHTML=`<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>研發</th><th>實際打樣日</th><th>延遲</th><th>原因</th></tr></thead><tbody>${data.map(s=>`<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong></td><td>${s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>`;
+  const total=all?.length||0;
+  const data=(all||[]).filter(s=>(s.delay_days||0)>0);
+  const sameDay=total-data.length;
+  const rate=total?Math.round(sameDay/total*100):100;
+  const rateColor=rate>=90?'var(--green)':rate>=70?'#a68a3a':'var(--red)';
+  if(cnt)cnt.innerHTML=`本月 ${total} 筆　當天登打率 <strong style="color:${rateColor}">${rate}%</strong>　延遲 ${data.length} 筆`;
+  if(!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月全數當天登打</div></div>';return;}
+  // 依打樣負責人彙總，看出延遲集中在誰身上
+  const byEmp={};
+  data.forEach(s=>{const n=s.employees?.name||'-';byEmp[n]=(byEmp[n]||0)+1;});
+  const summary=Object.entries(byEmp).sort((a,b)=>b[1]-a[1])
+    .map(([n,c])=>`<span class="badge" style="background:#fff4e0;color:#a86b1a;margin-right:4px">${n} ${c} 筆</span>`).join('');
+  el.innerHTML=`<div style="margin-bottom:8px">受影響的打樣負責人：${summary}</div>`+
+    `<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>打樣負責人</th><th>實際打樣日</th><th>延遲</th><th>獎金</th><th>原因</th></tr></thead><tbody>${data.map(s=>{
+      const noBonus=s.bonus_eligible===false;
+      return `<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong></td><td>${noBonus?'<span class="badge" style="background:#fde8e8;color:#b3261e">🚫 不計獎金</span>':'<span style="color:var(--ink-faint)">計入</span>'}</td><td>${s.approval_reason||'—'}</td></tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 // AUDIT LOGS（v8）
@@ -4438,7 +4361,7 @@ function switchPage(page){
   document.getElementById('page-'+page)?.classList.add('active');
   document.getElementById('tab-'+page)?.classList.add('active');
   if(page==='dashboard')loadDashboard();
-  if(page==='history'){loadDashboard();loadPayoutSummary();}
+  if(page==='history')loadDashboard();
   if(page==='orders')loadOrders();
   if(page==='shipments')loadShipments();
   if(page==='settings')renderEmployeeList();
@@ -4450,7 +4373,6 @@ function switchPage(page){
   if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
   if(page==='reconcile')loadReconcile();
   if(page==='kpireview')loadKpiReview();
-  if(page==='sales-import')loadSalesStaging();
 }
 async function loadReconcile(){
   const sel=document.getElementById('rec-month');
@@ -4566,9 +4488,6 @@ function dealBaseInfo(sc){
 function computeDealSegments(sc){
   const A=appSettings.aValue||3000;
   const emp=id=>employees.find(e=>e.id===id);
-  // 已離職者所屬之段別＝孤兒段（制度第六章：原作者離職且無接手者之段別＝孤兒段）
-  // 不限主責段；打樣段、確樣段之執行者若已離職，同樣折半、另一半不發，待協理指定接手人
-  const gone=id=>{const e=emp(id);return !!e&&e.is_active===false;};
   const lines=[];
   if(sc.is_oem){
     const amt=Math.round(A*0.3);
@@ -4608,22 +4527,11 @@ function computeDealSegments(sc){
   const samplerSplits=(sc.rd_deal_owner_splits||[]).filter(d=>d.role==='sampler'&&d.employee_id);
   if(samplerSplits.length){
     // 多人打樣：依確樣時勾選、按打樣次數存下的比例分（助理已於確樣排除）
-    samplerSplits.forEach(sp=>{
-      const share=sampleSeg*Number(sp.pct)/100;
-      if(gone(sp.employee_id)){
-        lines.push({segment:'sampling', employee_id:null, amount:Math.round(share*0.5), is_orphan_halved:true,
-          pending_reason:'打樣者已離職，孤兒段待指定接手人', note:`多人打樣 占打樣段 ${sp.pct}%－打樣者離職→折半，另一半不發`});
-      }else{
-        lines.push({segment:'sampling', employee_id:sp.employee_id, amount:Math.round(share), is_orphan_halved:false, note:`多人打樣 占打樣段 ${sp.pct}%`});
-      }
-    });
+    samplerSplits.forEach(sp=>lines.push({segment:'sampling', employee_id:sp.employee_id, amount:Math.round(sampleSeg*Number(sp.pct)/100), is_orphan_halved:false, note:`多人打樣 占打樣段 ${sp.pct}%`}));
   }else{
     const samplerId=sc.rd_samples?.employee_id;
     const samplerRole=sc.rd_samples?.employees?.role_level;
-    if(samplerId&&samplerRole!=='assistant'&&gone(samplerId)){
-      lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
-        pending_reason:'打樣者已離職，孤兒段待指定接手人', note:'打樣者離職→打樣段折半，另一半不發'});
-    }else if(samplerId&&samplerRole!=='assistant'){
+    if(samplerId&&samplerRole!=='assistant'){
       lines.push({segment:'sampling', employee_id:samplerId, amount:Math.round(sampleSeg), is_orphan_halved:false, note:'打樣者領打樣段'});
     }else if(orphan){
       lines.push({segment:'sampling', employee_id:null, amount:Math.round(sampleSeg*0.5), is_orphan_halved:true,
@@ -4633,131 +4541,73 @@ function computeDealSegments(sc){
     }
   }
   // 確樣段 20%
-  const confirmSeg=pool*0.2;
-  if(gone(sc.confirmed_by)){
-    lines.push({segment:'confirm', employee_id:null, amount:Math.round(confirmSeg*0.5), is_orphan_halved:true,
-      pending_reason:'確樣人已離職，孤兒段待指定接手人', note:'確樣人離職→確樣段折半，另一半不發'});
-  }else{
-    lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(confirmSeg), is_orphan_halved:false, note:'確樣人領確樣段'});
-  }
+  lines.push({segment:'confirm', employee_id:sc.confirmed_by, amount:Math.round(pool*0.2), is_orphan_halved:false, note:'確樣人領確樣段'});
   return lines;
 }
 
 // ===== 研發個人確認表（每人一張、只出自己；打樣月結逐月 + 成交三段每品項）=====
-// 制度：打樣未達合格件數=0；達標=1000+(件-合格件數)×55、上限88（合格件數 同仁18／課長13）；成交三段主責50/打樣30/確樣20
+// 制度 v10：打樣 <18=0；≥18=1000+(件-18)×55、上限88；成交三段主責50/打樣30/確樣20（依實際占比算）
 async function generateRdConfirmSheets(){
   const A=appSettings.aValue||3000;
   const yr=appSettings.year;
   const qMonths=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
   const pad=m=>String(m).padStart(2,'0');
   const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
-  // 1) 合格打樣件數（approved/auto_approved）本季各月各人
+  // 1) 合格打樣件數（approved/auto_approved，且未因逾期登打被排除）本季各月各人
   const {data:samples,error:e1}=await sb.from('rd_samples')
     .select('employee_id, sample_date, approval_status')
     .gte('sample_date',`${yr}-${pad(qMonths[0])}-01`).lt('sample_date',`${endY}-${pad(endM)}-01`)
-    .in('approval_status',['approved','auto_approved']);
+    .in('approval_status',['approved','auto_approved'])
+    .eq('bonus_eligible',true);
   if(e1){showToast('讀取打樣失敗：'+e1.message);return;}
-  // 試用期內不計獎金。⭐公司寬限（協理逐案核給，employees.probation_grace_month）：
-  // 開啟時，轉正當月不按日切分、整月計入；未開啟則維持按日判定。核給者須於個人對帳明細揭露。
-  const inProbDay=(empId, dateStr)=>{
+  // 試用期（到職起三個月）內產生的打樣不計獎金——按「打樣日」逐筆判定，非按季度比例折算
+  const inProbation=(empId, dateStr)=>{
     const e=employees.find(x=>x.id===empId);
     return !!(e && e.probation_end_date && dateStr && dateStr < e.probation_end_date);
   };
-  const hasGrace=empId=>!!(employees.find(x=>x.id===empId)||{}).probation_grace_month;
-  const inProbation=(empId, dateStr)=>{
-    const e=employees.find(x=>x.id===empId);
-    if(!e || !e.probation_end_date || !dateStr) return false;
-    return e.probation_grace_month ? (dateStr.slice(0,7) < e.probation_end_date.slice(0,7))
-                                   : (dateStr < e.probation_end_date);
-  };
-  const probEndOf=empId=>(employees.find(x=>x.id===empId)||{}).probation_end_date||'';
-  // 該人的轉正月是否落在本季（用於在表上標示「公司寬限·整月計入」）
-  const graceMonth=empId=>{
-    if(!hasGrace(empId)) return 0;
-    const pe=probEndOf(empId); if(!pe) return 0;
-    const [gy,gm]=pe.split('-').map(Number);
-    return (gy===yr && qMonths.includes(gm))?gm:0;
-  };
-  const cnt={}, probSkip={}, cntAll={}, graceGain={};
+  const cnt={}, probSkip={};
   (samples||[]).forEach(s=>{
     const k=s.employee_id; if(!k)return;
+    if(inProbation(k, s.sample_date)){ (probSkip[k]=probSkip[k]||{n:0})['n']++; return; }
     const m=Number(s.sample_date.slice(5,7));
-    // cntAll＝含試用期的全部件數，供「試用期未計入」區揭露實際產出與預估獎金
-    (cntAll[k]=cntAll[k]||{})[m]=(cntAll[k][m]||0)+1;
-    // 因公司寬限而多計入的件數（按日判定會被排除、按整月則計入）
-    if(!inProbation(k,s.sample_date) && inProbDay(k,s.sample_date)){
-      (graceGain[k]=graceGain[k]||{})[m]=((graceGain[k]||{})[m]||0)+1;
-    }
-    if(inProbation(k, s.sample_date)){
-      const p=(probSkip[k]=probSkip[k]||{n:0,byM:{}});
-      p.n++; p.byM[m]=(p.byM[m]||0)+1; return;
-    }
     (cnt[k]=cnt[k]||{})[m]=(cnt[k][m]||0)+1;
   });
-  const sampleBonus=(n,empId)=>rdSamplingBonus(n,empId); // 複用系統既有公式，確保與畫面一致
+  const sampleBonus=n=>rdSamplingBonus(n); // 複用系統既有公式，確保與畫面一致
   // 2) 成交三段（現有確樣 → 依發獎引擎預估）
   const {data:scs,error:e2}=await sb.from('rd_sample_customers')
-    .select('id, official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
+    .select('official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
     .eq('confirm_status','confirmed');
   if(e2){showToast('讀取確樣失敗：'+e2.message);return;}
-  // 本季已認列的成交，一律以「發獎明細」為準（覆核台可改金額、可指定孤兒段接手人），不由引擎重算
-  const {data:paidRows,error:e2b}=await sb.from('rd_deal_bonuses')
-    .select('sample_customer_id, official_product_code, segment, employee_id, amount, is_orphan_halved, recognized_at')
-    .eq('year',yr).eq('quarter',appSettings.quarter);
-  if(e2b){showToast('讀取成交明細失敗：'+e2b.message);return;}
   const segLabel={primary:'主責',sampling:'打樣',confirm:'確樣',collaborator:'協作',oem:'代工窗口'};
   // 成交獎金跟著「出貨認列」走，不是跟確樣日：確樣落在本季但尚未出貨者，該筆獎金屬於日後出貨的那一季，
   // 不得計入本季合計（與其他部門「出貨才計獎」一致）。故此處分兩組：本季已認列＝計入；未認列＝僅列示。
   const qStart=`${yr}-${pad(qMonths[0])}-01`, qEnd=`${endY}-${pad(endM)}-01`;
   const inThisQ=sc=>sc.recognized_at && sc.recognized_at>=qStart && sc.recognized_at<qEnd;
   const deal={}, pendingDeal={}, probDeal={}, allRows=[];
-  const scById={}; (scs||[]).forEach(sc=>scById[sc.id]=sc);
-  const poolOf=sc=>sc?(sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0)):0;
-  const whoBySc={};
-  // 2a) 本季已認列＝讀發獎明細（實際歸屬與實際金額，含孤兒段接手人、含經理手改金額）
-  (paidRows||[]).forEach(r=>{
-    const sc=scById[r.sample_customer_id];
-    const p=products.find(x=>x.product_code===r.official_product_code);
-    const lb=(segLabel[r.segment]||r.segment)+(r.is_orphan_halved?'（孤兒段折半·接手）':'');
-    if(!r.employee_id) return;                    // 尚未指定接手人的孤兒段：放行時才會補上
-    const nm=employees.find(e=>e.id===r.employee_id)?.name||'';
-    const key=r.sample_customer_id||r.official_product_code;
-    (whoBySc[key]=whoBySc[key]||{});
-    // 附表索引必須用「不含後綴」的基礎段別，否則「主責（孤兒段折半·接手）」查不到而整列顯示「—」；
-    // 代工不走三段，窗口併入主責欄呈現，避免整列空白
-    const kLb=r.segment==='oem'?'主責':(segLabel[r.segment]||r.segment);
-    const disp=nm+(r.segment==='oem'?'（代工窗口）':(r.is_orphan_halved?'（接手）':''));
-    whoBySc[key][kLb]=(whoBySc[key][kLb]?whoBySc[key][kLb]+'、':'')+disp;
-    const pool=poolOf(sc);
-    const recAt=(r.recognized_at||'').slice(0,10);
-    const row={code:r.official_product_code||'—', name:p?.product_name||'', cust:sc?.rd_customers?.short_name||'',
-      seg:r.segment, label:lb, pct:pool?Math.round(Number(r.amount)/pool*100):null, amount:Number(r.amount)||0, recAt};
-    if(inProbation(r.employee_id, recAt)) (probDeal[r.employee_id]=probDeal[r.employee_id]||[]).push(row);
-    else (deal[r.employee_id]=deal[r.employee_id]||[]).push(row);
-  });
-  // 2b) 尚未出貨認列＝仍由引擎預估列示（還沒有發獎明細可讀）
   (scs||[]).forEach(sc=>{
     const p=products.find(x=>x.product_code===sc.official_product_code);
+    const segs=computeDealSegments(sc);
+    const pool=sc.is_oem?A*0.3:(dealBaseInfo(sc).base?A*dealBaseInfo(sc).base:0);
     const recognized=inThisQ(sc);
-    const pool=poolOf(sc);
-    const who=whoBySc[sc.id]||{};
-    // 附表的三段人名必須每一列都有：本季發獎明細只涵蓋本季，
-    // 已在其他季認列（或尚未認列）的品項要改由引擎推算補齊，否則整列顯示「—」看起來像漏登
-    const needWho=!Object.keys(who).length;
-    if(!sc.recognized_at || needWho){
-      computeDealSegments(sc).forEach(x=>{
-        if(!x.employee_id)return;
-        const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
-        const lb=x.segment==='oem'?'主責':(segLabel[x.segment]||x.segment);
-        const disp=nm+(x.segment==='oem'?'（代工窗口）':'');
-        if(needWho) who[lb]=(who[lb]?who[lb]+'、':'')+disp;
-        if(!sc.recognized_at) (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push({
-          code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-          seg:x.segment, label:segLabel[x.segment]||x.segment, pct:pool?Math.round(x.amount/pool*100):null, amount:x.amount||0, recAt:''});
-      });
-    }
+    const who={};
+    segs.forEach(x=>{
+      if(!x.employee_id)return;
+      const nm=employees.find(e=>e.id===x.employee_id)?.name||'';
+      const lb=segLabel[x.segment]||x.segment;
+      who[lb]=(who[lb]?who[lb]+'、':'')+nm;
+      const pct=pool?Math.round(x.amount/pool*100):null;
+      const row={code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'', label:lb, pct, amount:x.amount||0, recAt:(sc.recognized_at||'').slice(0,10)};
+      // 試用期資格以「出貨認列日」判定，非確樣日：成交獎金在出貨當下才發生，
+      // 試用期內確樣、轉正後才出貨者，該筆獎金產生於轉正之後，具領取資格。
+      // 尚未出貨者不在此判定，一律列待認列，屆時再依實際出貨日判斷。
+      if(!recognized){
+        (pendingDeal[x.employee_id]=pendingDeal[x.employee_id]||[]).push(row);
+      } else if(inProbation(x.employee_id, (sc.recognized_at||'').slice(0,10))){
+        (probDeal[x.employee_id]=probDeal[x.employee_id]||[]).push(row);
+      } else (deal[x.employee_id]=deal[x.employee_id]||[]).push(row);
+    });
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, recAt:(sc.recognized_at||'').slice(0,10), who});
+      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, who});
   });
   // 3) 每人一張
   const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
@@ -4773,11 +4623,11 @@ async function generateRdConfirmSheets(){
   const _mgrEmp=rd.find(e=>e.role_level==='manager');
   const _asstEmp=rd.find(e=>e.role_level==='assistant');
   const _sumFor=emp=>Object.values(deal).flat().reduce((s,r)=>
-    s + ((!emp?.probation_end_date || (r.recAt||'').slice(0,7) >= emp.probation_end_date.slice(0,7)) ? r.amount : 0), 0);
+    s + ((!emp?.probation_end_date || (r.recAt||'') >= emp.probation_end_date) ? r.amount : 0), 0);
   const _staffForMgr=Object.entries(deal).reduce((s,[eid,rows])=>{
     const e2=employees.find(x=>x.id===eid);
     if(!(e2 && e2.dept==='研發部' && (e2.role_level==='staff'||e2.role_level==='senior'))) return s;
-    return s + rows.reduce((t,r)=>t + ((!_mgrEmp?.probation_end_date || (r.recAt||'').slice(0,7) >= _mgrEmp.probation_end_date.slice(0,7)) ? r.amount : 0), 0);
+    return s + rows.reduce((t,r)=>t + ((!_mgrEmp?.probation_end_date || (r.recAt||'') >= _mgrEmp.probation_end_date) ? r.amount : 0), 0);
   },0);
   const mgrAddon=Math.round(_staffForMgr*0.15);
   const asstShare=Math.round(_sumFor(_asstEmp)*0.05);
@@ -4802,7 +4652,8 @@ async function generateRdConfirmSheets(){
   // 該季各人打樣獎金（扣除試用期內打樣）
   const {data:allSamples}=await sb.from('rd_samples')
     .select('employee_id, sample_date, approval_status')
-    .in('approval_status',['approved','auto_approved']);
+    .in('approval_status',['approved','auto_approved'])
+    .eq('bonus_eligible',true);
   const samplingBonusOf=(empId,qq)=>{
     const [s0,s1]=qRange(qq); const byM={};
     (allSamples||[]).forEach(x=>{
@@ -4811,7 +4662,7 @@ async function generateRdConfirmSheets(){
       if(inProbation(empId,x.sample_date)) return;
       const m=Number(x.sample_date.slice(5,7)); byM[m]=(byM[m]||0)+1;
     });
-    return Object.values(byM).reduce((s,n)=>s+rdSamplingBonus(n,empId),0);
+    return Object.values(byM).reduce((s,n)=>s+rdSamplingBonus(n),0);
   };
   // 該季該人有無成交認列（任一段）
   const hasDealIn=(empId,qq)=>{
@@ -4835,35 +4686,24 @@ async function generateRdConfirmSheets(){
         if(ok) carry=0; else carry+=s;
       }
     });
-    const rel=qList.some(qq=>qq.k===curKey&&hasDealIn(empId,qq));
-    const carryBefore=rel?Math.max(0,payNow-samplingBonusOf(empId,{k:curKey,y:appSettings.year,q:appSettings.quarter}))
-                         :Math.max(0,carry-thisQDeferred);
-    return {payNow, deferredTotal:carry, thisQDeferred, carryBefore, released:rel};
+    return {payNow, deferredTotal:carry, thisQDeferred, released:qList.some(qq=>qq.k===curKey&&hasDealIn(empId,qq))};
   };
   // 全研發部確樣品項一覽：每個人都看得到「所有品項」與三段歸屬（不含金額，避免互比薪資）。
   // 個人表只列自己領到的，看不出「本該有我卻被登給別人」；有這張全覽才能由當事人自行發現遺漏。
   const allSorted=allRows.slice().sort((a,b)=>(b.confirmed||'').localeCompare(a.confirmed||''));
   const allTable=allSorted.length?`<h2>附表、全研發部確樣品項一覽（供交叉核對）</h2>
     <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th><th class="c">出貨認列</th><th>主責</th><th>打樣</th><th>確樣</th></tr></thead><tbody>
-    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':(r.recAt?`✅ 已認列<br><span style="font-size:10px;color:#777">${esc(r.recAt)}</span>`:'待出貨')}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
+    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':'待出貨'}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
     </tbody></table>
     <p class="note">本表列出全研發部所有確樣品項與三段歸屬，不含金額。<b>若你參與了其中某個品項，但該段別沒有列出你的名字，請在下方異議欄註明。</b></p>`:'';
-  // 同一品項的三段要排在一起，段內固定順序，避免同一支產品被別支插在中間
-  const SEG_ORDER={primary:1, collaborator:2, sampling:3, confirm:4, oem:5};
-  const sortDealRows=arr=>arr.slice().sort((a,b)=>
-    String(a.code).localeCompare(String(b.code)) || ((SEG_ORDER[a.seg]||9)-(SEG_ORDER[b.seg]||9)));
   let pages='';
   rd.forEach(e=>{
     const myCnt=cnt[e.id]||{}; let sTot=0;
-    const sRows=qMonths.map(m=>{
-      const n=myCnt[m]||0, all=(cntAll[e.id]||{})[m]||0, b=sampleBonus(n,e.id); sTot+=b;
-      const gap=all-n;   // 試用期內不計的件數：仍要讓當事人看到自己實際做了多少
-      return `<tr><td>${m} 月</td><td class="r">${all} 件</td><td class="r">${n} 件${gap?`<span style="font-size:10px;color:#b3541e"> （試用期不計 ${gap}）</span>`:''}</td><td class="r">${b.toLocaleString()} 元</td></tr>`;
-    }).join('');
-    const myDeal=sortDealRows(deal[e.id]||[]); let dTot=0;
+    const sRows=qMonths.map(m=>{const n=myCnt[m]||0,b=sampleBonus(n);sTot+=b;return `<tr><td>${m} 月</td><td class="r">${n} 件</td><td class="r">${b.toLocaleString()} 元</td></tr>`;}).join('');
+    const myDeal=deal[e.id]||[]; let dTot=0;
     const dRows=myDeal.map(d=>{dTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.pct!=null?d.pct+'%':'—'}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('')||'<tr><td colspan="6" class="c" style="color:#999">本季尚無出貨認列的成交</td></tr>';
     // 已確樣但尚未出貨：列示但不計入本季合計
-    const myPend=sortDealRows(pendingDeal[e.id]||[]); let pTot=0;
+    const myPend=pendingDeal[e.id]||[]; let pTot=0;
     const pRows=myPend.map(d=>{pTot+=d.amount;return `<tr><td>${esc(d.code)}</td><td>${esc(d.name)}</td><td>${esc(d.cust)}</td><td>${d.label}</td><td class="r">${d.amount.toLocaleString()} 元</td></tr>`;}).join('');
     const pendH=myPend.length?`<h2>二之二、已確樣但尚未出貨（<span style="color:#b3541e">不計入本季</span>）</h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我的段別</th><th class="r">屆時可領</th></tr></thead><tbody>${pRows}</tbody><tfoot><tr><td colspan="4" class="r">合計（待出貨）</td><td class="r">${pTot.toLocaleString()} 元</td></tr></tfoot></table>
@@ -4875,88 +4715,45 @@ async function generateRdConfirmSheets(){
       extraH=`<h2>三、團隊加成（研發同仁成交池 × 15%）<span class="est">＊預估</span></h2><table><tbody><tr><td>研發同仁成交池合計（不含課長自己）</td><td class="r">${staffTotal.toLocaleString()} 元</td></tr><tr><td>× 15% 團隊加成</td><td class="r"><b>${mgrAddon.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">課長總獎金＝個人（打樣＋成交）＋研發同仁成交池×15%；加成池不含課長自己已分得的段。</p>`;
     }else if(e.role_level==='assistant'){
       extra=asstShare;
-      const estShare=Math.round(poolTotal*0.05);          // 不受試用期限制的預估值
-      const inProbQ=estShare>asstShare;                    // 本季分潤被試用期擋掉
-      extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）</h2><table><tbody>`+
-        `<tr><td>本季全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr>`+
-        `<tr><td>× 5% 助理分潤（預估）</td><td class="r"><b>${estShare.toLocaleString()} 元</b></td></tr>`+
-        (inProbQ?`<tr style="background:#fdebd0"><td>本季狀態：<b style="color:#b3541e">試用期內（至 ${esc(e.probation_end_date||'—')}）</b>，依制度不計獎金</td><td class="r"><b style="font-size:16px;color:#b3541e">實發 ${asstShare.toLocaleString()} 元</b></td></tr>`
-                :`<tr style="background:#e8f6f0"><td><b>本季實發</b></td><td class="r"><b style="font-size:16px;color:#2e7d52">${asstShare.toLocaleString()} 元</b></td></tr>`)+
-        `</tbody></table><p class="note">研發助理不走成交三段、亦無合格打樣件數，獎金一律為全團隊成交池的 5% 分潤。${inProbQ?`上列預估為「若已轉正」之金額，供你掌握團隊產出規模；自 <b>${esc(e.probation_end_date||'')}</b> 起之出貨認列即開始計入你的分潤。`:''}</p>`;
+      extraH=`<h2>三、全團隊成交分潤（全團隊成交池 × 5%）<span class="est">＊預估</span></h2><table><tbody><tr><td>全團隊成交池合計（含課長）</td><td class="r">${poolTotal.toLocaleString()} 元</td></tr><tr><td>× 5% 助理分潤</td><td class="r"><b>${asstShare.toLocaleString()} 元</b></td></tr></tbody></table><p class="note">助理不走成交三段，改領全團隊成交池 5%。</p>`;
     }
     const g=gateOf(e.id);
-    const gBadge=g.released
-      ? `<div style="background:#e8f6f0;border:1px solid #2e7d52;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-weight:700;color:#2e7d52">✅ 本季<u>照常發放</u>　—　你本季有確樣品項完成出貨認列，發放條件成立</div>`
-      : `<div style="background:#fdebd0;border:1px solid #b3541e;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-weight:700;color:#b3541e">⏸️ 本季<u>暫緩發放</u>（非取消）　—　你本季沒有任何確樣品項完成出貨認列</div>`;
-    const gateH=gBadge+`<table><tbody>
+    const gateH=`<table><tbody>
       <tr><td>本季打樣獎金原額</td><td class="r">${sTot.toLocaleString()} 元</td></tr>
-      <tr><td>先前季度累積暫緩額</td><td class="r">${(g.carryBefore||0).toLocaleString()} 元</td></tr>
-      <tr style="background:${g.released?'#e8f6f0':'#fdebd0'}"><td><b>本季實際發放</b></td><td class="r"><b style="font-size:16px;color:${g.released?'#2e7d52':'#b3541e'}">${(g.released?g.payNow:0).toLocaleString()} 元</b></td></tr>
-      <tr><td>本季結束後仍累積暫緩（待日後出貨當季一併發放）</td><td class="r"><b>${(g.released?0:g.deferredTotal).toLocaleString()} 元</b></td></tr>
+      ${g.released
+        ? `<tr><td>本季有確樣品項出貨認列 → <b style="color:#2e7d52">解除暫緩</b>，連同先前累積一併發放</td><td class="r"><b>${g.payNow.toLocaleString()} 元</b></td></tr>`
+        : `<tr><td>本季無任何確樣品項出貨認列 → <b style="color:#b3541e">打樣獎金暫緩</b>（非取消）</td><td class="r"><b>0 元</b></td></tr>
+           <tr><td>累計暫緩餘額（含本季，待日後出貨時一併發放）</td><td class="r">${g.deferredTotal.toLocaleString()} 元</td></tr>`}
       </tbody></table>
-      <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金<b>暫緩並累積遞延、不會消失也不設時效</b>，待你有品項出貨的那一季，連同先前暫緩額一次發清。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
-    const grand=e.role_level==='assistant'?extra:(g.payNow+dTot+extra); // 助理不適用打樣件數獎金、不走成交三段
+      <p class="note">打樣獎金發放條件：該季須至少有一個你參與的確樣品項完成出貨認列。若無，該季打樣獎金暫緩並累積遞延，待你有品項出貨的那一季，連同先前暫緩額一次發放。判定採寬認定：主責／協作／打樣／確樣任一段有認列即算。</p>`;
+    const grand=g.payNow+dTot+extra;
     // 試用期揭露：講清楚哪些被排除、為什麼、何時起計，避免當事人以為系統漏算
     const probEnd=e.probation_end_date||'';
-    const probP=probSkip[e.id]||{n:0,byM:{}};
-    const probSkipN=probP.n||0;
+    const probSkipN=(probSkip[e.id]||{}).n||0;
     const myProb=probDeal[e.id]||[];
-    // 試用期逐月揭露：讓當事人看得到自己實際打了多少、以及若全數計入的預估金額（參考值，不發放）
-    const myAll=cntAll[e.id]||{};
-    let allTot=0, estTot=0, skipTot=0;
-    const probRows=qMonths.map(m=>{
-      const all=myAll[m]||0; if(!all) return '';
-      const skip=(probP.byM||{})[m]||0, kept=all-skip;
-      const est=sampleBonus(all,e.id); allTot+=all; estTot+=est; skipTot+=skip;
-      return `<tr><td>${m} 月</td><td class="r">${all} 件</td><td class="r">${skip} 件</td><td class="r">${kept} 件</td><td class="r">${est.toLocaleString()} 元</td></tr>`;
-    }).join('');
-    const isAsst=e.role_level==='assistant';
-    const probH=((probSkipN&&!isAsst)||myProb.length||(isAsst&&probEnd))?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
-      ${(probSkipN&&!isAsst)?`<table><thead><tr><th>月份</th><th class="r">實際打樣</th><th class="r">試用期內不計</th><th class="r">計入獎金</th><th class="r">若全數計入之預估</th></tr></thead>
-      <tbody>${probRows}
-      <tr><td><b>合計</b></td><td class="r"><b>${allTot} 件</b></td><td class="r"><b>${skipTot} 件</b></td><td class="r"><b>${allTot-skipTot} 件</b></td><td class="r"><b>${estTot.toLocaleString()} 元</b></td></tr>
-      </tbody></table>
-      <p class="note">最右欄為<b>參考值、不發放</b>：假設本季打樣全數計入時的金額，供你掌握自己的實際產出。實際發放以「計入獎金」件數為準（見第一區）。</p>`:''}
+    const probH=(probSkipN||myProb.length)?`<h2>試用期未計入項目（<span style="color:#b3541e">依制度不計獎金</span>）</h2>
       <table><tbody>
+      ${probSkipN?`<tr><td>試用期內打樣（不計獎金）</td><td class="r">${probSkipN} 件</td></tr>`:''}
       ${myProb.length?`<tr><td>試用期內出貨認列之成交段（不計獎金）</td><td class="r">${myProb.length} 筆　${myProb.reduce((s,d)=>s+d.amount,0).toLocaleString()} 元</td></tr>`:''}
-      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎${hasGrace(e.id)?`　<span style="color:#1a7f5a">（公司寬限：轉正當月以整月計算）</span>`:''}</td></tr>
-      ${isAsst?'':`<tr><td>本職級合格件數</td><td class="r"><b>${rdQualifyCount(e.id)} 件／月</b></td></tr>`}
+      <tr><td>正式錄用日</td><td class="r"><b>${esc(probEnd||'—')}</b> 起計獎</td></tr>
       </tbody></table>
-      <p class="note">依制度，試用期（到職起三個月）內不計獎金，<b>需經過試用期考核、評估適任與否後，才會納入公司營運季獎金鼓勵制度</b>。判定方式：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
+      <p class="note">依制度，試用期（到職起三個月）內不計獎金：打樣以「打樣日」判定、成交以「出貨認列日」判定。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
       <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
-      ${e.role_level==='assistant'?`<h2>一、獎金計算方式</h2>
-      <table><tbody><tr><td>職務</td><td class="r"><b>研發助理</b></td></tr>
-      <tr><td>獎金基準</td><td class="r"><b>全團隊成交池 × 5% 分潤</b></td></tr></tbody></table>
-      <p class="note">研發助理不適用「月打樣件數階梯獎金」，獎金一律以全團隊成交池之 5% 分潤計算，故本表不列個人打樣件數。</p>`
-      :`<h2>一、打樣獎金（每月）</h2>
-      <table><thead><tr><th>月份</th><th class="r">實際打樣</th><th class="r">計入獎金件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="3" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
-      <p class="note">未達合格件數＝0；達標＝1,000＋(件數−合格件數)×55；單月上限 88 件。<br>合格件數依職級訂定：<b>課長以下職級 ${RD_QUALIFY_STAFF} 件／月</b>、<b>研發課長 ${RD_QUALIFY_MANAGER} 件／月</b>——課長需兼顧下屬指導與團隊管理，可投入打樣的工時相對受限，公司體恤此一實況，僅在打樣件數標準上給予調整。<b>本職級合格件數 ${rdQualifyCount(e.id)} 件／月</b>。試用期內之打樣不列入件數。${(()=>{const gm=graceMonth(e.id); if(!gm) return '';
-        const gN=((graceGain[e.id]||{})[gm])||0;
-        return `<br><b style="color:#1a7f5a">◆ 公司寬限：你於 ${esc(probEndOf(e.id))} 轉正。依制度，${gm} 月原應自轉正日起計算件數；`+
-          `公司考量你試用期努力積極，轉正月整個月都積極投入，決定 ${gm} 月<b>以整月計算</b>，全月件數都算給你。`+
-          (gN?`本季因此多計入 <b>${gN}</b> 件。`:'')+
-          `</b>`;})()}</p>
+      <h2>一、打樣獎金（每月）</h2>
+      <table><thead><tr><th>月份</th><th class="r">合格打樣件數</th><th class="r">打樣獎金</th></tr></thead><tbody>${sRows}</tbody><tfoot><tr><td colspan="2" class="r">小計</td><td class="r">${sTot.toLocaleString()} 元</td></tr></tfoot></table>
+      <p class="note">合格件數 &lt;18＝0；≥18＝1,000＋(件數−18)×55；單月上限 88 件。試用期內之打樣不列入件數。</p>
       <h2>一之二、打樣獎金發放判定</h2>
-      ${gateH}`}
-      ${e.role_level==='assistant'?'':`<h2>二、成交獎金三段（本季已出貨認列）</h2>
+      ${gateH}
+      <h2>二、成交獎金三段（本季已出貨認列）</h2>
       <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>我負責的段別</th><th class="r">占比</th><th class="r">獎金</th></tr></thead><tbody>${dRows}</tbody><tfoot><tr><td colspan="5" class="r">小計</td><td class="r">${dTot.toLocaleString()} 元</td></tr></tfoot></table>
       <p class="note">成交獎金以「出貨認列」為計算時點：出貨落在哪一季，該筆獎金即計入哪一季。</p>
-      ${pendH}`}
+      ${pendH}
       ${extraH}
       ${probH}
-      ${(()=>{const parts=[];
-        if(e.role_level==='assistant'){ parts.push(`助理分潤 ${extra.toLocaleString()}`); }
-        else{
-          parts.push(`打樣獎金 ${(g.released?g.payNow:0).toLocaleString()}`);
-          parts.push(`成交獎金 ${dTot.toLocaleString()}`);
-          if(e.role_level==='manager') parts.push(`團隊加成 ${extra.toLocaleString()}`);
-        }
-        return `<div style="text-align:right;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">`+
-          `<div style="font-size:12px;color:#555;margin-bottom:2px">${parts.join('　＋　')}</div>`+
-          `<div style="font-size:15px;font-weight:700">本季實計合計：${grand.toLocaleString()} 元</div></div>`;})()}
-      ${e.role_level==='assistant'?'':allTable}
-      <div class="cbox"><p><b>本人確認：</b>${e.role_level==='assistant'?'以上全團隊成交池之 5% 分潤金額與實際情況相符':`以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':''}與實際情況相符`}；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
+      <div style="text-align:right;font-size:15px;font-weight:700;margin-top:12px;border-top:2px solid #c99a2e;padding-top:8px">本季實計合計：${grand.toLocaleString()} 元</div>
+      ${allTable}
+      <div class="cbox"><p><b>本人確認：</b>以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':e.role_level==='assistant'?'與分潤':''}與實際情況相符；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
@@ -4995,8 +4792,6 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
       .eq('official_product_code', s.code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
     for(const sc of scs){
-      // 成交必發生於確樣之後：確樣日之後的出貨才屬本次確樣所促成之成交（與 recognizeFromSales 一致）
-      if(sc.confirmed_at && shipDate && String(shipDate).slice(0,10) < sc.confirmed_at) continue;
       const segs=computeDealSegments(sc);
       const d=new Date(shipDate), month=d.getMonth()+1, y=d.getFullYear();
       const q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
@@ -5020,33 +4815,24 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
 
 // 研發認列（吃銷貨明細 sales_records）：新品 + 同編號累計達 500 罐 → 算三段寫待覆核；認列具冪等
 async function recognizeFromSales(){
-  // 認列閘門＝「已確樣且尚未認列」（下方 rd_sample_customers 查詢），不再依賴會計銷貨的「新品／舊品追加」標記。
-  // 原因：該標記實際與「是否已開發票」連動，非產品新舊——同一支產品同一天出貨會同時出現兩種標記
-  //（案例 2026-05-08 JP000006：2,879 罐標舊品追加、7 罐標新品），據以過濾會讓真新品整支漏發。
-  // 重複發獎由 rd_sample_customers.recognized_at is null 的一次性保護把關。
   const {data:sales}=await sb.from('sales_records')
     .select('product_code, customer_name, qty, ship_date')
-    .not('product_code','is',null);
+    .eq('new_or_repeat','新品').not('product_code','is',null);
   if(!sales||!sales.length) return 0;
   const byCode={};
   sales.forEach(s=>{(byCode[s.product_code]=byCode[s.product_code]||[]).push(s);});
   let count=0;
   for(const code of Object.keys(byCode)){
     const rows=byCode[code];
-    if(rows.reduce((s,r)=>s+(r.qty||0),0)<500) continue;        // 全期間都不足 500 → 直接跳過
+    const totalQty=rows.reduce((s,r)=>s+(r.qty||0),0);
+    if(totalQty<500) continue;                                  // 尾數不計
     const {data:scs}=await sb.from('rd_sample_customers')
       .select('*, rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(role_level)), rd_deal_owner_splits(employee_id,pct,role)')
       .eq('official_product_code', code).eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null);
     if(!scs||!scs.length) continue;
+    const shipDate=rows.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
+    const cust=rows[0].customer_name||'';
     for(const sc of scs){
-      // 成交必發生於「確樣之後」：確樣日以前的出貨不是本次確樣促成的成交，不納入計算。
-      // 若不擋，舊品事後補確樣會回頭認列到已結算的舊季度
-      //（案例 JP000085：出貨 2025-04-25、確樣 2026-07-06，會被認列成 2025Q2）。
-      const eff=sc.confirmed_at?rows.filter(r=>r.ship_date&&r.ship_date>=sc.confirmed_at):rows;
-      const totalQty=eff.reduce((s,r)=>s+(r.qty||0),0);
-      if(totalQty<500) continue;                                // 確樣後累計未達 500：尾數不計
-      const shipDate=eff.map(r=>r.ship_date).filter(Boolean).sort()[0]||null;
-      const cust=eff[0]?.customer_name||'';
       const segs=computeDealSegments(sc);
       const d=shipDate?new Date(shipDate):new Date();
       const month=d.getMonth()+1, y=d.getFullYear(), q=month<=3?'Q1':month<=6?'Q2':month<=9?'Q3':'Q4';
@@ -5264,7 +5050,7 @@ async function loadDealBonuses(){
   }else{
     body=`<div class="empty-state"><div class="empty-icon">📭</div><div style="font-size:14px">尚無待覆核的成交獎金</div></div>`;
   }
-  // 已放行區：同仁對確認表提出疑慮時，協理可退回待覆核再修改（放行只是轉給財務、錢未發，故可逆）
+  // 已放行區：同仁對確認表提出疑慮時，經理可退回待覆核再修改（放行只是轉給財務、錢未發，故可逆）
   const {data:released}=await sb.from('rd_deal_bonuses')
     .select('*, employees(name), rd_sample_customers(rd_customers(short_name))')
     .eq('status','released').order('recognized_at',{ascending:false});
@@ -5476,7 +5262,7 @@ function saleExcludeReason(s){
   const nm=s.item_name_raw||'';
   if(nm.includes('PIF')) return 'PIF不計';
   if(nm.includes('破損')) return '破損不計';
-  if(/開.{0,3}發票/.test(nm)) return '已開票不計';   // 涵蓋「已開發票／之前開過發票／開立發票」
+  if(nm.includes('開發票')) return '已開票不計';
   // 代購（替客戶採買紙盒、瓶器等非自有產品）與同業間原料調度，均非本公司產品銷售，不計獎金
   if(nm.includes('代購')) return '代購不計';
   if(_RAW_MATERIAL_KEYWORDS.some(k=>nm.toLowerCase().includes(k))) return '原料調度不計';
@@ -5553,226 +5339,6 @@ async function fillDeptAutoCount(inputId, noteId){
   }
 }
 
-// ===== 本季發放總表：把分散在三張表的錢合併成一張給財務的清單 =====
-// 研發成交在 rd_deal_bonuses(released)、研發打樣在 rd_monthly_settlement(paid)、
-// 其他部門季獎金與團隊加成在 bonus_records。只看任一張都會漏。
-let _payoutRows=[];
-async function loadPayoutSummary(){
-  const el=document.getElementById('payout-content'); if(!el) return;
-  const yr=appSettings.year, q=appSettings.quarter;
-  const qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[q]||[];
-  const agg={};   // name -> {dept, role, deal, sampling, dept_bonus, team, total, defer}
-  const put=(name,dept,role,field,amt)=>{
-    if(!name) return;
-    const a=agg[name]=agg[name]||{name,dept:dept||'',role:role||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
-    if(dept&&!a.dept)a.dept=dept; if(role&&!a.role)a.role=role;
-    a[field]+=Number(amt)||0;
-  };
-  // 1) 研發成交獎金（已放行才算要發）
-  const {data:deals}=await sb.from('rd_deal_bonuses')
-    .select('employee_id, amount, employees(name, dept, role_title)')
-    .eq('status','released').eq('year',yr).eq('quarter',q);
-  (deals||[]).forEach(d=>put(d.employees?.name, d.employees?.dept||'研發部', d.employees?.role_title, 'deal', d.amount));
-  // 2) 研發打樣獎金（paid＝當季有成交認列、gate 已解除）
-  const {data:samp}=await sb.from('rd_monthly_settlement')
-    .select('base_bonus, status, month, employees(name, dept, role_title)')
-    .eq('year',yr).in('month',qm);
-  (samp||[]).forEach(r=>{
-    const nm=r.employees?.name; if(!nm) return;
-    if(r.status==='paid') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'sampling', r.base_bonus);
-    else if(r.status==='pending_carryover') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'defer', r.base_bonus);
-  });
-  // 3) 其他部門季獎金／團隊加成
-  const {data:br}=await sb.from('bonus_records').select('*').eq('year',yr).eq('quarter',q);
-  (br||[]).forEach(r=>put(r.name, r.dept, r.role_title, r.record_type==='team_bonus'?'team':'dept_bonus', r.bonus));
-  // 在職員工全數納入：0 元也要出現，並註明原因，避免「該有錢卻沒出現」看不出來
-  const qStart=`${yr}-${String(qm[0]).padStart(2,'0')}-01`;
-  const qEndM=qm[qm.length-1], eY=qEndM===12?yr+1:yr, eM=qEndM===12?1:qEndM+1;
-  const qEnd=`${eY}-${String(eM).padStart(2,'0')}-01`;
-  // 該季有無打樣（研發判定「有做事但沒達標」用）
-  const {data:qs}=await sb.from('rd_samples').select('employee_id, sample_date')
-    .gte('sample_date',qStart).lt('sample_date',qEnd).in('approval_status',['approved','auto_approved']);
-  const sampCnt={}; (qs||[]).forEach(r=>{ if(r.employee_id) sampCnt[r.employee_id]=(sampCnt[r.employee_id]||0)+1; });
-  employees.filter(e=>e.is_active).forEach(e=>{
-    const a=agg[e.name]=agg[e.name]||{name:e.name,dept:e.dept||'',role:e.role_title||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
-    if(!a.dept)a.dept=e.dept||''; if(!a.role)a.role=e.role_title||'';
-    a.empId=e.id; a.probation_end_date=e.probation_end_date;
-  });
-  const reasonOf=a=>{
-    const e=employees.find(x=>x.id===a.empId)||{};
-    // 試用期：本季結束前都還沒轉正 → 依制度整季不計獎金
-    if(e.probation_end_date && e.probation_end_date>=qEnd) return `試用期中（至 ${e.probation_end_date}），依制度不計獎金`;
-    if(a.defer>0) return `打樣獎金 ${a.defer.toLocaleString()} 元暫緩：本季無成交出貨認列，待日後出貨當季一併發放`;
-    if(e.dept==='研發部'){
-      if(e.role_level==='assistant') return '助理領全團隊成交池 5% 分潤，本季分潤基數為 0';
-      const n=sampCnt[a.empId]||0;
-      if(n>0) return `本季打樣 ${n} 件、未達合格件數門檻，且無成交出貨認列`;
-      return '本季無打樣、亦無成交出貨認列';
-    }
-    return '本季尚未結算，或結算結果為 0（請確認該部門是否已完成結算）';
-  };
-  _payoutRows=Object.values(agg).map(a=>({...a, total:a.deal+a.sampling+a.dept_bonus+a.team}))
-    .map(a=>({...a, zeroReason: a.total>0?'':reasonOf(a)}))
-    .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.total-a.total);
-  renderPayoutSummary();
-}
-function renderPayoutSummary(){
-  const el=document.getElementById('payout-content');
-  if(!_payoutRows.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">本季尚無可發放的獎金</div></div>';
-    return;
-  }
-  const byDept={}; _payoutRows.forEach(r=>{(byDept[r.dept||'—']=byDept[r.dept||'—']||[]).push(r);});
-  const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
-  const deferAll=_payoutRows.reduce((s,r)=>s+r.defer,0);
-  let html='';
-  for(const [dept,rows] of Object.entries(byDept)){
-    const sub=rows.reduce((s,r)=>s+r.total,0);
-    const isRd=dept==='研發部';   // 成交/打樣獎金為研發部專屬，其他部門不列這兩欄
-    html+=`<div style="margin-bottom:14px">
-      <div style="font-weight:600;margin-bottom:6px;color:var(--ink)">${esc2(dept)}　<span style="font-size:12px;color:var(--ink-faint)">小計 ${sub.toLocaleString()} 元　·　${rows.filter(r=>r.total>0).length}/${rows.length} 人有獎金</span></div>
-      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}<th class="td-right">部門季獎金</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
-      ${rows.map(r=>r.total>0?`<tr>
-        <td style="font-weight:500">${esc2(r.name)}</td>
-        <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
-        ${isRd?`<td class="td-right">${r.deal?r.deal.toLocaleString():'—'}</td>
-        <td class="td-right">${r.sampling?r.sampling.toLocaleString():'—'}${r.defer?`<div style="font-size:10px;color:#b3541e">暫緩 ${r.defer.toLocaleString()}</div>`:''}</td>`:''}
-        <td class="td-right">${r.dept_bonus?r.dept_bonus.toLocaleString():'—'}</td>
-        <td class="td-right">${r.team?r.team.toLocaleString():'—'}</td>
-        <td class="td-right"><b>${r.total.toLocaleString()}</b></td></tr>`
-      :`<tr style="background:var(--surface-3)">
-        <td style="font-weight:500;color:var(--ink-faint)">${esc2(r.name)}</td>
-        <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
-        <td colspan="${isRd?4:2}" style="font-size:12px;color:var(--ink-faint)">${esc2(r.zeroReason||'')}</td>
-        <td class="td-right"><span class="badge badge-gray">本季無</span></td></tr>`).join('')}
-      </tbody></table></div>`;
-  }
-  html+=`<div style="text-align:right;border-top:2px solid var(--gold);padding-top:10px;margin-top:6px">
-    <div style="font-size:13px;color:var(--ink-faint)">${appSettings.year} ${appSettings.quarter}　在職 ${_payoutRows.length} 人，其中 <b>${_payoutRows.filter(r=>r.total>0).length}</b> 人有獎金、${_payoutRows.filter(r=>r.total<=0).length} 人本季無</div>
-    <div style="font-size:19px;font-weight:700">應發放總額：${grand.toLocaleString()} 元</div>
-    ${deferAll?`<div style="font-size:12px;color:#b3541e;margin-top:3px">另有暫緩累積 ${deferAll.toLocaleString()} 元（本季無成交認列，待日後出貨當季一併發放，不列入本次）</div>`:''}
-  </div>`;
-  el.innerHTML=html;
-}
-function exportPayoutCSV(){
-  if(!_payoutRows.length){showToast('本季無可發放獎金');return;}
-  const head=['部門','姓名','職稱','成交獎金','打樣獎金','部門季獎金','團隊加成／分潤','應發合計','暫緩累積','本季無獎金之原因'];
-  const lines=[head.join(',')].concat(_payoutRows.map(r=>
-    [r.dept,r.name,r.role,r.deal,r.sampling,r.dept_bonus,r.team,r.total,r.defer,r.zeroReason||''].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')));
-  const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
-  lines.push(['','','','','','','合計',grand,'',''].map(v=>`"${v}"`).join(','));
-  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`獎金發放總表_${appSettings.year}${appSettings.quarter}.csv`;
-  a.click(); URL.revokeObjectURL(a.href);
-  showToast('已匯出發放總表');
-}
-// ===== 銷貨自動匯入：暫存區確認（NAS 排程寫入 sales_staging，協理確認後才進 sales_records）=====
-let _stgRows=[];
-async function loadSalesStaging(){
-  const el=document.getElementById('staging-content'); if(!el) return;
-  const {data,error}=await sb.from('sales_staging').select('*').eq('status','pending')
-    .order('batch',{ascending:false}).order('row_no');
-  if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
-  _stgRows=data||[];
-  renderSalesStaging();
-}
-function renderSalesStaging(){
-  const el=document.getElementById('staging-content');
-  if(!_stgRows.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div style="font-size:14px">沒有待確認的自動匯入資料</div></div>';
-    return;
-  }
-  const byBatch={};
-  _stgRows.forEach(r=>{(byBatch[r.batch]=byBatch[r.batch]||[]).push(r);});
-  const opts='<option value="">（未對應）</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code}｜${p.product_name||''}</option>`).join('');
-  let html='';
-  for(const [batch,rows] of Object.entries(byBatch)){
-    const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
-    const exc=rows.filter(r=>r.exclude_reason).length;
-    const willCount=rows.length-exc;
-    html+=`<div style="margin-bottom:18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-        <div><b style="font-size:15px">${esc2(batch)}</b>
-          <span style="font-size:12px;color:var(--ink-faint);margin-left:8px">${esc2(rows[0].src_file||'')}</span>
-          <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">共 ${rows.length} 列　·　計入獎金 <b>${willCount}</b> 列　·　自動剔除 ${exc} 列${noCode?`　·　<b style="color:#b3541e">${noCode} 列未對應編號</b>`:''}</div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-outline btn-sm" onclick="rejectStaging('${esc2(batch)}')">✕ 全部退回</button>
-          <button class="btn btn-gold btn-sm" onclick="confirmImportStaging('${esc2(batch)}')">✅ 確認匯入</button>
-        </div>
-      </div>
-      <table><thead><tr><th>列</th><th>客戶</th><th>品名</th><th>正式編號</th><th class="td-right">數量</th><th>銷貨日</th><th>發票</th><th>判定</th></tr></thead><tbody>
-      ${rows.map(r=>{
-        const bad=!r.product_code && !r.exclude_reason;
-        return `<tr style="${bad?'background:#fdebd0':''}">
-          <td style="color:var(--ink-faint)">${r.row_no}</td>
-          <td>${esc2(r.customer_name)}</td>
-          <td style="font-size:12px">${esc2(r.item_name_raw)}</td>
-          <td><select class="form-select" style="min-width:190px;font-size:12px" id="stg-code-${r.id}" onchange="_stgSetCode('${r.id}',this.value)">${opts.replace(`value="${r.product_code}"`,`value="${r.product_code}" selected`)}</select>
-            <div style="font-size:10px;color:var(--ink-faint)">${r.match_method==='alias'?'別名對應':r.match_method==='exact'?'完全相符':r.match_method==='fuzzy'?`模糊 ${r.match_score}`:'—'}</div></td>
-          <td class="td-right">${Number(r.qty||0).toLocaleString()}</td>
-          <td style="font-size:12px">${esc2(r.ship_date||'')}</td>
-          <td style="font-size:11px;color:var(--ink-faint)">${esc2(r.invoice_no||'')}</td>
-          <td>${r.exclude_reason?`<span class="badge badge-gray">${esc2(r.exclude_reason)}</span>`:'<span class="badge badge-green">計入</span>'}</td>
-        </tr>`;}).join('')}
-      </tbody></table>
-      ${noCode?`<div style="font-size:12px;color:#b3541e;margin-top:6px">⚠️ 橘底列尚未對應正式編號：請於「正式編號」欄選擇，選過的會自動記入別名、日後同品名不必再選。未對應者匯入後不會進入研發認列與部門件數。</div>`:''}
-    </div>`;
-  }
-  el.innerHTML=html;
-}
-function esc2(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function _stgSetCode(id,code){
-  const r=_stgRows.find(x=>x.id===id); if(r){ r.product_code=code||null; r._manual=!!code; }
-}
-async function rejectStaging(batch){
-  const ok=await confirmCard('退回這批自動匯入',
-    `將 <b>${esc2(batch)}</b> 的待確認資料整批標記為「已退回」，<b>不會寫入正式資料</b>。<br><br>下次 NAS 排程仍會重新讀取該月檔案並再次送來待確認。`,'確認退回');
-  if(!ok) return;
-  const {error}=await sb.from('sales_staging').update({status:'rejected'}).eq('batch',batch).eq('status','pending');
-  if(error){showToast('退回失敗：'+error.message);return;}
-  showToast('已退回，未寫入正式資料'); loadSalesStaging();
-}
-async function confirmImportStaging(batch){
-  const rows=_stgRows.filter(r=>r.batch===batch);
-  if(!rows.length) return;
-  const exc=rows.filter(r=>r.exclude_reason).length;
-  const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
-  const ok=await confirmCard('確認匯入銷貨明細',
-    `<b>${esc2(batch)}</b>　共 ${rows.length} 列<br><br>`+
-    `・寫入正式銷貨紀錄：<b>${rows.length}</b> 列<br>`+
-    `・其中自動剔除不計獎金：${exc} 列（PIF／已開票／原料調度等）<br>`+
-    (noCode?`・<b style="color:#b3541e">尚有 ${noCode} 列未對應正式編號</b>，匯入後不會進入研發認列與部門件數<br>`:'')+
-    `<br>匯入後將自動重跑：研發成交認列、部門件數比對。`,'確認匯入');
-  if(!ok) return;
-  showToast('匯入中…');
-  // 1) 手動選過的編號寫回別名，日後同品名自動對應
-  for(const r of rows.filter(x=>x._manual && x.product_code)){
-    const norm=normName(r.item_name_raw);
-    if(norm) await sb.from('product_aliases').upsert({alias_norm:norm, alias_raw:r.item_name_raw, product_code:r.product_code},{onConflict:'alias_norm'});
-  }
-  // 2) 寫進正式銷貨紀錄
-  const recs=rows.map(r=>{
-    const d=r.ship_date||''; const mo=Number(d.slice(5,7))||0;
-    return {import_batch:'AUTO-'+batch, customer_name:r.customer_name, item_name_raw:r.item_name_raw,
-      product_code:r.product_code||null, qty:r.qty, unit_price:r.unit_price, amount:r.amount,
-      ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
-      year:Number(d.slice(0,4))||null, month:mo||null,
-      quarter:mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null};
-  });
-  const {error:e1}=await sb.from('sales_records').insert(recs);
-  if(e1){showToast('匯入失敗：'+e1.message);return;}
-  // 3) 標記已匯入（保留紀錄可追溯，不刪除）
-  await sb.from('sales_staging').update({status:'imported', imported_at:new Date().toISOString()})
-    .eq('batch',batch).eq('status','pending');
-  // 4) 重跑認列與件數
-  let n=0; try{ n=await recognizeFromSales(); }catch(err){ console.warn(err); }
-  try{ await matchSalesToOrders(); }catch(err){ console.warn(err); }
-  showToast(`✅ 已匯入 ${recs.length} 列${n?`，新認列 ${n} 筆成交（待覆核）`:''}`);
-  loadSalesStaging(); loadTodoCenter?.();
-}
 // ===== 銷貨 CSV 匯入（地基）=====
 let _salesAliases={};   // alias_norm -> code
 let _siRows=[];
@@ -6043,7 +5609,7 @@ function onConfirmCustomerChange(){
   if(isConfirmed){
     document.getElementById('cf-rebind-code').textContent=rc.official_product_code||'';
     document.querySelectorAll('.cf-rebind-verb').forEach(sp=>sp.textContent=isMgr?'':'申請');
-    document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是協理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
+    document.getElementById('cf-rebind-mode-txt').textContent=isMgr?'你是經理，下列操作直接生效':'課長操作須提申請、待 ELLA 審核';
   }
   // 課長對已確樣：不再隱藏儲存鈕，改成「只更新打樣分潤+備註」模式（編號/確樣人/狀態仍鎖，走申請）
   // 調整模式開啟期間，課長對已確樣紀錄可直接修改（不必提申請、不凍結）；關閉後回復原本的申請流程
@@ -6092,7 +5658,7 @@ function onConfirmProductChange(){
   updateConfirmPool();
 }
 
-// 主檔沒設主責的編號（新品都這樣）→ 確樣時由課長指定，寫在 rd_sample_customers（課長有權限；products 只有協理能寫）
+// 主檔沒設主責的編號（新品都這樣）→ 確樣時由課長指定，寫在 rd_sample_customers（課長有權限；products 只有經理能寫）
 function syncOwnerSetField(){
   const wrap=document.getElementById('cf-owner-set-wrap'); if(!wrap)return;
   const p=products.find(x=>x.product_code===document.getElementById('cf-product').value);
@@ -6383,7 +5949,7 @@ function confirmCard(title, bodyHtml, okText='確認'){
 }
 function gcDone(v){closeModal('genConfirmModal');const r=gcResolve;gcResolve=null;if(r)r(v);}
 
-// ===== 改綁／取消確樣（D）：協理直改、課長提申請 =====
+// ===== 改綁／取消確樣（D）：經理直改、課長提申請 =====
 let rbState=null;
 async function openRebind(action){
   const scId=cfState.activeScId;
