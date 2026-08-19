@@ -921,7 +921,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="card-title">📊 本月登打紀律</div>
             <div><span id="rds-overdue-count" style="font-size:13px;color:var(--ink-faint);margin-right:8px">本月 0 筆</span></div>
           </div>
-          <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">2026-09-01 起：延遲 0–1 天自動通過｜2–3 天須填原因送審｜<strong>逾 3 日該筆不計入打樣獎金</strong>。以週末、國定假日為由申請延遲者不予核准。<br>登錄時點影響該筆<strong>打樣負責人</strong>的獎金計算，請於打樣當日完成登錄。</div>
+          <div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6">2026-09-01 起：<strong>0–1 天為正常登錄時效</strong>（自動通過）｜登錄延遲 2–3 天須填原因送審、獎金照計｜<strong>逾 3 日該筆不計入打樣獎金</strong>。週五打樣請於當日完成登錄。以週末、國定假日為由申請延遲者不予核准。<br>登錄時點影響該筆<strong>打樣負責人</strong>的獎金計算，請於打樣當日完成登錄。</div>
           <div id="rds-overdue-content"><div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">本月無延遲登打</div></div></div>
         </div>
       </div>
@@ -1443,7 +1443,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </select>
         </div>
         <div class="form-group"><label class="form-label">品項 *</label><input class="form-input" id="rds-item-name" placeholder="如：玫瑰水凝霜、保濕精華液…" /></div>
-        <div class="form-group"><label class="form-label">交樣日期</label><input class="form-input" type="date" id="rds-delivery-date" /></div>
+        <div class="form-group"><label class="form-label">交樣日期<span style="font-weight:400;color:var(--ink-faint)">（選填，可事後補填）</span></label><input class="form-input" type="date" id="rds-delivery-date" /><div style="font-size:11px;color:var(--ink-faint);margin-top:3px">交樣日＝交到業務手上那天。業務測試與寄送客戶之時程不影響本欄，亦不影響登錄時效；<strong>請勿為等待交樣而延後登錄</strong>。</div></div>
         <div class="form-group"><label class="form-label">版本號</label><input class="form-input" id="rds-version" placeholder="v1, v2..." /></div>
       </div>
       <div class="form-group">
@@ -3342,9 +3342,12 @@ function updateRdsDelayInfo(){
     else{info.innerHTML=`❌ 延遲 ${delay} 天，系統禁止（舊制限 7 天內）`;info.style.color='var(--red)';reasonWrap.style.display='none';}
     return;
   }
-  if(delay===0){info.innerHTML='🟢 當天登記，自動通過';info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(delay===1){info.innerHTML='🟢 延遲 1 天，自動通過（無需原因）';info.style.color='var(--green)';reasonWrap.style.display='none';}
-  else if(delay<=3){info.innerHTML=`⚠ 延遲 ${delay} 天，<strong>必須填寫原因</strong>送 ELLA 審核<br><span style="font-size:11px">※ 跨週末、國定假日不得作為延遲理由</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
+  // 週五打樣提醒：跨週末不列入時效例外，須當日完成登錄
+  const friTip = new Date(d+'T00:00:00').getDay()===5
+    ? '<br><span style="font-size:11px;color:#a68a3a">※ 本筆為<strong>週五打樣</strong>，請於當日完成登錄，不順延至週一（跨週末不得作為延遲理由）</span>' : '';
+  if(delay===0){info.innerHTML='🟢 <strong>正常登錄時效</strong>　當日登錄，自動通過'+friTip;info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay===1){info.innerHTML='🟢 <strong>正常登錄時效（0–1 天）</strong>　自動通過，無需填寫原因'+friTip;info.style.color='var(--green)';reasonWrap.style.display='none';}
+  else if(delay<=3){info.innerHTML=`⚠ 登錄延遲 ${delay} 天，<strong>必須填寫原因</strong>送協理審核（獎金照計）`+friTip;info.style.color='var(--red)';reasonWrap.style.display='block';}
   else{info.innerHTML=`逾期 ${delay} 天 — 仍可登錄以保全件數紀錄，惟<strong>本筆不計入打樣獎金</strong>（原因必填）<br><span style="font-size:11px">※ 影響對象為該筆之打樣負責人</span>`;info.style.color='var(--red)';reasonWrap.style.display='block';}
 }
 
@@ -3724,9 +3727,9 @@ async function loadOverdueLogs(){
   const summary=Object.entries(byEmp).sort((a,b)=>b[1]-a[1])
     .map(([n,c])=>`<span class="badge" style="background:#fff4e0;color:#a86b1a;margin-right:4px">${n} ${c} 筆</span>`).join('');
   el.innerHTML=`<div style="margin-bottom:8px">受影響的打樣負責人：${summary}</div>`+
-    `<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>打樣負責人</th><th>實際打樣日</th><th>延遲</th><th>獎金</th><th>原因</th></tr></thead><tbody>${data.map(s=>{
+    `<table><thead><tr><th>登打時間</th><th>樣品編號</th><th>打樣負責人</th><th>實際打樣日</th><th>登錄間隔</th><th>獎金</th><th>原因</th></tr></thead><tbody>${data.map(s=>{
       const noBonus=s.bonus_eligible===false;
-      return `<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong></td><td>${noBonus?'<span class="badge" style="background:#fde8e8;color:#b3261e">🚫 不計獎金</span>':'<span style="color:var(--ink-faint)">計入</span>'}</td><td>${s.approval_reason||'—'}</td></tr>`;
+      return `<tr><td>${new Date(s.logged_at).toLocaleDateString('zh-TW')} ${new Date(s.logged_at).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.sample_code}</td><td>${s.employees?.name||'-'}</td><td>${s.sample_date}</td><td><strong>${s.delay_days} 天</strong>${(s.delay_days||0)<=1?'<div style="font-size:10px;color:var(--green)">正常時效</div>':''}</td><td>${noBonus?'<span class="badge" style="background:#fde8e8;color:#b3261e">🚫 不計獎金</span>':'<span style="color:var(--ink-faint)">計入</span>'}</td><td>${s.approval_reason||'—'}</td></tr>`;
     }).join('')}</tbody></table>`;
 }
 
