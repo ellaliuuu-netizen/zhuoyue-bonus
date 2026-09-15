@@ -839,6 +839,60 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="section-title" style="color:#5d8aa8">研發打樣登記</div>
         <div class="section-desc">月件數階梯獎金（18件 1,000 / 25件以上 1,000+(件數-24)×50 / 上限88件）；當月任一客戶出貨完成才發放，否則進待回溯台帳（6 個月內可補發）</div>
 
+        <!-- 作業說明（收摺，預設關閉）2026-09-15 -->
+        <details class="card" style="border-color:#5d8aa8;margin-bottom:16px">
+          <summary style="cursor:pointer;padding:14px 16px;font-weight:600;color:#5d8aa8;font-size:15px;list-style:none;display:flex;align-items:center;justify-content:space-between">
+            <span>📖 打樣登打作業說明（件數怎麼算、時效、編號規則）</span>
+            <span style="font-size:12px;color:var(--ink-faint);font-weight:400">點此展開</span>
+          </summary>
+          <div style="padding:0 16px 16px;font-size:13px;line-height:1.85;color:var(--ink)">
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+              <strong style="color:#5d8aa8">一、一支樣品＝一件，送幾個客戶都是一件</strong><br>
+              打樣件數計算的是<strong>實際打樣次數</strong>。同一支樣品送給不同客戶，打樣只做了一次，因此<strong>計 1 件、用同一個樣品編號</strong>。<br>
+              送多個客戶時，請在<strong>同一筆紀錄的「客戶」欄位多選</strong>，不需要另建一筆。<br>
+              <span style="color:var(--ink-faint)">※ 確樣獎金則是每個客戶各自計算 —— 兩個客戶都確樣，就有兩筆確樣獎金。送多個客戶是提高確樣機率。</span>
+            </div>
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+              <strong style="color:#5d8aa8">二、樣品編號的日期，與交樣日期無關</strong><br>
+              編號中的日期代表<strong>打樣日</strong>，是命名規則的一部分。<br>
+              什麼時候交樣給哪一個客戶，是獨立的另一件事，<strong>不需要與編號對應</strong>，也不影響件數判定。
+            </div>
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+              <strong style="color:#5d8aa8">三、日常工作類打樣，不計入獎金與件數</strong><br>
+              <strong>防腐挑戰、安定性測試</strong>這類，屬於<strong>日常工作，不是開發工作</strong>。<br>
+              打樣紀錄<strong>可以登打保留</strong>作為工作軌跡，但不列入打樣獎金與件數計算。
+            </div>
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+              <strong style="color:#5d8aa8">四、登打時效（2026-09-01 起）</strong>
+              <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 0;width:130px"><strong>0–1 天</strong></td><td>正常登錄時效，自動通過</td></tr>
+                <tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 0"><strong>2–3 天</strong></td><td>須填寫原因送審，獎金照計</td></tr>
+                <tr><td style="padding:5px 0"><strong>逾 3 日</strong></td><td>仍可登錄以保留件數與確樣對應，該筆不計入打樣獎金</td></tr>
+              </table>
+              <span style="color:var(--ink-faint)">※ 週五打樣請於當日完成登錄；以週末、國定假日為由申請延遲者不予核准。<br>※ 登錄時點影響該筆<strong>打樣負責人</strong>的獎金計算。</span>
+            </div>
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+              <strong style="color:#5d8aa8">五、編號打錯了怎麼辦</strong><br>
+              <strong>請告知協理，由協理在「修改」中調整編號</strong>，不需要另建一筆正確的。<br>
+              另建一筆會讓系統留下兩筆重複紀錄，件數與確樣對應都會受影響。<br>
+              <span style="color:var(--ink-faint)">※ 新增時若編號與既有紀錄重複，系統會跳出提示並列出既有紀錄，請依當下情況選擇「同一支樣品加客戶」或「確為另一支樣品」。</span>
+            </div>
+
+            <div style="background:var(--surface);border-radius:8px;padding:12px 14px">
+              <strong style="color:#5d8aa8">六、確樣與成交獎金</strong><br>
+              <strong>確樣＝掛上正式產品編號才算成交</strong>，沒有確樣就不會產生成交獎金。<br>
+              成交獎金分三段：主責（配方撰寫者）50%、打樣 30%、確樣 20%。<br>
+              打樣獎金歸<strong>打樣者</strong>；成交獎金歸<strong>配方擬定者</strong>。若打樣者與配方擬定者不同人，請於登打時填寫「配方擬定者」欄位。
+            </div>
+
+          </div>
+        </details>
+
         <!-- Card -1: 確樣進度總表（跨月）— manager + rd_manager 都看得到 -->
         <div class="card rdmgr-show" style="border-color:var(--blue)">
           <div class="card-header">
