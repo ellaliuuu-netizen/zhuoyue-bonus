@@ -1418,7 +1418,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-header"><div class="modal-title" id="rds-modal-title">＋ 新增打樣紀錄</div><button class="modal-close" onclick="closeModal('newRdSampleModal')">✕</button></div>
     <div class="modal-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /></div>
+        <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /><div id="rds-code-hint" style="display:none;font-size:11px;color:#a68a3a;margin-top:4px">協理權限：可調整編號，異動會列入修改紀錄</div></div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
         <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp" onchange="updateAssistedForVisibility()"><option value="">請選擇</option></select></div>
         <div class="form-group" id="rds-assisted-for-wrap" style="grid-column:span 2">
@@ -3247,6 +3247,8 @@ function openRdSampleModal(){
   document.getElementById('rds-code').value='';
   document.getElementById('rds-code').readOnly=false;
   document.getElementById('rds-code').style.background='';
+  document.getElementById('rds-code').title='';
+  const _ch=document.getElementById('rds-code-hint'); if(_ch)_ch.style.display='none';
   document.getElementById('rds-date').value=new Date().toISOString().slice(0,10);
   document.getElementById('rds-emp').value='';
   document.getElementById('rds-formula').value='';
@@ -3293,8 +3295,14 @@ async function openEditRdSampleModal(id){
   currentEditId=id;
   document.getElementById('rds-modal-title').textContent='✏️ 修改打樣紀錄';
   document.getElementById('rds-code').value=s.sample_code;
-  document.getElementById('rds-code').readOnly=true;  // 樣品編號鎖住不可改
-  document.getElementById('rds-code').style.background='var(--surface)';
+  // 樣品編號為獎金歸屬之鍵：一般角色維持唯讀；協理（manager）可調整，供登打錯誤時修正
+  const _codeEl=document.getElementById('rds-code');
+  const _canEditCode=(currentRole==='manager');
+  _codeEl.readOnly=!_canEditCode;
+  _codeEl.style.background=_canEditCode?'':'var(--surface)';
+  _codeEl.title=_canEditCode?'協理權限：可調整樣品編號（會列入修改紀錄）':'樣品編號不可自行調整，如需修正請洽協理';
+  const _codeHint=document.getElementById('rds-code-hint');
+  if(_codeHint)_codeHint.style.display=_canEditCode?'block':'none';
   document.getElementById('rds-date').value=s.sample_date;
   document.getElementById('rds-emp').value=s.employee_id||'';
   document.getElementById('rds-formula').value=s.formula_type||'';
@@ -3421,6 +3429,7 @@ async function saveRdSample(){
     // === 編輯模式 ===
     if(!editReason){showToast('修改必須填寫修改原因');return;}
     const {error}=await sb.from('rd_samples').update({
+      sample_code:code,
       sample_date:date,employee_id:empId,formula_type:formula,
       version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
       // DB 的 chk_d3plus_needs_reason 是 NOT VALID：舊資料（delay_days>=3 但 approval_reason 為空）建檔時沒被檢查，
@@ -3431,7 +3440,11 @@ async function saveRdSample(){
       approved_by:null,approved_at:null,rejection_note:null,
       edit_reason:editReason,last_edited_at:new Date().toISOString()
     }).eq('id',currentEditId);
-    if(error){showToast('修改失敗：'+error.message);return;}
+    if(error){
+      const dup=/uq_sample_code_date|duplicate key/i.test(error.message||'');
+      showToast(dup?`修改失敗：同一打樣日已存在編號 ${code}，請確認編號`:'修改失敗：'+error.message);
+      return;
+    }
     // 更新客戶綁定（先刪舊的再插新的）
     await sb.from('rd_sample_customers').delete().eq('sample_id',currentEditId);
     const inserts=rdsSelectedCustomers.map(cid=>({sample_id:currentEditId,customer_id:cid}));
@@ -3446,6 +3459,22 @@ async function saveRdSample(){
   }
 
   // === 新增模式 ===
+  // 編號重複提示：同編號在制度上代表「同一支樣品」。送不同客戶請於原紀錄加選客戶（件數計 1 件），
+  // 確為另一支樣品才另立編號。此處僅提示，不阻擋。
+  const {data:_sameCode}=await sb.from('rd_samples')
+    .select('sample_date,item_name,rd_sample_customers(rd_customers(short_name))')
+    .eq('sample_code',code).order('sample_date',{ascending:false});
+  if(_sameCode&&_sameCode.length){
+    const _list=_sameCode.slice(0,5).map(x=>{
+      const cs=(x.rd_sample_customers||[]).map(rc=>rc.rd_customers?.short_name).filter(Boolean).join('、');
+      return `　・${x.sample_date}　${x.item_name||'—'}${cs?'　（'+cs+'）':''}`;
+    }).join('\n');
+    const _msg=`編號 ${code} 已有 ${_sameCode.length} 筆登打紀錄：\n${_list}\n\n`+
+      `・同一支樣品送不同客戶 → 請改用該筆的「修改」加選客戶，打樣件數計 1 件\n`+
+      `・確為另一支樣品 → 請確認編號後再繼續\n\n`+
+      `仍要以此編號新增一筆嗎？`;
+    if(!confirm(_msg))return;
+  }
   const {data:user}=await sb.auth.getUser();
   const {data:s,error}=await sb.from('rd_samples').insert({
     sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
@@ -3453,7 +3482,11 @@ async function saveRdSample(){
     approval_reason:reason||null,created_by:user.user.id,
     assisted_for_employee_id:assistedFor
   }).select('id').single();
-  if(error){showToast('儲存失敗：'+error.message);return;}
+  if(error){
+    const dup=/uq_sample_code_date|duplicate key/i.test(error.message||'');
+    showToast(dup?`儲存失敗：${date} 已存在編號 ${code} 的打樣紀錄`:'儲存失敗：'+error.message);
+    return;
+  }
   // 寫客戶對應
   const inserts=rdsSelectedCustomers.map(cid=>({sample_id:s.id,customer_id:cid}));
   const {error:e2}=await sb.from('rd_sample_customers').insert(inserts);
