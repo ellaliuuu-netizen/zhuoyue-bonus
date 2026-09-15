@@ -1473,6 +1473,15 @@ table tr:hover td{background:rgba(247,240,222,.5);}
     <div class="modal-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group"><label class="form-label">樣品編號 *</label><input class="form-input" id="rds-code" placeholder="如 R26050001" /><div id="rds-code-hint" style="display:none;font-size:11px;color:#a68a3a;margin-top:4px">協理權限：可調整編號，異動會列入修改紀錄</div></div>
+        <div class="form-group" style="grid-column:span 2;background:var(--surface);border-radius:6px;padding:10px 12px">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0">
+            <input type="checkbox" id="rds-routine" style="margin-top:3px" />
+            <span style="font-size:13px;line-height:1.6">
+              <strong>日常工作類打樣</strong>（保留紀錄，不計入打樣獎金與件數）<br>
+              <span style="font-size:11px;color:var(--ink-faint)">防腐挑戰、安定性測試等屬日常工作，非開發工作。仍可登打作為工作軌跡。</span>
+            </span>
+          </label>
+        </div>
         <div class="form-group"><label class="form-label">打樣日期 *</label><input class="form-input" type="date" id="rds-date" /></div>
         <div class="form-group"><label class="form-label">研發人員 *</label><select class="form-select" id="rds-emp" onchange="updateAssistedForVisibility()"><option value="">請選擇</option></select></div>
         <div class="form-group" id="rds-assisted-for-wrap" style="grid-column:span 2">
@@ -3217,7 +3226,7 @@ async function loadRdSamplingStats(){
   const start=`${y}-${String(m).padStart(2,'0')}-01`;
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const {data,error}=await sb.from('rd_samples')
-    .select('employee_id, approval_status, employees!rd_samples_employee_id_fkey(name)')
+    .select('employee_id, approval_status, is_routine, employees!rd_samples_employee_id_fkey(name)')
     .gte('sample_date',start).lt('sample_date',nm);
   const el=document.getElementById('rds-stats-content');
   const lbl=document.getElementById('rds-stats-month-label');
@@ -3228,15 +3237,19 @@ async function loadRdSamplingStats(){
   const APPROVED=new Set(['auto_approved','approved']);
   const PENDING=new Set(['pending_review']);
   const stats=rdEmps.map(e=>{
-    const rows=(data||[]).filter(r=>r.employee_id===e.id);
+    const all=(data||[]).filter(r=>r.employee_id===e.id);
+    // 日常工作類（防腐挑戰、安定性測試等）不計入件數，另欄顯示
+    const routine=all.filter(r=>r.is_routine).length;
+    const rows=all.filter(r=>!r.is_routine);
     const approved=rows.filter(r=>APPROVED.has(r.approval_status)).length;
     const pending=rows.filter(r=>PENDING.has(r.approval_status)).length;
-    return {name:e.name,total:rows.length,approved,pending};
+    return {name:e.name,total:rows.length,approved,pending,routine};
   });
   const totalAll=stats.reduce((s,r)=>s+r.total,0);
   const apprAll=stats.reduce((s,r)=>s+r.approved,0);
   const pendAll=stats.reduce((s,r)=>s+r.pending,0);
-  el.innerHTML=`<table><thead><tr><th>研發人員</th><th class="td-right">總件數</th><th class="td-right">✅ 已通過</th><th class="td-right">🟡 待審</th></tr></thead><tbody>${stats.map(s=>`<tr><td>${s.name}</td><td class="td-right"><strong>${s.total}</strong></td><td class="td-right">${s.approved}</td><td class="td-right">${s.pending}</td></tr>`).join('')}<tr style="border-top:2px solid var(--gold);font-weight:bold;background:var(--surface)"><td>團隊合計</td><td class="td-right">${totalAll}</td><td class="td-right">${apprAll}</td><td class="td-right">${pendAll}</td></tr></tbody></table>`;
+  const routAll=stats.reduce((s,r)=>s+r.routine,0);
+  el.innerHTML=`<table><thead><tr><th>研發人員</th><th class="td-right">總件數</th><th class="td-right">✅ 已通過</th><th class="td-right">🟡 待審</th><th class="td-right">🔧 日常工作</th></tr></thead><tbody>${stats.map(s=>`<tr><td>${s.name}</td><td class="td-right"><strong>${s.total}</strong></td><td class="td-right">${s.approved}</td><td class="td-right">${s.pending}</td><td class="td-right" style="color:var(--ink-faint)">${s.routine||'—'}</td></tr>`).join('')}<tr style="border-top:2px solid var(--gold);font-weight:bold;background:var(--surface)"><td>團隊合計</td><td class="td-right">${totalAll}</td><td class="td-right">${apprAll}</td><td class="td-right">${pendAll}</td><td class="td-right" style="color:var(--ink-faint)">${routAll||'—'}</td></tr></tbody></table>`+`<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">🔧 日常工作類（防腐挑戰、安定性測試等）保留紀錄但不計入件數與打樣獎金。</div>`;
 }
 
 async function loadRdSamples(){
@@ -3290,7 +3303,8 @@ async function loadRdSamples(){
       empCell = s.employees?.name||'-';
     }
     const dupWarn=(s.item_name&&nameCount[s.item_name.trim()]>1)?`<div style="font-size:10px;color:#b3541e">⚠ 同品名 ${nameCount[s.item_name.trim()]} 筆，認打樣日</div>`:'';
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}${dupWarn}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
+    const routineTag=s.is_routine?`<div style="font-size:10px;color:#5d8aa8">🔧 日常工作（不計獎金與件數）</div>`:'';
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}${dupWarn}${routineTag}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -3303,6 +3317,7 @@ function openRdSampleModal(){
   document.getElementById('rds-code').style.background='';
   document.getElementById('rds-code').title='';
   const _ch=document.getElementById('rds-code-hint'); if(_ch)_ch.style.display='none';
+  const _rr=document.getElementById('rds-routine'); if(_rr)_rr.checked=false;
   document.getElementById('rds-date').value=new Date().toISOString().slice(0,10);
   document.getElementById('rds-emp').value='';
   document.getElementById('rds-formula').value='';
@@ -3358,6 +3373,7 @@ async function openEditRdSampleModal(id){
   const _codeHint=document.getElementById('rds-code-hint');
   if(_codeHint)_codeHint.style.display=_canEditCode?'block':'none';
   document.getElementById('rds-date').value=s.sample_date;
+  const _rrE=document.getElementById('rds-routine'); if(_rrE)_rrE.checked=!!s.is_routine;
   document.getElementById('rds-emp').value=s.employee_id||'';
   document.getElementById('rds-formula').value=s.formula_type||'';
   document.getElementById('rds-version').value=s.version||'';
@@ -3446,6 +3462,7 @@ async function saveRdSample(){
   const deliveryDate=document.getElementById('rds-delivery-date').value;
   const reason=document.getElementById('rds-reason').value.trim();
   const editReason=document.getElementById('rds-edit-reason').value.trim();
+  const isRoutine=!!document.getElementById('rds-routine')?.checked;
   if(!code||!date||!empId){showToast('請填必填欄位');return;}
   if(!formula){showToast('請選擇劑型');return;}
   if(!itemName){showToast('請填品項');return;}
@@ -3483,7 +3500,7 @@ async function saveRdSample(){
     // === 編輯模式 ===
     if(!editReason){showToast('修改必須填寫修改原因');return;}
     const {error}=await sb.from('rd_samples').update({
-      sample_code:code,
+      sample_code:code,is_routine:isRoutine,
       sample_date:date,employee_id:empId,formula_type:formula,
       version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
       // DB 的 chk_d3plus_needs_reason 是 NOT VALID：舊資料（delay_days>=3 但 approval_reason 為空）建檔時沒被檢查，
@@ -3531,7 +3548,7 @@ async function saveRdSample(){
   }
   const {data:user}=await sb.auth.getUser();
   const {data:s,error}=await sb.from('rd_samples').insert({
-    sample_code:code,sample_date:date,employee_id:empId,formula_type:formula,
+    sample_code:code,is_routine:isRoutine,sample_date:date,employee_id:empId,formula_type:formula,
     version:ver||null,item_name:itemName,delivery_date:deliveryDate||null,
     approval_reason:reason||null,created_by:user.user.id,
     assisted_for_employee_id:assistedFor
