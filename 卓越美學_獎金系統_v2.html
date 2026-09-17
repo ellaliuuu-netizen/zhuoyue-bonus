@@ -862,8 +862,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
 
             <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
               <strong style="color:#5d8aa8">三、日常工作類打樣，不計入獎金與件數</strong><br>
-              <strong>防腐挑戰、安定性測試</strong>這類，屬於<strong>日常工作，不是開發工作</strong>。<br>
-              打樣紀錄<strong>可以登打保留</strong>作為工作軌跡，但不列入打樣獎金與件數計算。
+              <strong>防腐挑戰、安定性測試、相容性測試、留樣觀察</strong>這類，屬於<strong>日常工作，不是開發工作</strong>。<br>
+              打樣紀錄<strong>可以登打保留</strong>作為工作軌跡，但不列入打樣獎金與件數計算。<br>
+              ※ <strong>客戶指定重打</strong>屬開發工作，<strong>照常計入</strong>件數與打樣獎金，登打時請勿勾選日常工作類。
             </div>
 
             <div style="background:var(--surface);border-radius:8px;padding:12px 14px;margin-bottom:14px">
@@ -1478,7 +1479,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <input type="checkbox" id="rds-routine" style="margin-top:3px" />
             <span style="font-size:13px;line-height:1.6">
               <strong>日常工作類打樣</strong>（保留紀錄，不計入打樣獎金與件數）<br>
-              <span style="font-size:11px;color:var(--ink-faint)">防腐挑戰、安定性測試等屬日常工作，非開發工作。仍可登打作為工作軌跡。</span>
+              <span style="font-size:11px;color:var(--ink-faint)">防腐挑戰、安定性測試、相容性測試、留樣觀察屬日常工作，非開發工作，仍可登打作為工作軌跡。客戶指定重打照常計入，請勿勾選。</span>
             </span>
           </label>
         </div>
@@ -3238,7 +3239,7 @@ async function loadRdSamplingStats(){
   const PENDING=new Set(['pending_review']);
   const stats=rdEmps.map(e=>{
     const all=(data||[]).filter(r=>r.employee_id===e.id);
-    // 日常工作類（防腐挑戰、安定性測試等）不計入件數，另欄顯示
+    // 日常工作類（防腐挑戰、安定性測試、相容性測試、留樣觀察）不計入件數；客戶指定重打照計，另欄顯示
     const routine=all.filter(r=>r.is_routine).length;
     const rows=all.filter(r=>!r.is_routine);
     const approved=rows.filter(r=>APPROVED.has(r.approval_status)).length;
@@ -3249,7 +3250,7 @@ async function loadRdSamplingStats(){
   const apprAll=stats.reduce((s,r)=>s+r.approved,0);
   const pendAll=stats.reduce((s,r)=>s+r.pending,0);
   const routAll=stats.reduce((s,r)=>s+r.routine,0);
-  el.innerHTML=`<table><thead><tr><th>研發人員</th><th class="td-right">總件數</th><th class="td-right">✅ 已通過</th><th class="td-right">🟡 待審</th><th class="td-right">🔧 日常工作</th></tr></thead><tbody>${stats.map(s=>`<tr><td>${s.name}</td><td class="td-right"><strong>${s.total}</strong></td><td class="td-right">${s.approved}</td><td class="td-right">${s.pending}</td><td class="td-right" style="color:var(--ink-faint)">${s.routine||'—'}</td></tr>`).join('')}<tr style="border-top:2px solid var(--gold);font-weight:bold;background:var(--surface)"><td>團隊合計</td><td class="td-right">${totalAll}</td><td class="td-right">${apprAll}</td><td class="td-right">${pendAll}</td><td class="td-right" style="color:var(--ink-faint)">${routAll||'—'}</td></tr></tbody></table>`+`<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">🔧 日常工作類（防腐挑戰、安定性測試等）保留紀錄但不計入件數與打樣獎金。</div>`;
+  el.innerHTML=`<table><thead><tr><th>研發人員</th><th class="td-right">總件數</th><th class="td-right">✅ 已通過</th><th class="td-right">🟡 待審</th><th class="td-right">🔧 日常工作</th></tr></thead><tbody>${stats.map(s=>`<tr><td>${s.name}</td><td class="td-right"><strong>${s.total}</strong></td><td class="td-right">${s.approved}</td><td class="td-right">${s.pending}</td><td class="td-right" style="color:var(--ink-faint)">${s.routine||'—'}</td></tr>`).join('')}<tr style="border-top:2px solid var(--gold);font-weight:bold;background:var(--surface)"><td>團隊合計</td><td class="td-right">${totalAll}</td><td class="td-right">${apprAll}</td><td class="td-right">${pendAll}</td><td class="td-right" style="color:var(--ink-faint)">${routAll||'—'}</td></tr></tbody></table>`+`<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">🔧 日常工作類（防腐挑戰、安定性測試、相容性測試、留樣觀察）保留紀錄但不計入件數與打樣獎金；客戶指定重打照常計入。</div>`;
 }
 
 async function loadRdSamples(){
