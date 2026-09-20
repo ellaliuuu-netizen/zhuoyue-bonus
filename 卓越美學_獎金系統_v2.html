@@ -5739,8 +5739,13 @@ async function loadPayoutSummary(){
   const qEnd=`${eY}-${String(eM).padStart(2,'0')}-01`;
   // 該季有無打樣（研發判定「有做事但沒達標」用）
   const {data:qs}=await sb.from('rd_samples').select('employee_id, sample_date')
-    .gte('sample_date',qStart).lt('sample_date',qEnd).in('approval_status',['approved','auto_approved']);
-  const sampCnt={}; (qs||[]).forEach(r=>{ if(r.employee_id) sampCnt[r.employee_id]=(sampCnt[r.employee_id]||0)+1; });
+    .gte('sample_date',qStart).lt('sample_date',qEnd).in('approval_status',['approved','auto_approved'])
+    .eq('bonus_eligible',true);
+  const sampCnt={}; const sampByMonth={};
+  (qs||[]).forEach(r=>{ if(!r.employee_id) return;
+    sampCnt[r.employee_id]=(sampCnt[r.employee_id]||0)+1;
+    const k=r.sample_date.slice(0,7);
+    (sampByMonth[r.employee_id]=sampByMonth[r.employee_id]||{})[k]=(sampByMonth[r.employee_id][k]||0)+1; });
   employees.filter(e=>e.is_active).forEach(e=>{
     const a=agg[e.name]=agg[e.name]||{name:e.name,dept:e.dept||'',role:e.role_title||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
     if(!a.dept)a.dept=e.dept||''; if(!a.role)a.role=e.role_title||'';
@@ -5754,7 +5759,11 @@ async function loadPayoutSummary(){
     if(e.dept==='研發部'){
       if(e.role_level==='assistant') return '助理領全團隊成交池 5% 分潤，本季分潤基數為 0';
       const n=sampCnt[a.empId]||0;
-      if(n>0) return `本季打樣 ${n} 件、未達合格件數門檻，且無成交出貨認列`;
+      // 月門檻是逐月判定：只要有任一月達標，理由就不是「未達門檻」，而是尚未結算或無成交認列而暫緩
+      const _q=rdQualifyCount(a.empId);
+      const _reach=Object.values(sampByMonth[a.empId]||{}).filter(c=>c>=_q).length;
+      if(_reach>0) return `本季打樣 ${n} 件、其中 ${_reach} 個月達合格件數 ${_q} 件；打樣獎金尚未執行月結算，或因本季無成交出貨認列而暫緩累積`;
+      if(n>0) return `本季打樣 ${n} 件，各月均未達合格件數 ${_q} 件；且無成交出貨認列`;
       return '本季無打樣、亦無成交出貨認列';
     }
     return '本季尚未結算，或結算結果為 0（請確認該部門是否已完成結算）';
