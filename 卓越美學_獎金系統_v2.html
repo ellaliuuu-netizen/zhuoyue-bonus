@@ -5619,7 +5619,9 @@ function custMatch(a,b){ if(!a||!b)return false; const x=String(a).replace(/\s/g
 let _orderAmbiguous=[];
 let _orderExcluded=[];
 // 剔除裁示：不計件的銷貨（PIF全排／破損／已開票／非正式訂單品項）
-const _EXCLUDE_CODES=['JP000079','JP000080','JP000081','JP000082']; // 非正式（頭皮微針等）
+// 協理 2026-09-21 裁示：有正式產品編號＝已有訂單，品名是否正式與計獎無關，不再以「非正式品名」排除。
+// 原清單 ['JP000079','JP000080','JP000081','JP000082'] 已停用（保留常數供未來確有需排除之編號時使用）。
+const _EXCLUDE_CODES=[];
 function saleExcludeReason(s){
   const nm=s.item_name_raw||'';
   if(nm.includes('PIF')) return 'PIF不計';
@@ -5628,7 +5630,7 @@ function saleExcludeReason(s){
   // 代購（替客戶採買紙盒、瓶器等非自有產品）與同業間原料調度，均非本公司產品銷售，不計獎金
   if(nm.includes('代購')) return '代購不計';
   if(_RAW_MATERIAL_KEYWORDS.some(k=>nm.toLowerCase().includes(k))) return '原料調度不計';
-  if(_EXCLUDE_CODES.includes(s.product_code)) return '非正式不計';
+  if(_EXCLUDE_CODES.length && _EXCLUDE_CODES.includes(s.product_code)) return '指定排除編號';
   return null;
 }
 // 同業間原料調度的品名關鍵字（少量、非成品）
