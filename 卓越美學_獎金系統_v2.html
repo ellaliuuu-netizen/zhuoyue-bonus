@@ -5752,9 +5752,14 @@ async function matchSalesToOrders(){
       const usable=(openC.length?openC:cands2).slice().sort((a,b)=>_d(a.sign_date)-_d(b.sign_date));
       if(usable.length) pick=usable[0];
       else {
-        // ⛔ 有訂購日就不可退回先進先出猜測，否則會綁到不相干的舊訂單（2026-09-25 阻黑淨斑案）
-        _orderAmbiguous.push({...s, reason:`出貨單記載訂購日 ${s.source_order_date}，系統無 ±30 天內的同編號訂單（缺訂單資料）`});
-        continue;
+        // 訂購日對不上時：若該編號「只有一張」尚未結算且日期合理的訂單，綁它不算猜測（常見於一張出貨單含多品項、
+        // 抬頭只寫一個訂購日的情形，例：卸妝膏與其試用包同單）。若有兩張以上候選才列待判，不猜。
+        const only=(byCode[s.product_code]||[]).filter(o=>(!o.sign_date||!s.ship_date||o.sign_date<=s.ship_date) && (cumq[o.id]||0) < o.order_qty*0.8);
+        if(only.length===1){ pick=only[0]; }
+        else {
+          _orderAmbiguous.push({...s, reason:`出貨單記載訂購日 ${s.source_order_date}，系統無 ±30 天內的同編號訂單；且該編號有 ${only.length} 張未結訂單無法判斷`});
+          continue;
+        }
       }
     }
     if(!pick){
