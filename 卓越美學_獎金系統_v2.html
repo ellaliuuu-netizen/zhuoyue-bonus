@@ -687,7 +687,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-primary manager-only" onclick="settleSalesMonth()">執行結算</button>
               </div>
             </div>
-            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（全公司首次訂單，且訂金收款日落在該月；訂金在「🔔待辦→新客訂金待登記」登記）→ ×1,500，次月發放 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
+            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（全公司首次訂單，且訂金收款日落在該月；訂金在「🔔待辦→新客訂金待登記」登記）→ ×1,500，次月同月薪一起發放 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
             <div id="sales-m-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
           </div>
           <div class="card manager-only" style="border-color:#7a5c3d">
@@ -702,7 +702,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-gold btn-sm" onclick="generateSalesConfirmSheets('month')">產生月確認表</button>
               </div>
             </div>
-            <div class="info-box"><b>月確認表</b>：月底產出當月（新客＋出貨）明細給業務確認，隔月 5 日隨薪資發放。<b>季確認表</b>：季底彙整三個月＋季達標。<br>產出業務部個人明細：新客獎金（客戶／訂單／訂金入帳日／認列月／發放時間）＋逐月出貨獎金（計獎金額、排除金額、級距）＋季達標＋合計＋異議處理程序＋簽收欄。資料直接取自訂單簿與會計銷貨明細。</div>
+            <div class="info-box"><b>月確認表</b>：月底產出當月（新客＋出貨）明細給業務確認，次月同月薪一起發放（每月 5 日）。<b>季確認表</b>：季底彙整三個月＋季達標。<br>產出業務部個人明細：新客獎金（客戶／訂單／訂金入帳日／認列月／發放時間）＋逐月出貨獎金（計獎金額、排除金額、級距）＋季達標＋合計＋異議處理程序＋簽收欄。資料直接取自訂單簿與會計銷貨明細。</div>
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
             <table><thead><tr><th>出貨金額</th><th class="td-right">比例</th></tr></thead><tbody>
@@ -2921,7 +2921,7 @@ async function settleSalesMonth(){
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const salesEmps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
   if(!salesEmps.length){showToast('沒有在職業務人員');return;}
-  // 新客：客戶在訂單簿的第一張訂單（全公司首次成交，政策 B），且訂金收款日落在本月 → 本月認列、次月發放
+  // 新客：客戶在訂單簿的第一張訂單（全公司首次成交，政策 B），且訂金收款日落在本月 → 本月認列、次月同月薪一起發放
   // 2026-09-25 改寫：原讀 orders 表（從未使用、恆為空），新客獎金永遠算成 0
   const _nc=(await _newClientFirstOrders()).filter(o=>o.deposit_paid_at && o.deposit_paid_at>=start && o.deposit_paid_at<nm);
   // 出貨金額：改吃會計銷貨明細 sales_records（按業務員名對應員工），取代舊 shipments
@@ -2980,7 +2980,7 @@ async function settleSalesMonth(){
       new_client_count:ncCount,new_client_bonus:ncBonus,
       ship_amount:amt,ship_ratio:ratio,ship_bonus:shipBonus,
       total_bonus:total,status:'paid',
-      note:[pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
+      note:[pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月同月薪一起發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
     results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
@@ -3887,7 +3887,7 @@ async function loadTodoCenter(){
   const secS=document.getElementById('todo-samples'); if(secS) secS.innerHTML = jump('samples','研發打樣審核') + (nS? `<table><thead><tr><th>打樣日</th><th>編號</th><th>品項</th><th>研發</th><th>延遲</th><th>原因</th></tr></thead><tbody>${sD.map(s=>`<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${s.delay_days||0}天</td><td>${s.edit_reason||s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
   const secD=document.getElementById('todo-deals'); if(secD) secD.innerHTML = jump('deals','成交獎金覆核') + (nD? `<table><thead><tr><th>正式編號</th><th>段別</th><th>領獎人</th><th class="td-right">金額</th><th>認列日</th></tr></thead><tbody>${dD.map(d=>`<tr><td>${d.official_product_code||'—'}</td><td>${segLabel[d.segment]||d.segment}</td><td>${d.employees?.name||'待指定'}</td><td class="td-right">${fmt(d.amount||0)}</td><td>${(d.recognized_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
   const secR=document.getElementById('todo-reqs'); if(secR) secR.innerHTML = jump('reqs','改綁／取消申請') + (nR? `<table><thead><tr><th>類型</th><th>正式編號</th><th>客戶</th><th>申請日</th></tr></thead><tbody>${rD.map(q=>`<tr><td>${q.action==='cancel'?'取消確樣':'改綁'}</td><td>${q.official_product_code||q.src?.official_product_code||'—'}</td><td>${q.src?.rd_customers?.short_name||'—'}</td><td>${(q.requested_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
-  const secP=document.getElementById('todo-deposit'); if(secP) secP.innerHTML = `<div class="info-box" style="font-size:12px;margin-bottom:8px">新客戶的第一張訂單，收到訂金後在此登記收款日。<b>新客獎金＝訂金收款當月認列、次月發放</b>（業務部制度第二章；2026-09-25 協理裁示）。登記後即從待辦消失，業務月結算自動帶入。</div>` + (nP? `<table><thead><tr><th>客戶</th><th>訂單編號</th><th>簽單日</th><th>業務</th><th class="td-right">訂單金額</th><th>訂金收款日</th><th></th></tr></thead><tbody>${pD.map(o=>`<tr><td>${esc2(o.customer)}</td><td style="font-size:12px">${esc2(o.order_no)}</td><td style="font-size:12px">${esc2(o.sign_date||'—')}</td><td>${esc2(o.sales_person||'—')}</td><td class="td-right">${Math.round(o.amount).toLocaleString()}</td><td><input type="date" class="form-input" style="width:auto;font-size:12px" id="dep-${esc2(o.order_no)}"></td><td><button class="btn btn-gold btn-sm" onclick="saveDeposit('${esc2(o.order_no)}')">登記</button></td></tr>`).join('')}</tbody></table>` : empty);
+  const secP=document.getElementById('todo-deposit'); if(secP) secP.innerHTML = `<div class="info-box" style="font-size:12px;margin-bottom:8px">新客戶的第一張訂單，收到訂金後在此登記收款日。<b>新客獎金＝訂金收款當月認列、次月同月薪一起發放</b>（業務部制度第二章；2026-09-25 協理裁示）。登記後即從待辦消失，業務月結算自動帶入。</div>` + (nP? `<table><thead><tr><th>客戶</th><th>訂單編號</th><th>簽單日</th><th>業務</th><th class="td-right">訂單金額</th><th>訂金收款日</th><th></th></tr></thead><tbody>${pD.map(o=>`<tr><td>${esc2(o.customer)}</td><td style="font-size:12px">${esc2(o.order_no)}</td><td style="font-size:12px">${esc2(o.sign_date||'—')}</td><td>${esc2(o.sales_person||'—')}</td><td class="td-right">${Math.round(o.amount).toLocaleString()}</td><td><input type="date" class="form-input" style="width:auto;font-size:12px" id="dep-${esc2(o.order_no)}"></td><td><button class="btn btn-gold btn-sm" onclick="saveDeposit('${esc2(o.order_no)}')">登記</button></td></tr>`).join('')}</tbody></table>` : empty);
   const secC=document.getElementById('todo-carry'); if(secC) secC.innerHTML = jump('carry','研發打樣月結回溯') + (nC? `<table><thead><tr><th>研發</th><th>月份</th><th>件數</th><th>回溯期限</th></tr></thead><tbody>${cD.map(c=>`<tr><td>${c.employees?.name||'-'}</td><td>${c.year}-${String(c.month).padStart(2,'0')}</td><td>${c.sample_count||0}</td><td>${c.carryover_deadline||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
 }
 function switchTodoTab(el,id){
@@ -3919,7 +3919,7 @@ async function saveDeposit(orderNo){
   if(!d){ showToast('請先選訂金收款日'); return; }
   const {error}=await sb.from('order_lines').update({deposit_paid_at:d, deposit_note:`協理登記 ${new Date().toISOString().slice(0,10)}`}).eq('order_no',orderNo);
   if(error){ showToast('登記失敗：'+error.message); return; }
-  showToast(`✓ ${orderNo} 訂金收款日 ${d} 已登記（新客獎金於 ${d.slice(0,7)} 認列、次月發放）`);
+  showToast(`✓ ${orderNo} 訂金收款日 ${d} 已登記（新客獎金於 ${d.slice(0,7)} 認列、次月同月薪一起發放）`);
   loadTodoCenter();
 }
 async function openTodoCenter(){ await loadTodoCenter(); openModal('todoCenterModal'); }
@@ -4568,7 +4568,7 @@ async function generateSalesConfirmSheets(kind){
     const ncWait=mine.filter(o=>!o.deposit_paid_at && o.sign_date>=DEPOSIT_TRACK_FROM && o.sign_date<qEnd);
     const ncTot=ncIn.length*ncUnit;
     const ncRows=ncIn.map(o=>`<tr><td>${esc2(o.customer)}</td><td style="font-size:11px">${esc2(o.order_no)}</td><td>${esc2(o.sign_date||'')}</td><td>${esc2(o.deposit_paid_at)}</td><td class="c">${o.deposit_paid_at.slice(5,7)*1} 月</td><td class="c">${nextYm(o.deposit_paid_at).slice(5)*1} 月</td><td class="r">${fmt(ncUnit)}</td></tr>`).join('')
-      + ncWait.map(o=>`<tr style="color:#999"><td>${esc2(o.customer)}</td><td style="font-size:11px">${esc2(o.order_no)}</td><td>${esc2(o.sign_date||'')}</td><td colspan="3">訂金尚未入帳：入帳當月認列、次月發放</td><td class="r">—</td></tr>`).join('');
+      + ncWait.map(o=>`<tr style="color:#999"><td>${esc2(o.customer)}</td><td style="font-size:11px">${esc2(o.order_no)}</td><td>${esc2(o.sign_date||'')}</td><td colspan="3">訂金尚未入帳：入帳當月認列、次月同月薪一起發放</td><td class="r">—</td></tr>`).join('');
     // 出貨：逐月、依業務歸屬；排除規則與月結算、研發認列同一套
     const mRecs=(recs||[]).filter(r=>keys.includes((r.sales_person||'').trim()));
     let shipTot=0; const monthRows=[]; const detail=[];
@@ -4590,8 +4590,8 @@ async function generateSalesConfirmSheets(kind){
       <table><thead><tr><th>客戶</th><th>訂單編號</th><th>簽單日</th><th>訂金入帳日</th><th class="c">認列月</th><th class="c">依制度應發月</th><th class="r">獎金</th></tr></thead>
       <tbody>${ncRows||'<tr><td colspan="7" class="c">本季無新客</td></tr>'}</tbody>
       <tfoot><tr><td colspan="6">新客獎金小計（${ncIn.length} 位 × ${fmt(ncUnit)}）</td><td class="r">${fmt(ncTot)}</td></tr></tfoot></table>
-      <p class="note">新客＝全公司首次成交之客戶（一客只計一次）；以客戶付清訂金為認列時點，訂金入帳當月認列、次月發放。</p>
-      ${ncIn.length&&!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>本季新客獎金依制度應於${[...new Set(ncIn.map(o=>nextYm(o.deposit_paid_at).slice(5)*1+' 月'))].join('、')}發放，公司尚未另行撥付，<b>併同本季獎金一次發放</b>，金額不受影響。</p>`:''}
+      <p class="note">新客＝全公司首次成交之客戶（一客只計一次）；以客戶付清訂金為認列時點，訂金入帳當月認列、次月同月薪一起發放。</p>
+      ${ncIn.length&&!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>本季新客獎金依制度應於次月同月薪一起發放（${[...new Set(ncIn.map(o=>nextYm(o.deposit_paid_at).slice(5)*1+' 月'))].join('、')}），公司尚未另行撥付，<b>併同本季獎金一次發放</b>，金額不受影響。</p>`:''}
       <h2>二、出貨獎金（逐月）</h2>
       <table><thead><tr><th>月份</th><th class="r">計獎出貨金額（未稅）</th><th class="r">不計獎金額</th><th class="c">適用比例</th><th class="r">出貨獎金</th></tr></thead>
       <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
@@ -4608,7 +4608,7 @@ async function generateSalesConfirmSheets(kind){
         ${isMonth?'':`<tr><td>季度達標獎金</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>`}
         ${pr.ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(pr.ratio*100).toFixed(1)}%</td></tr>`:''}
       </tbody><tfoot><tr><td><b>${isMonth?'本月實發':'本季實發'}</b></td><td class="r"><b>${fmt(final)}</b></td></tr></tfoot></table>
-      ${isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放日：</b>本月獎金於 ${payDay} 隨薪資發放。出貨金額以會計銷貨開發票明細為準；月底後才開立發票之出貨，併入開票當月計算。</p>`:''}
+      ${isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放日：</b>本月獎金於次月同月薪一起發放（${payDay}）。出貨金額以會計銷貨開發票明細為準；月底後才開立發票之出貨，併入開票當月計算。</p>`:''}
       ${DISPUTE(isMonth?4:5)}
       <div class="cbox">本人確認：以上新客、出貨金額與獎金之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
       <p>異議／補充：____________________________________________________</p>
