@@ -5940,12 +5940,39 @@ function exportPayoutCSV(){
 }
 // ===== 銷貨自動匯入：暫存區確認（NAS 排程寫入 sales_staging，協理確認後才進 sales_records）=====
 let _stgRows=[];
+// 業務歸屬：會計銷貨明細沒有業務欄，匯入時依「該客戶最近一張訂單的業務」帶入；
+// 業務獎金依 sales_records.sales_person 歸人，空白＝這筆業績不算給任何人，故對不到者不准匯入。
+// 客戶名正規化：會計檔常帶付款條件或公司全名（例「新享生技(隔月10號)」「星辰國際事業有限公司」）
+function _custKey(s){
+  return String(s||'').replace(/[（(][^）)]*[）)]/g,'').replace(/股份有限公司|有限公司|公司/g,'').replace(/\s+/g,'');
+}
+let _custRep={};
+async function _loadCustRep(){
+  const {data}=await sb.from('order_lines').select('customer_name, sales_person, sign_date')
+    .not('sales_person','is',null).order('sign_date',{ascending:false});
+  _custRep={};
+  (data||[]).forEach(o=>{ const k=_custKey(o.customer_name), sp=(o.sales_person||'').trim();
+    if(k && sp && !_custRep[k]) _custRep[k]=sp; });   // 依簽單日新到舊，第一筆＝最近一張單的業務
+}
+function _repOf(cust){
+  const k=_custKey(cust); if(!k) return null;
+  if(_custRep[k]) return _custRep[k];
+  // 會計與訂單簿寫法略有不同（例「飲美科」vs「飲美科妍」）→ 退一步用包含比對，但只接受唯一結果
+  const hits=[...new Set(Object.keys(_custRep).filter(x=>x.includes(k)||k.includes(x)).map(x=>_custRep[x]))];
+  return hits.length===1?hits[0]:null;
+}
+function _salesRepOptions(){
+  const s=new Set();
+  employees.filter(e=>e.dept==='業務部').forEach(e=>s.add((e.csv_sales_alias||e.name||'').trim()));
+  return [...s].filter(Boolean);
+}
 async function loadSalesStaging(){
   const el=document.getElementById('staging-content'); if(!el) return;
   const {data,error}=await sb.from('sales_staging').select('*').eq('status','pending')
     .order('batch',{ascending:false}).order('row_no');
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
-  _stgRows=data||[];
+  await _loadCustRep();
+  _stgRows=(data||[]).map(r=>({...r, _rep:_repOf(r.customer_name)}));
   renderSalesStaging();
 }
 function renderSalesStaging(){
@@ -5957,28 +5984,31 @@ function renderSalesStaging(){
   const byBatch={};
   _stgRows.forEach(r=>{(byBatch[r.batch]=byBatch[r.batch]||[]).push(r);});
   const opts='<option value="">（未對應）</option>'+products.map(p=>`<option value="${p.product_code}">${p.product_code}｜${p.product_name||''}</option>`).join('');
+  const repOpts='<option value="">（未指定）</option>'+_salesRepOptions().map(sp=>`<option value="${esc2(sp)}">${esc2(sp)}</option>`).join('');
   let html='';
   for(const [batch,rows] of Object.entries(byBatch)){
     const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
+    const noRep=rows.filter(r=>!r._rep).length;
     const exc=rows.filter(r=>r.exclude_reason).length;
     const willCount=rows.length-exc;
     html+=`<div style="margin-bottom:18px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
         <div><b style="font-size:15px">${esc2(batch)}</b>
           <span style="font-size:12px;color:var(--ink-faint);margin-left:8px">${esc2(rows[0].src_file||'')}</span>
-          <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">共 ${rows.length} 列　·　計入獎金 <b>${willCount}</b> 列　·　自動剔除 ${exc} 列${noCode?`　·　<b style="color:#b3541e">${noCode} 列未對應編號</b>`:''}</div>
+          <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">共 ${rows.length} 列　·　計入獎金 <b>${willCount}</b> 列　·　自動剔除 ${exc} 列${noCode?`　·　<b style="color:#b3541e">${noCode} 列未對應編號</b>`:''}${noRep?`　·　<b style="color:#b3541e">${noRep} 列未指定業務</b>`:''}</div>
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-outline btn-sm" onclick="rejectStaging('${esc2(batch)}')">✕ 全部退回</button>
           <button class="btn btn-gold btn-sm" onclick="confirmImportStaging('${esc2(batch)}')">✅ 確認匯入</button>
         </div>
       </div>
-      <table><thead><tr><th>列</th><th>客戶</th><th>品名</th><th>正式編號</th><th class="td-right">數量</th><th>銷貨日</th><th>發票</th><th>判定</th></tr></thead><tbody>
+      <table><thead><tr><th>列</th><th>客戶</th><th>業務</th><th>品名</th><th>正式編號</th><th class="td-right">數量</th><th>銷貨日</th><th>發票</th><th>判定</th></tr></thead><tbody>
       ${rows.map(r=>{
-        const bad=!r.product_code && !r.exclude_reason;
+        const bad=(!r.product_code && !r.exclude_reason) || !r._rep;
         return `<tr style="${bad?'background:#fdebd0':''}">
           <td style="color:var(--ink-faint)">${r.row_no}</td>
           <td>${esc2(r.customer_name)}</td>
+          <td><select class="form-select" style="min-width:90px;font-size:12px" onchange="_stgSetRep('${r.id}',this.value)">${repOpts.replace(`value="${esc2(r._rep||'')}"`,`value="${esc2(r._rep||'')}" selected`)}</select></td>
           <td style="font-size:12px">${esc2(r.item_name_raw)}</td>
           <td><select class="form-select" style="min-width:190px;font-size:12px" id="stg-code-${r.id}" onchange="_stgSetCode('${r.id}',this.value)">${opts.replace(`value="${r.product_code}"`,`value="${r.product_code}" selected`)}</select>
             <div style="font-size:10px;color:var(--ink-faint)">${r.match_method==='alias'?'別名對應':r.match_method==='exact'?'完全相符':r.match_method==='fuzzy'?`模糊 ${r.match_score}`:'—'}</div></td>
@@ -5989,6 +6019,7 @@ function renderSalesStaging(){
         </tr>`;}).join('')}
       </tbody></table>
       ${noCode?`<div style="font-size:12px;color:#b3541e;margin-top:6px">⚠️ 橘底列尚未對應正式編號：請於「正式編號」欄選擇，選過的會自動記入別名、日後同品名不必再選。未對應者匯入後不會進入研發認列與部門件數。</div>`:''}
+      ${noRep?`<div style="font-size:12px;color:#b3541e;margin-top:6px">⚠️ ${noRep} 列查無該客戶的訂單、無法自動帶出業務：請於「業務」欄指定，<b>全部指定後才能匯入</b>（業務空白＝業績不算給任何人，業務獎金會漏算）。</div>`:''}
     </div>`;
   }
   el.innerHTML=html;
@@ -5996,6 +6027,9 @@ function renderSalesStaging(){
 function esc2(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function _stgSetCode(id,code){
   const r=_stgRows.find(x=>x.id===id); if(r){ r.product_code=code||null; r._manual=!!code; }
+}
+function _stgSetRep(id,sp){
+  const r=_stgRows.find(x=>x.id===id); if(r){ r._rep=sp||null; renderSalesStaging(); }
 }
 async function rejectStaging(batch){
   const ok=await confirmCard('退回這批自動匯入',
@@ -6010,6 +6044,8 @@ async function confirmImportStaging(batch){
   if(!rows.length) return;
   const exc=rows.filter(r=>r.exclude_reason).length;
   const noCode=rows.filter(r=>!r.product_code && !r.exclude_reason).length;
+  const noRep=rows.filter(r=>!r._rep).length;
+  if(noRep){ showToast(`尚有 ${noRep} 列未指定業務，請先於「業務」欄指定後再匯入`); return; }
   const ok=await confirmCard('確認匯入銷貨明細',
     `<b>${esc2(batch)}</b>　共 ${rows.length} 列<br><br>`+
     `・寫入正式銷貨紀錄：<b>${rows.length}</b> 列<br>`+
@@ -6028,7 +6064,7 @@ async function confirmImportStaging(batch){
     const d=r.ship_date||''; const mo=Number(d.slice(5,7))||0;
     return {import_batch:'AUTO-'+batch, customer_name:r.customer_name, item_name_raw:r.item_name_raw,
       product_code:r.product_code||null, qty:r.qty, unit_price:r.unit_price, amount:r.amount,
-      ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
+      sales_person:r._rep, ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
       year:Number(d.slice(0,4))||null, month:mo||null,
       quarter:mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null};
   });
