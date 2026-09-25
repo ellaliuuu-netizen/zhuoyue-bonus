@@ -1523,12 +1523,14 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <div class="inner-tab active" onclick="switchTodoTab(this,'todo-samples')">🧪 打樣待審核 <span id="todo-cnt-samples" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
       <div class="inner-tab" onclick="switchTodoTab(this,'todo-deals')">🎯 成交獎金待覆核 <span id="todo-cnt-deals" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
       <div class="inner-tab" onclick="switchTodoTab(this,'todo-reqs')">🔁 改綁／取消申請 <span id="todo-cnt-reqs" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
+      <div class="inner-tab" onclick="switchTodoTab(this,'todo-deposit')">💰 新客訂金待登記 <span id="todo-cnt-deposit" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
       <div class="inner-tab" onclick="switchTodoTab(this,'todo-carry')">🔄 打樣回溯台帳 <span id="todo-cnt-carry" style="display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:#b0a89c;color:#fff;font-size:11px;font-weight:700;text-align:center;margin-left:3px">0</span></div>
     </div>
     <div id="todo-samples" class="todo-sec"></div>
     <div id="todo-deals" class="todo-sec" style="display:none"></div>
     <div id="todo-reqs" class="todo-sec" style="display:none"></div>
     <div id="todo-carry" class="todo-sec" style="display:none"></div>
+    <div id="todo-deposit" class="todo-sec" style="display:none"></div>
   </div>
 </div>
 
@@ -2904,12 +2906,9 @@ async function settleSalesMonth(){
   const nm=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
   const salesEmps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
   if(!salesEmps.length){showToast('沒有在職業務人員');return;}
-  const {data:ordersInMonth}=await sb.from('orders')
-    .select('id,sales_id,customer_name,unit_price,total_qty,payment_received_at,is_refunded')
-    .gte('order_date',start).lt('order_date',nm);
-  // 政策 B：全公司首次成交 — 客戶第一次出現就只算一次新客，後續換業務不再算
-  const {data:priorOrders}=await sb.from('orders').select('customer_name').lt('order_date',start);
-  const priorCustomers=new Set((priorOrders||[]).map(o=>o.customer_name));
+  // 新客：客戶在訂單簿的第一張訂單（全公司首次成交，政策 B），且訂金收款日落在本月 → 本月認列、次月發放
+  // 2026-09-25 改寫：原讀 orders 表（從未使用、恆為空），新客獎金永遠算成 0
+  const _nc=(await _newClientFirstOrders()).filter(o=>o.deposit_paid_at && o.deposit_paid_at>=start && o.deposit_paid_at<nm);
   // 出貨金額：改吃會計銷貨明細 sales_records（按業務員名對應員工），取代舊 shipments
   const {data:salesRecs}=await sb.from('sales_records').select('sales_person,amount,item_name_raw,product_code').eq('year',y).eq('month',m);
   const salesAliasMap={};
@@ -2921,14 +2920,12 @@ async function settleSalesMonth(){
   // 當月新客戶集合（避免同月內同客戶被多筆訂單算重複）
   const monthNewCustomers=new Set();
   const ncByEmp={}; const amtByEmp={};
-  (ordersInMonth||[]).forEach(o=>{
-    if(!o.sales_id||o.is_refunded||!o.payment_received_at)return;
-    // 政策 B：客戶須是「全公司歷史第一次」且當月也只算一次
-    if(priorCustomers.has(o.customer_name))return;
-    if(monthNewCustomers.has(o.customer_name))return;
-    monthNewCustomers.add(o.customer_name);
-    if(!ncByEmp[o.sales_id])ncByEmp[o.sales_id]=new Set();
-    ncByEmp[o.sales_id].add(o.customer_name);
+  _nc.forEach(o=>{
+    const empId=salesAliasMap[(o.sales_person||'').trim()];
+    if(!empId){ unmatchedSales['新客:'+(o.sales_person||'未填業務')]=(unmatchedSales['新客:'+(o.sales_person||'未填業務')]||0); return; }
+    if(monthNewCustomers.has(o.custKey)) return;
+    monthNewCustomers.add(o.custKey);
+    (ncByEmp[empId]=ncByEmp[empId]||new Set()).add(o.customer);
   });
   // 業務出貨金額同樣排除 PIF／已開票／代購／原料調度（協理 2026-07-04 裁示：PIF 全部門不計入獎金）
   const excByEmp={}; let excTotal=0;
@@ -2968,7 +2965,7 @@ async function settleSalesMonth(){
       new_client_count:ncCount,new_client_bonus:ncBonus,
       ship_amount:amt,ship_ratio:ratio,ship_bonus:shipBonus,
       total_bonus:total,status:'paid',
-      note:pr.note||null,settled_by:currentUser.id,
+      note:[pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
     results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
@@ -3863,22 +3860,52 @@ async function loadTodoCenter(){
     sb.from('rd_monthly_settlement').select('year,month,sample_count,carryover_deadline,employees(name)').eq('status','pending_carryover').order('carryover_deadline')
   ]);
   const sD=smp.data||[], dD=dl.data||[], rD=rq.data||[], cD=cy.data||[];
-  const nS=sD.length, nD=dD.length, nR=rD.length, nC=cD.length, total=nS+nD+nR+nC;
+  const pD=await _pendingDepositOrders();
+  const nS=sD.length, nD=dD.length, nR=rD.length, nC=cD.length, nP=pD.length, total=nS+nD+nR+nC+nP;
   if(dot){ dot.style.display=total>0?'':'none'; dot.textContent=total; }
   if(badge) badge.style.opacity=total>0?'1':'.55';
   const setCnt=(id,v)=>{const e=document.getElementById(id); if(e){e.textContent=v; e.style.background=v>0?'#e5484d':'#b0a89c';}};
-  setCnt('todo-cnt-samples',nS); setCnt('todo-cnt-deals',nD); setCnt('todo-cnt-reqs',nR); setCnt('todo-cnt-carry',nC);
+  setCnt('todo-cnt-samples',nS); setCnt('todo-cnt-deals',nD); setCnt('todo-cnt-reqs',nR); setCnt('todo-cnt-carry',nC); setCnt('todo-cnt-deposit',nP);
   const jump=(kind,label)=>`<button class="btn btn-gold btn-sm" onclick="gotoTodo('${kind}')" style="margin-bottom:10px">前往處理 →（${label}）</button>`;
   const empty='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">目前沒有</div></div>';
   const segLabel={primary:'主責50%',sampling:'打樣30%',confirm:'確樣20%',collaborator:'協作',oem:'代工100%'};
   const secS=document.getElementById('todo-samples'); if(secS) secS.innerHTML = jump('samples','研發打樣審核') + (nS? `<table><thead><tr><th>打樣日</th><th>編號</th><th>品項</th><th>研發</th><th>延遲</th><th>原因</th></tr></thead><tbody>${sD.map(s=>`<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong></td><td>${s.item_name||'—'}</td><td>${s.employees?.name||'-'}</td><td>${s.delay_days||0}天</td><td>${s.edit_reason||s.approval_reason||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
   const secD=document.getElementById('todo-deals'); if(secD) secD.innerHTML = jump('deals','成交獎金覆核') + (nD? `<table><thead><tr><th>正式編號</th><th>段別</th><th>領獎人</th><th class="td-right">金額</th><th>認列日</th></tr></thead><tbody>${dD.map(d=>`<tr><td>${d.official_product_code||'—'}</td><td>${segLabel[d.segment]||d.segment}</td><td>${d.employees?.name||'待指定'}</td><td class="td-right">${fmt(d.amount||0)}</td><td>${(d.recognized_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
   const secR=document.getElementById('todo-reqs'); if(secR) secR.innerHTML = jump('reqs','改綁／取消申請') + (nR? `<table><thead><tr><th>類型</th><th>正式編號</th><th>客戶</th><th>申請日</th></tr></thead><tbody>${rD.map(q=>`<tr><td>${q.action==='cancel'?'取消確樣':'改綁'}</td><td>${q.official_product_code||q.src?.official_product_code||'—'}</td><td>${q.src?.rd_customers?.short_name||'—'}</td><td>${(q.requested_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>` : empty);
+  const secP=document.getElementById('todo-deposit'); if(secP) secP.innerHTML = `<div class="info-box" style="font-size:12px;margin-bottom:8px">新客戶的第一張訂單，收到訂金後在此登記收款日。<b>新客獎金＝訂金收款當月認列、次月發放</b>（業務部制度第二章；2026-09-25 協理裁示）。登記後即從待辦消失，業務月結算自動帶入。</div>` + (nP? `<table><thead><tr><th>客戶</th><th>訂單編號</th><th>簽單日</th><th>業務</th><th class="td-right">訂單金額</th><th>訂金收款日</th><th></th></tr></thead><tbody>${pD.map(o=>`<tr><td>${esc2(o.customer)}</td><td style="font-size:12px">${esc2(o.order_no)}</td><td style="font-size:12px">${esc2(o.sign_date||'—')}</td><td>${esc2(o.sales_person||'—')}</td><td class="td-right">${Math.round(o.amount).toLocaleString()}</td><td><input type="date" class="form-input" style="width:auto;font-size:12px" id="dep-${esc2(o.order_no)}"></td><td><button class="btn btn-gold btn-sm" onclick="saveDeposit('${esc2(o.order_no)}')">登記</button></td></tr>`).join('')}</tbody></table>` : empty);
   const secC=document.getElementById('todo-carry'); if(secC) secC.innerHTML = jump('carry','研發打樣月結回溯') + (nC? `<table><thead><tr><th>研發</th><th>月份</th><th>件數</th><th>回溯期限</th></tr></thead><tbody>${cD.map(c=>`<tr><td>${c.employees?.name||'-'}</td><td>${c.year}-${String(c.month).padStart(2,'0')}</td><td>${c.sample_count||0}</td><td>${c.carryover_deadline||'—'}</td></tr>`).join('')}</tbody></table>` : empty);
 }
 function switchTodoTab(el,id){
   el.closest('.inner-tabs').querySelectorAll('.inner-tab').forEach(t=>t.classList.remove('active')); el.classList.add('active');
-  ['todo-samples','todo-deals','todo-reqs','todo-carry'].forEach(s=>{const e=document.getElementById(s); if(e)e.style.display=(s===id)?'block':'none';});
+  ['todo-samples','todo-deals','todo-reqs','todo-carry','todo-deposit'].forEach(s=>{const e=document.getElementById(s); if(e)e.style.display=(s===id)?'block':'none';});
+}
+// ===== 新客訂金登記（2026-09-25）=====
+// 只追蹤 2026-08 起「新客戶的第一張訂單」；更早的客戶都已成交多次，不再列待辦
+const DEPOSIT_TRACK_FROM='2026-08-01';
+async function _newClientFirstOrders(){
+  const {data}=await sb.from('order_lines').select('order_no, sign_date, customer_name, sales_person, amount, deposit_paid_at').order('sign_date',{ascending:true});
+  const first={};   // 客戶 → 最早簽單日
+  (data||[]).forEach(l=>{ const k=_custKey(l.customer_name); if(!k||!l.sign_date) return; if(!first[k]||l.sign_date<first[k]) first[k]=l.sign_date; });
+  const byOrder={};
+  (data||[]).forEach(l=>{
+    const k=_custKey(l.customer_name); if(!k||!l.order_no||l.sign_date!==first[k]) return;
+    const o=byOrder[l.order_no]=byOrder[l.order_no]||{order_no:l.order_no, sign_date:l.sign_date, customer:l.customer_name, custKey:k, sales_person:l.sales_person, amount:0, deposit_paid_at:null};
+    o.amount+=Number(l.amount||0); if(l.deposit_paid_at) o.deposit_paid_at=l.deposit_paid_at;
+  });
+  // 同一新客同一天若有兩張單，只取一張（新客獎金一客只發一次）
+  const seen=new Set();
+  return Object.values(byOrder).sort((a,b)=>(a.order_no||'').localeCompare(b.order_no||'')).filter(o=>{ if(seen.has(o.custKey)) return false; seen.add(o.custKey); return true; });
+}
+async function _pendingDepositOrders(){
+  return (await _newClientFirstOrders()).filter(o=>o.sign_date>=DEPOSIT_TRACK_FROM && !o.deposit_paid_at);
+}
+async function saveDeposit(orderNo){
+  const d=document.getElementById('dep-'+orderNo)?.value;
+  if(!d){ showToast('請先選訂金收款日'); return; }
+  const {error}=await sb.from('order_lines').update({deposit_paid_at:d, deposit_note:`協理登記 ${new Date().toISOString().slice(0,10)}`}).eq('order_no',orderNo);
+  if(error){ showToast('登記失敗：'+error.message); return; }
+  showToast(`✓ ${orderNo} 訂金收款日 ${d} 已登記（新客獎金於 ${d.slice(0,7)} 認列、次月發放）`);
+  loadTodoCenter();
 }
 async function openTodoCenter(){ await loadTodoCenter(); openModal('todoCenterModal'); }
 function gotoTodo(kind){
@@ -6007,7 +6034,7 @@ async function loadPayoutSummary(){
   const agg={};   // name -> {dept, role, deal, sampling, dept_bonus, team, total, defer}
   const put=(name,dept,role,field,amt)=>{
     if(!name) return;
-    const a=agg[name]=agg[name]||{name,dept:dept||'',role:role||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
+    const a=agg[name]=agg[name]||{name,dept:dept||'',role:role||'',deal:0,sampling:0,sales:0,dept_bonus:0,team:0,defer:0};
     if(dept&&!a.dept)a.dept=dept; if(role&&!a.role)a.role=role;
     a[field]+=Number(amt)||0;
   };
@@ -6025,6 +6052,11 @@ async function loadPayoutSummary(){
     if(r.status==='paid') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'sampling', r.base_bonus);
     else if(r.status==='pending_carryover') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'defer', r.base_bonus);
   });
+  // 2-2) 業務部：月獎金（新客＋出貨，當季三個月）與季達標獎金（2026-09-25 補：原總表完全沒讀這兩張表）
+  const {data:smm}=await sb.from('sales_monthly_settlement').select('total_bonus, month, employees(name, dept, role_title)').eq('year',yr).in('month',qm);
+  (smm||[]).forEach(r=>put(r.employees?.name, r.employees?.dept||'業務部', r.employees?.role_title, 'sales', r.total_bonus));
+  const {data:sqq}=await sb.from('sales_quarterly_settlement').select('achievement_bonus, employees(name, dept, role_title)').eq('year',yr).eq('quarter',q);
+  (sqq||[]).forEach(r=>put(r.employees?.name, r.employees?.dept||'業務部', r.employees?.role_title, 'dept_bonus', r.achievement_bonus));
   // 3) 其他部門季獎金／團隊加成
   const {data:br}=await sb.from('bonus_records').select('*').eq('year',yr).eq('quarter',q);
   (br||[]).forEach(r=>put(r.name, r.dept, r.role_title, r.record_type==='team_bonus'?'team':'dept_bonus', r.bonus));
@@ -6042,7 +6074,7 @@ async function loadPayoutSummary(){
     const k=r.sample_date.slice(0,7);
     (sampByMonth[r.employee_id]=sampByMonth[r.employee_id]||{})[k]=(sampByMonth[r.employee_id][k]||0)+1; });
   employees.filter(e=>e.is_active).forEach(e=>{
-    const a=agg[e.name]=agg[e.name]||{name:e.name,dept:e.dept||'',role:e.role_title||'',deal:0,sampling:0,dept_bonus:0,team:0,defer:0};
+    const a=agg[e.name]=agg[e.name]||{name:e.name,dept:e.dept||'',role:e.role_title||'',deal:0,sampling:0,sales:0,dept_bonus:0,team:0,defer:0};
     if(!a.dept)a.dept=e.dept||''; if(!a.role)a.role=e.role_title||'';
     a.empId=e.id; a.probation_end_date=e.probation_end_date;
   });
@@ -6063,7 +6095,7 @@ async function loadPayoutSummary(){
     }
     return '本季尚未結算，或結算結果為 0（請確認該部門是否已完成結算）';
   };
-  _payoutRows=Object.values(agg).map(a=>({...a, total:a.deal+a.sampling+a.dept_bonus+a.team}))
+  _payoutRows=Object.values(agg).map(a=>({...a, total:a.deal+a.sampling+a.sales+a.dept_bonus+a.team}))
     .map(a=>({...a, zeroReason: a.total>0?'':reasonOf(a)}))
     .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.total-a.total);
   renderPayoutSummary();
@@ -6081,21 +6113,23 @@ function renderPayoutSummary(){
   for(const [dept,rows] of Object.entries(byDept)){
     const sub=rows.reduce((s,r)=>s+r.total,0);
     const isRd=dept==='研發部';   // 成交/打樣獎金為研發部專屬，其他部門不列這兩欄
+    const isSales=dept==='業務部'; // 業務月獎金（新客＋出貨）為業務部專屬
     html+=`<div style="margin-bottom:14px">
       <div style="font-weight:600;margin-bottom:6px;color:var(--ink)">${esc2(dept)}　<span style="font-size:12px;color:var(--ink-faint)">小計 ${sub.toLocaleString()} 元　·　${rows.filter(r=>r.total>0).length}/${rows.length} 人有獎金</span></div>
-      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}<th class="td-right">部門季獎金</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
+      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}${isSales?'<th class="td-right">業務月獎金（新客＋出貨）</th>':''}<th class="td-right">${isSales?'季達標獎金':'部門季獎金'}</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
       ${rows.map(r=>r.total>0?`<tr>
         <td style="font-weight:500">${esc2(r.name)}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
         ${isRd?`<td class="td-right">${r.deal?r.deal.toLocaleString():'—'}</td>
         <td class="td-right">${r.sampling?r.sampling.toLocaleString():'—'}${r.defer?`<div style="font-size:10px;color:#b3541e">暫緩 ${r.defer.toLocaleString()}</div>`:''}</td>`:''}
+        ${isSales?`<td class="td-right">${r.sales?r.sales.toLocaleString():'—'}</td>`:''}
         <td class="td-right">${r.dept_bonus?r.dept_bonus.toLocaleString():'—'}</td>
         <td class="td-right">${r.team?r.team.toLocaleString():'—'}</td>
         <td class="td-right"><b>${r.total.toLocaleString()}</b></td></tr>`
       :`<tr style="background:var(--surface-3)">
         <td style="font-weight:500;color:var(--ink-faint)">${esc2(r.name)}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
-        <td colspan="${isRd?4:2}" style="font-size:12px;color:var(--ink-faint)">${esc2(r.zeroReason||'')}</td>
+        <td colspan="${isRd?4:isSales?3:2}" style="font-size:12px;color:var(--ink-faint)">${esc2(r.zeroReason||'')}</td>
         <td class="td-right"><span class="badge badge-gray">本季無</span></td></tr>`).join('')}
       </tbody></table></div>`;
   }
@@ -6108,11 +6142,11 @@ function renderPayoutSummary(){
 }
 function exportPayoutCSV(){
   if(!_payoutRows.length){showToast('本季無可發放獎金');return;}
-  const head=['部門','姓名','職稱','成交獎金','打樣獎金','部門季獎金','團隊加成／分潤','應發合計','暫緩累積','本季無獎金之原因'];
+  const head=['部門','姓名','職稱','成交獎金','打樣獎金','業務月獎金（新客＋出貨）','部門季獎金／業務季達標','團隊加成／分潤','應發合計','暫緩累積','本季無獎金之原因'];
   const lines=[head.join(',')].concat(_payoutRows.map(r=>
-    [r.dept,r.name,r.role,r.deal,r.sampling,r.dept_bonus,r.team,r.total,r.defer,r.zeroReason||''].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')));
+    [r.dept,r.name,r.role,r.deal,r.sampling,r.sales,r.dept_bonus,r.team,r.total,r.defer,r.zeroReason||''].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')));
   const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
-  lines.push(['','','','','','','合計',grand,'',''].map(v=>`"${v}"`).join(','));
+  lines.push(['','','','','','','','合計',grand,'',''].map(v=>`"${v}"`).join(','));
   const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
