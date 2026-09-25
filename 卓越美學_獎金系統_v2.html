@@ -730,7 +730,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <tr><td>300 萬 – 500 萬</td><td class="td-right">10,000 元</td></tr>
               <tr><td>500 萬 – 700 萬</td><td class="td-right">15,000 元</td></tr>
               <tr><td>700 萬 – 900 萬</td><td class="td-right">20,000 元</td></tr>
-              <tr><td>超過 900 萬</td><td class="td-right">25,000 元</td></tr>
+              <tr><td>900 萬 – 1,000 萬</td><td class="td-right">25,000 元</td></tr>
+              <tr><td>1,000 萬 – 1,500 萬</td><td class="td-right">30,000 元</td></tr>
+              <tr><td>1,500 萬 – 2,000 萬</td><td class="td-right">35,000 元</td></tr>
+              <tr><td>2,000 萬 – 3,000 萬</td><td class="td-right">40,000 元</td></tr>
+              <tr><td>3,000 萬 – 5,000 萬</td><td class="td-right">56,000 元</td></tr>
+              <tr><td>5,000 萬以上</td><td class="td-right">66,000 元</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -3019,7 +3024,13 @@ async function settleSalesQuarter(){
     else if(rev<5000000){bonus=10000;label='300–500 萬';}
     else if(rev<7000000){bonus=15000;label='500–700 萬';}
     else if(rev<9000000){bonus=20000;label='700–900 萬';}
-    else{bonus=25000;label='超過 900 萬';}
+    // 2026-09-26 協理裁示延伸級距（業務制度 v1 確認版第四章）
+    else if(rev<10000000){bonus=25000;label='900–1,000 萬';}
+    else if(rev<15000000){bonus=30000;label='1,000–1,500 萬';}
+    else if(rev<20000000){bonus=35000;label='1,500–2,000 萬';}
+    else if(rev<30000000){bonus=40000;label='2,000–3,000 萬';}
+    else if(rev<50000000){bonus=56000;label='3,000–5,000 萬';}
+    else{bonus=66000;label='5,000 萬以上';}
     if(rev===0){
       results.push({name:emp.name,rev:0,bonus:0,label:'— 無回款',status:'—'});continue;
     }
@@ -4600,7 +4611,7 @@ async function generateSalesConfirmSheets(kind){
       ${isMonth?'':`<h2>三、季度回款達標獎金</h2>
       ${sq?`<table><tbody><tr><td>本季回款金額</td><td class="r">${Math.round(Number(sq.paid_revenue||0)).toLocaleString()}</td></tr><tr><td>級距</td><td class="r">${esc2(sq.level_label||'')}</td></tr><tr><td>回款達標獎金</td><td class="r"><b>${fmt(qBonus)}</b></td></tr></tbody></table>`
           :`<table><tbody><tr><td>本季回款金額</td><td class="r">回款資料建置中</td></tr><tr><td>回款達標獎金</td><td class="r">待回款資料到位後結算</td></tr></tbody></table>`}
-      <p class="note">以個人當季回款金額計（客戶實際付款入帳，已出貨未收款不計）：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900 萬以上 25,000。</p>`}
+      <p class="note">以個人當季回款金額計（客戶實際付款入帳，已出貨未收款不計）：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900–1,000 萬 25,000｜1,000–1,500 萬 30,000｜1,500–2,000 萬 35,000｜2,000–3,000 萬 40,000｜3,000–5,000 萬 56,000｜5,000 萬以上 66,000。</p>`}
       <h2>${isMonth?'三、本月合計':'四、本季合計'}</h2>
       <table><tbody>
         <tr><td>新客獎金</td><td class="r">${fmt(ncTot)}</td></tr>
