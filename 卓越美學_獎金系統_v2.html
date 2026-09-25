@@ -5654,9 +5654,13 @@ async function matchSalesToOrders(){
     //     2026-09-25 新增。先進先出在訂單母體缺一張時會連鎖錯位（電眼熨斗霜案：1/20 的貨吃掉 1/19 的單，
     //     使 4/30+5/21 那批無單可綁，Q2 少算 1 件）。生管出貨單本來就寫了訂購日，直接用它最準。
     if(!pick && s.source_order_date){
-      const exact=(byCode[s.product_code]||[]).filter(o=>o.sign_date===s.source_order_date);
-      if(exact.length) pick=exact[0];
-      else { _orderAmbiguous.push({...s, reason:`出貨單記載訂購日 ${s.source_order_date}，但系統查無該日期的同編號訂單`}); continue; }
+      const _d=x=>Math.abs((new Date(x)-new Date(s.source_order_date))/86400000);
+      const cands2=(byCode[s.product_code]||[]).filter(o=>o.sign_date && _d(o.sign_date)<=30);
+      // 出貨單與訂購單的訂購日常有數天登打落差（實測 1～18 天），故取「最接近」而非完全相同；
+      // 同樣接近時優先給尚未達 80% 的那張。
+      const openC=cands2.filter(o=>(cumq[o.id]||0) < o.order_qty*0.8);
+      const usable=(openC.length?openC:cands2).slice().sort((a,b)=>_d(a.sign_date)-_d(b.sign_date));
+      if(usable.length) pick=usable[0];
     }
     if(!pick){
       // 2 訂購日 FIFO：同 code、訂購日<=出貨日、尚未達80% 的最舊訂單
