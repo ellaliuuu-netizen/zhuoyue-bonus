@@ -4382,9 +4382,9 @@ async function generateDeptConfirmSheets(dept){
   const itemRows = (lines||[]).map((l,i)=>`<tr><td class="c">${i+1}</td><td>${l.product_code}</td><td>${pname(l.product_code)||l.item_name_raw||''}</td><td>${l.customer_name||''}</td><td class="r">${(l.order_qty||0).toLocaleString()}</td><td class="r">${(l.shipped_qty||0).toLocaleString()}</td><td class="c">${l.bonus_settled_month} 月</td></tr>`).join('');
   const DISPUTE = (n)=>`<h2>${n}、確認與異議處理程序</h2>
       <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
-        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 7 個日曆日</td></tr>
+        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 2 日內</td></tr>
         <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
-        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 10 個工作日</td></tr>
+        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 3 日內</td></tr>
         <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
         <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
       </tbody></table>
@@ -4455,7 +4455,7 @@ async function generateDeptConfirmSheets(dept){
         ${addon?`<tr><td>主管加給（協理個案核給，不受試用期比例影響）</td><td class="r">${fmt(addon)}</td></tr>`:''}
       </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
       ${DISPUTE(sumSec+1)}
-      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 7 日內提出。
+      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 日內提出。
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
@@ -4531,15 +4531,15 @@ async function generatePurConfirmSheets(){
 
       <h2>${supplement?'五':'四'}、確認與異議處理程序</h2>
       <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
-        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 7 個日曆日</td></tr>
+        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 2 日內</td></tr>
         <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
-        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 10 個工作日</td></tr>
+        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 3 日內</td></tr>
         <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
         <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
       </tbody></table>
       <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正，不因異議而延後發放。</p>
 
-      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 7 日內提出。
+      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 日內提出。
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
@@ -5332,6 +5332,15 @@ async function generateRdConfirmSheets(){
           `<div style="font-size:12px;color:#555;margin-bottom:2px">${parts.join('　＋　')}</div>`+
           `<div style="font-size:15px;font-weight:700">本季實計合計：${grand.toLocaleString()} 元</div></div>`;})()}
       ${e.role_level==='assistant'?'':allTable}
+      <h2>確認與異議處理程序</h2>
+      <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
+        <tr><td class="c">1</td><td>同仁核對本表之打樣件數、成交段別歸屬與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 2 日內</td></tr>
+        <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
+        <tr><td class="c">3</td><td>協理就異議項目調閱原始紀錄核對：打樣登錄紀錄、確樣紀錄與段別拆分、出貨認列資料</td><td class="c">收到異議起 3 日內</td></tr>
+        <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
+        <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
+      </tbody></table>
+      <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正，不因異議而延後發放。</p>
       <div class="cbox"><p><b>本人確認：</b>${e.role_level==='assistant'?'以上全團隊成交池之 5% 分潤金額與實際情況相符':`以上打樣件數、成交三段歸屬（主責／打樣／確樣）${e.role_level==='manager'?'與團隊加成':''}與實際情況相符`}；附表所列品項中，凡我有參與者均已正確列名。如有錯誤請於下方註明。</p>
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
