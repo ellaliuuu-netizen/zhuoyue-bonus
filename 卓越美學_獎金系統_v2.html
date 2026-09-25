@@ -624,8 +624,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>品名</th><th>本次件數</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
-            <tbody id="shipments-tbody"><tr><td colspan="8" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
+            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>產品編號</th><th>品名</th><th>本次件數</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
+            <tbody id="shipments-tbody"><tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -2759,7 +2759,7 @@ async function loadShipments() {
   const data = (recs || []).map(r => {
     const m = ordMap[key(r.product_code)] || { total: 0, shipped: 0, n: 0, done: 0 };
     return {
-      id: r.id, ship_date: r.ship_date, shipment_no: r.invoice_no,
+      id: r.id, ship_date: r.ship_date, shipment_no: r.invoice_no, product_code: r.product_code,
       ship_qty: r.qty || 0, is_on_time: true, is_refunded: (r.qty || 0) < 0,
       _totalShipped: m.shipped, _total: m.total, _ord: m,
       order: { customer_name: r.customer_name, product_name: r.item_name_raw, total_qty: m.total }
@@ -2769,7 +2769,7 @@ async function loadShipments() {
   if (!data.length) {
     // 銷貨明細含金額，讀取政策僅開放協理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
     const noPerm = currentRole === 'rd_manager';
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
     return;
   }
 
@@ -2782,6 +2782,7 @@ async function loadShipments() {
       <td>${s.ship_date}</td>
       <td style="font-size:12px;color:var(--ink-faint)">${s.shipment_no||'—'}</td>
       <td>${s.order?.customer_name||'—'}</td>
+      <td style="font-size:12px;white-space:nowrap">${s.product_code||'<span style="color:#b3541e">未對應</span>'}</td>
       <td>${s.order?.product_name||'—'}</td>
       <td class="td-right">${fmtNum(s.ship_qty)}</td>
       <td>${!total?'<span style="color:var(--ink-faint);font-size:11px">查無對應訂單</span>'
@@ -5879,7 +5880,7 @@ const _RAW_MATERIAL_KEYWORDS=['lipobelle','奈米冰川水'];
 // 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
   const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date');
-  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, source_order_date, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter').not('product_code','is',null).neq('new_or_repeat','其他');
+  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, source_order_date, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter').not('product_code','is',null).or('new_or_repeat.is.null,new_or_repeat.neq.其他');  // ⛔ 勿改回 .neq：neq 會把 NULL 一起濾掉（2026-09-25 自動匯入的 9 月銷貨因此整批沒配對、訂單進度顯示 0%）
   const matched={}; _orderAmbiguous=[]; _orderExcluded=[];
   const cumq={};   // ol.id -> 已累計量（FIFO 判斷是否已滿）
   const byCode={}; // code -> [ol]
@@ -6227,7 +6228,7 @@ async function confirmImportStaging(batch){
     const d=r.ship_date||''; const mo=Number(d.slice(5,7))||0;
     return {import_batch:'AUTO-'+batch, customer_name:r.customer_name, item_name_raw:r.item_name_raw,
       product_code:r.product_code||null, qty:r.qty, unit_price:r.unit_price, amount:r.amount,
-      sales_person:r._rep, ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
+      sales_person:r._rep, new_or_repeat:'', ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
       year:Number(d.slice(0,4))||null, month:mo||null,
       quarter:mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null};
   });
