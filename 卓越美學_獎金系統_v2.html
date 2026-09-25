@@ -687,8 +687,20 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-primary manager-only" onclick="settleSalesMonth()">執行結算</button>
               </div>
             </div>
-            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（首次訂單且已記錄回款）→ ×1,500 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
+            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（全公司首次訂單，且訂金收款日落在該月；訂金在「🔔待辦→新客訂金待登記」登記）→ ×1,500，次月發放 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
             <div id="sales-m-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
+          </div>
+          <div class="card manager-only" style="border-color:#7a5c3d">
+            <div class="card-header">
+              <div class="card-title">🖨️ 個人獎金確認表</div>
+              <div>
+                <select class="form-select" id="sales-sheet-q" style="width:auto;display:inline-block;margin-right:6px">
+                  <option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3" selected>Q3</option><option value="Q4">Q4</option>
+                </select>
+                <button class="btn btn-outline btn-sm" onclick="generateSalesConfirmSheets()">產生確認表</button>
+              </div>
+            </div>
+            <div class="info-box">產出該季業務部個人明細：新客獎金（客戶／訂單／訂金入帳日／認列月／發放時間）＋逐月出貨獎金（計獎金額、排除金額、級距）＋季達標＋合計＋異議處理程序＋簽收欄。資料直接取自訂單簿與會計銷貨明細。</div>
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
             <table><thead><tr><th>出貨金額</th><th class="td-right">比例</th></tr></thead><tbody>
@@ -4502,6 +4514,101 @@ async function generateDeptConfirmSheets(dept){
   const w=window.open('','_blank');
   if(!w){showToast('請允許彈出視窗後再試');return;}
   w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${dept}個人獎金確認表 ${yr}${qq}</title>${css}</head><body><div class="tb"><button onclick="window.print()">🖨️ 列印 / 存 PDF</button></div>${pages}</body></html>`);
+  w.document.close();
+}
+
+// ===== 業務部個人獎金確認表（2026-09-25 新增，比照其他部門格式）=====
+// 直接由訂單簿（新客＋訂金入帳日）與會計銷貨明細（出貨金額）計算，不依賴是否已按過月結算，避免漏結的月份在表上消失
+async function generateSalesConfirmSheets(){
+  const yr=appSettings.year, qq=document.getElementById('sales-sheet-q').value;
+  const qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[qq];
+  const qStart=`${yr}-${String(qm[0]).padStart(2,'0')}-01`;
+  const eM=qm[2]===12?1:qm[2]+1, eY=qm[2]===12?yr+1:yr, qEnd=`${eY}-${String(eM).padStart(2,'0')}-01`;
+  const emps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
+  if(!emps.length){ showToast('沒有在職業務人員'); return; }
+  const keysOf=e=>[e.name,e.csv_sales_alias].filter(Boolean).map(x=>x.trim());
+  const ncAll=await _newClientFirstOrders();
+  const {data:recs}=await sb.from('sales_records').select('ship_date,invoice_no,customer_name,item_name_raw,product_code,qty,amount,sales_person,month').eq('year',yr).in('month',qm).order('ship_date');
+  const {data:sqs}=await sb.from('sales_quarterly_settlement').select('*').eq('year',yr).eq('quarter',qq);
+  const ncUnit=appSettings.newClientBonus||1500;
+  const tierOf=a=>a>=4000000?[0.0035,'0.35%']:a>=2000000?[0.0028,'0.28%']:a>=1000000?[0.0022,'0.22%']:a>=500000?[0.0018,'0.18%']:[0.0015,'0.15%'];
+  const nextYm=d=>{const [y,m]=d.slice(0,7).split('-').map(Number); return m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;};
+  const DISPUTE=(n)=>`<h2>${n}、確認與異議處理程序</h2>
+    <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
+      <tr><td class="c">1</td><td>同仁核對本表之新客、出貨金額與獎金；如有疑義，於「異議／補充」欄具體載明客戶、訂單或出貨後交回</td><td class="c">收到起 2 個工作日內</td></tr>
+      <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
+      <tr><td class="c">3</td><td>協理就異議項目調閱原始單據核對：訂購確認單、訂金入帳紀錄、會計銷貨開發票明細</td><td class="c">收到異議起 3 個工作日內</td></tr>
+      <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
+      <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
+    </tbody></table>
+    <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正，不因異議而延後發放。</p>`;
+  let pages='';
+  for(const e of emps){
+    const keys=keysOf(e);
+    const mine=ncAll.filter(o=>keys.includes((o.sales_person||'').trim()));
+    const ncIn=mine.filter(o=>o.deposit_paid_at && o.deposit_paid_at>=qStart && o.deposit_paid_at<qEnd);
+    const ncWait=mine.filter(o=>!o.deposit_paid_at && o.sign_date>=DEPOSIT_TRACK_FROM && o.sign_date<qEnd);
+    const ncTot=ncIn.length*ncUnit;
+    const ncRows=ncIn.map(o=>`<tr><td>${esc2(o.customer)}</td><td style="font-size:11px">${esc2(o.order_no)}</td><td>${esc2(o.sign_date||'')}</td><td>${esc2(o.deposit_paid_at)}</td><td class="c">${o.deposit_paid_at.slice(5,7)*1} 月</td><td class="c">${nextYm(o.deposit_paid_at).slice(5)*1} 月</td><td class="r">${fmt(ncUnit)}</td></tr>`).join('')
+      + ncWait.map(o=>`<tr style="color:#999"><td>${esc2(o.customer)}</td><td style="font-size:11px">${esc2(o.order_no)}</td><td>${esc2(o.sign_date||'')}</td><td colspan="3">訂金尚未入帳：入帳當月認列、次月發放</td><td class="r">—</td></tr>`).join('');
+    // 出貨：逐月、依業務歸屬；排除規則與月結算、研發認列同一套
+    const mRecs=(recs||[]).filter(r=>keys.includes((r.sales_person||'').trim()));
+    let shipTot=0; const monthRows=[]; const detail=[];
+    for(const m of qm){
+      const rs=mRecs.filter(r=>r.month===m);
+      let amt=0, exc=0;
+      rs.forEach(r=>{ const ex=saleExcludeReason(r); if(ex){ exc+=Number(r.amount||0); detail.push({...r,ex}); } else { amt+=Number(r.amount||0); detail.push(r);} });
+      const [ratio,lab]=tierOf(amt); const b=amt>0?Math.round(amt*ratio):0; shipTot+=b;
+      monthRows.push(`<tr><td>${m} 月</td><td class="r">${Math.round(amt).toLocaleString()}</td><td class="r" style="color:#999">${exc?Math.round(exc).toLocaleString():'—'}</td><td class="c">${amt>0?lab:'—'}</td><td class="r">${fmt(b)}</td></tr>`);
+    }
+    const detRows=detail.map(r=>`<tr${r.ex?' style="color:#999"':''}><td>${esc2(r.ship_date||'')}</td><td style="font-size:11px">${esc2(r.invoice_no||'')}</td><td>${esc2(r.customer_name||'')}</td><td style="font-size:11px">${esc2(r.product_code||'')}</td><td>${esc2(r.item_name_raw||'')}</td><td class="r">${Number(r.qty||0).toLocaleString()}</td><td class="r">${Math.round(Number(r.amount||0)).toLocaleString()}</td><td style="font-size:11px">${r.ex?esc2(r.ex):''}</td></tr>`).join('');
+    const sq=(sqs||[]).find(x=>x.employee_id===e.id);
+    const qBonus=sq?Number(sq.achievement_bonus||0):0;
+    const pr=(()=>{ const sv=appSettings.quarter; appSettings.quarter=qq; const r=probationRatio(e); appSettings.quarter=sv; return r; })();   // 以表單所選季度計
+    const base=ncTot+shipTot+qBonus, final=Math.round(base*pr.ratio);
+    const early=ncIn.filter(o=>nextYm(o.deposit_paid_at)<=`${yr}-${String(qm[2]).padStart(2,'0')}`);
+    pages+=`<section class="sheet"><h1>業務部個人獎金確認表</h1>
+      <div class="meta">${yr} ${qq}｜${esc2(e.name)}（${esc2(e.role_title||'')}）｜產出日 ${new Date().toISOString().slice(0,10)}</div>
+      <h2>一、新客獎金</h2>
+      <table><thead><tr><th>客戶</th><th>訂單編號</th><th>簽單日</th><th>訂金入帳日</th><th class="c">認列月</th><th class="c">依制度應發月</th><th class="r">獎金</th></tr></thead>
+      <tbody>${ncRows||'<tr><td colspan="7" class="c">本季無新客</td></tr>'}</tbody>
+      <tfoot><tr><td colspan="6">新客獎金小計（${ncIn.length} 位 × ${fmt(ncUnit)}）</td><td class="r">${fmt(ncTot)}</td></tr></tfoot></table>
+      <p class="note">新客＝全公司首次成交之客戶（一客只計一次）；以客戶付清訂金為認列時點，訂金入帳當月認列、次月發放。</p>
+      ${ncIn.length?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>本季新客獎金依制度應於${[...new Set(ncIn.map(o=>nextYm(o.deposit_paid_at).slice(5)*1+' 月'))].join('、')}發放，公司尚未另行撥付，<b>併同本季獎金一次發放</b>，金額不受影響。</p>`:''}
+      <h2>二、出貨獎金（逐月）</h2>
+      <table><thead><tr><th>月份</th><th class="r">計獎出貨金額（未稅）</th><th class="r">不計獎金額</th><th class="c">適用比例</th><th class="r">出貨獎金</th></tr></thead>
+      <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
+      <p class="note">當月出貨金額整筆適用所屬級距比例：50 萬以下 0.15%｜50–100 萬 0.18%｜100–200 萬 0.22%｜200–400 萬 0.28%｜400 萬以上 0.35%。金額以會計銷貨開發票明細為準（會計於出貨當週開立發票，出貨月＝開票月）；PIF、折讓、已開票補列、代購、原料調度不計。</p>
+      ${detRows?`<h2>二之二、本季出貨明細</h2><table><thead><tr><th>出貨日</th><th>發票</th><th>客戶</th><th>編號</th><th>品名</th><th class="r">數量</th><th class="r">金額</th><th>不計原因</th></tr></thead><tbody>${detRows}</tbody></table>`:''}
+      <h2>三、季度達標獎金</h2>
+      ${sq?`<table><tbody><tr><td>本季已回款業績</td><td class="r">${Math.round(Number(sq.paid_revenue||0)).toLocaleString()}</td></tr><tr><td>級距</td><td class="r">${esc2(sq.level_label||'')}</td></tr><tr><td>達標獎金</td><td class="r"><b>${fmt(qBonus)}</b></td></tr></tbody></table>`
+          :`<table><tbody><tr><td>本季已回款業績</td><td class="r">回款資料建置中</td></tr><tr><td>達標獎金</td><td class="r">待回款資料到位後結算</td></tr></tbody></table>`}
+      <p class="note">以個人當季「已回款入帳」業績計：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900 萬以上 25,000。</p>
+      <h2>四、本季合計</h2>
+      <table><tbody>
+        <tr><td>新客獎金</td><td class="r">${fmt(ncTot)}</td></tr>
+        <tr><td>出貨獎金</td><td class="r">${fmt(shipTot)}</td></tr>
+        <tr><td>季度達標獎金</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>
+        ${pr.ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(pr.ratio*100).toFixed(1)}%</td></tr>`:''}
+      </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(final)}</b></td></tr></tfoot></table>
+      ${DISPUTE(5)}
+      <div class="cbox">本人確認：以上新客、出貨金額與獎金之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
+      <p>異議／補充：____________________________________________________</p>
+      <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+  }
+  const css=`<style>@page{size:A4;margin:16mm}body{font-family:"Noto Sans TC",sans-serif;color:#1a1a1a;font-size:13px;line-height:1.6;margin:0}
+    .sheet{page-break-after:always;max-width:720px;margin:0 auto 24px}
+    h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;border-left:4px solid #c99a2e;padding-left:8px}
+    .meta{color:#555;font-size:12px;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin:4px 0}
+    th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px}.r{text-align:right}.c{text-align:center}
+    thead th{background:#f3ede0}tfoot td{font-weight:600;background:#faf7f0}
+    .note{font-size:10px;color:#777;margin:4px 0 0}
+    .cbox{margin-top:16px;border:1px dashed #999;padding:10px 12px;font-size:12px}.sign{margin-top:14px}
+    @media screen{body{background:#eee;padding:20px}.sheet{background:#fff;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.15)}}
+    .tb{position:fixed;top:10px;right:10px}@media print{.tb{display:none}}</style>`;
+  const w=window.open('','_blank');
+  if(!w){showToast('請允許彈出視窗後再試');return;}
+  w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>業務部個人獎金確認表 ${yr}${qq}</title>${css}</head><body><div class="tb"><button onclick="window.print()">🖨️ 列印 / 存 PDF</button></div>${pages}</body></html>`);
   w.document.close();
 }
 
