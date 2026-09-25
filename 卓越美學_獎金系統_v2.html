@@ -4371,7 +4371,7 @@ async function generatePurConfirmSheets(){
       <table><tbody>
         <tr><td>本季計件件數</td><td class="r"><b>${k.ship_count||0} 件</b></td></tr>
         <tr><td>級距計算</td><td class="r">${ship.breakdown||'—'}</td></tr>
-        <tr><td>件數獎金小計</td><td class="r"><b>${fmt(k.ship_bonus||0)} 元</b></td></tr>
+        <tr><td>件數獎金小計</td><td class="r"><b>${fmt(k.ship_bonus||0)}</b></td></tr>
       </tbody></table>
       <p class="note">級距：未達 20 件不發；達標後第 1–20 件每件 100、第 21–35 件 150、第 36–50 件 200、第 51 件起 250。</p>
 
@@ -4384,10 +4384,10 @@ async function generatePurConfirmSheets(){
       <table><thead><tr><th>評分面向</th><th class="c">權重</th><th class="c">得分（1–5）</th></tr></thead><tbody>
         ${WEI.map(([n,w,key])=>`<tr><td>${n}</td><td class="c">${w}%</td><td class="c">${sc[key]!=null?sc[key]:'—'}</td></tr>`).join('')}
       </tbody><tfoot><tr><td>加權總分</td><td class="c">—</td><td class="c">${k.score_total||0} / 100</td></tr>
-        <tr><td>對應級距獎金</td><td class="c">—</td><td class="c"><b>${fmt(k.kpi_bonus||0)} 元</b></td></tr></tfoot></table>
+        <tr><td>對應級距獎金</td><td class="c">—</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
       <p class="note">級距：60 分以下 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。加權總分＝Σ（各項得分 × 權重）÷ 5 × 100。</p>
 
-      ${supplement? `<h2>三、兼任生管補貼</h2><table><tbody><tr><td>本季兼任生管補貼</td><td class="r"><b>${fmt(supplement)} 元</b></td></tr></tbody></table>
+      ${supplement? `<h2>三、兼任生管補貼</h2><table><tbody><tr><td>本季兼任生管補貼</td><td class="r"><b>${fmt(supplement)}</b></td></tr></tbody></table>
       <p class="note">依制度，於正式生管到職後取消。</p>` : ''}
 
       <h2>${supplement?'四':'三'}、本季合計</h2>
@@ -4396,7 +4396,7 @@ async function generatePurConfirmSheets(){
         <tr><td>評分加成</td><td class="r">${fmt(k.kpi_bonus||0)}</td></tr>
         ${supplement?`<tr><td>兼任生管補貼</td><td class="r">${fmt(supplement)}</td></tr>`:''}
         ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
-      </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)} 元</b></td></tr></tfoot></table>
+      </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
 
       <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請於下方註明，交協理覆核。
       <p>異議／補充：____________________________________________________</p>
@@ -5718,6 +5718,9 @@ function saleExcludeReason(s){
   if(nm.includes('代購')) return '代購不計';
   if(_RAW_MATERIAL_KEYWORDS.some(k=>nm.toLowerCase().includes(k))) return '原料調度不計';
   if(_EXCLUDE_CODES.length && _EXCLUDE_CODES.includes(s.product_code)) return '指定排除編號';
+  // 折讓列：金額為負但數量記正數（單價開錯、瑕疵補償等）＝價格調整，不是實際出貨，計件時必須排除。
+  // 2026-09-25：JP000014 一筆「單價開錯」折讓帶 3,013 罐，曾使出貨量虛增。真正的退貨會是負數量，仍照扣。
+  if(Number(s.amount)<0 && Number(s.qty)>0) return '折讓（非出貨量）';
   return null;
 }
 // 同業間原料調度的品名關鍵字（少量、非成品）
@@ -5748,6 +5751,11 @@ async function matchSalesToOrders(){
       const openC=cands2.filter(o=>(cumq[o.id]||0) < o.order_qty*0.8);
       const usable=(openC.length?openC:cands2).slice().sort((a,b)=>_d(a.sign_date)-_d(b.sign_date));
       if(usable.length) pick=usable[0];
+      else {
+        // ⛔ 有訂購日就不可退回先進先出猜測，否則會綁到不相干的舊訂單（2026-09-25 阻黑淨斑案）
+        _orderAmbiguous.push({...s, reason:`出貨單記載訂購日 ${s.source_order_date}，系統無 ±30 天內的同編號訂單（缺訂單資料）`});
+        continue;
+      }
     }
     if(!pick){
       // 2 訂購日 FIFO：同 code、訂購日<=出貨日、尚未達80% 的最舊訂單
