@@ -1153,11 +1153,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- PRODUCTION -->
       <div class="page" id="page-production">
         <div class="section-title" style="color:var(--red)">生產部獎金計算</div>
-        <div class="section-desc">季獎金 = 出貨件數獎金 ＋ 準時率獎金 ＋ 評分加成（依 v2 文件三項獨立計算、直接加總）</div>
-        <div class="warn-box" style="font-size:13px;padding:14px 18px">
-          <strong>⚠ 本制度尚未啟用</strong><br>
-          依據《生產部獎金規範書》：此制度於「自有 ISO 工廠落地（2026/08）」後才實施。當前由採購部施詠心兼任生管工作，獎金列計於採購部。本頁僅供模擬試算，儲存後標記為 <code>preview</code>。
-        </div>
+        <div class="section-desc">季獎金 = 出貨件數獎金 ＋ 準時率獎金 ＋ 評分加成（依《生管部獎金制度 v1 確認版》三項獨立計算、直接加總，再乘試用期比例）</div>
+        <div class="info-box" id="prod-mode-note" style="font-size:13px"></div>
         <div id="prod-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card">
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
@@ -1166,15 +1163,30 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="form-group"><label class="form-label">當季出貨件數（系統自動帶，可手改）</label>
               <input class="form-input" type="number" id="prod-shipments" placeholder="0" min="0" />
               <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
-            <div class="form-group"><label class="form-label">當季出貨準時率（%）</label><input class="form-input" type="number" id="prod-ontime" placeholder="例：90" min="0" max="100" step="0.1" oninput="updateProdBar()" /></div>
+            <div class="form-group"><label class="form-label">當季出貨準時率（%）</label><input class="form-input" type="number" id="prod-ontime" placeholder="例：90" min="0" max="100" step="0.1" oninput="updateProdBar()" />
+              <div id="prod-ontime-note" style="font-size:11px;color:var(--ink-faint)">數字取自每週一「交期比對週報」該季準時率（以交期正本計算）</div></div>
           </div>
           <div id="prod-bar-wrap" style="margin-bottom:14px"></div>
           <hr class="divider">
-          <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--red)">評分項目（v2 文件建議使用 1/3/5 三級）</div>
+          <div id="prod-v1-block">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--red)" id="prod-v1-title">評分加成：六面向加權（每項 1–5 分，總分 ＝ Σ 得分 ÷ 5 × 權重）</div>
+          <div class="score-group"><div class="score-title">① 交期管理（權重 20）</div><div class="score-desc">1分：經常逾時回覆，延誤發生後才得知 ｜ 3分：偶爾逾時或事後才通報 ｜ 5分：可行交期 2 個工作日內回覆；延誤均事先通報</div><div class="score-stars" id="prod-t1"></div></div>
+          <div class="score-group"><div class="score-title">② 工單開立與文件正確性（權重 20）</div><div class="score-desc">1分：經常逾時，或關鍵欄位錯誤 4 筆以上 ｜ 3分：偶爾逾時，或錯誤 1–3 筆 ｜ 5分：審閱與開單均於時限內完成，主動發現說明書問題；關鍵欄位零錯誤</div><div class="score-stars" id="prod-t2"></div></div>
+          <div class="score-group"><div class="score-title">③ 異常與客訴處理（權重 20）</div><div class="score-desc">1分：未回報、拖延或同一問題再發 ｜ 3分：已處理但未做原因分析或未追蹤結案 ｜ 5分：當日回報，提出原因分析、改善對策與預防措施並追蹤至結案</div><div class="score-stars" id="prod-t3"></div></div>
+          <div class="score-group"><div class="score-title">④ 生產流程改善（權重 15）</div><div class="score-desc">1分：未提出改善 ｜ 3分：已提案但未落地或無數據佐證 ｜ 5分：當季至少 1 項改善落地，有改善前後數據比較</div><div class="score-stars" id="prod-t4"></div></div>
+          <div class="score-group"><div class="score-title">⑤ 庫存與效期管控（權重 15）</div><div class="score-desc">1分：未提交 ｜ 3分：遲交或未附處理建議 ｜ 5分：每月準時提交 6 個月內到期庫存清單並附處理建議</div><div class="score-stars" id="prod-t5"></div></div>
+          <div class="score-group"><div class="score-title">⑥ 跨部門協調（權重 10）</div><div class="score-desc">1分：須多次追問 ｜ 3分：部分延遲 ｜ 5分：跨部門會議交辦事項如期完成</div><div class="score-stars" id="prod-t6"></div></div>
+          <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin:4px 0 8px"><input type="checkbox" id="prod-noincident" onchange="calcProdScore()"> 本季無客訴亦無異常案件（第③項不評分，權重併入第④項）</label>
+          <div style="text-align:right;font-size:12px;color:var(--ink-faint);display:none" id="prod-trial-line">試評總分：<strong id="prod-trial-tot" style="font-size:14px">0</strong> / 100（不影響本季獎金）</div>
+          </div>
+          <div id="prod-legacy-block">
+          <hr class="divider">
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--red)">2026 Q3 評分（過渡規定：原四項標準，每項 1／3／5 分，四項合計 × 5 換算百分制）</div>
           <div class="score-group"><div class="score-title">排程準確性</div><div class="score-desc">1分：經常需臨時調整 ｜ 3分：偶爾調整 ｜ 5分：排程穩定</div><div class="score-stars" id="prod-s1"></div></div>
           <div class="score-group"><div class="score-title">跨部門協調</div><div class="score-desc">1分：被動等待 ｜ 3分：偶爾主動 ｜ 5分：主動協調順暢</div><div class="score-stars" id="prod-s2"></div></div>
           <div class="score-group"><div class="score-title">異常處理速度</div><div class="score-desc">1分：慢且需指示 ｜ 3分：普通 ｜ 5分：快速主動解決</div><div class="score-stars" id="prod-s3"></div></div>
           <div class="score-group"><div class="score-title">出貨文件準確性</div><div class="score-desc">1分：經常出錯 ｜ 3分：偶爾出錯 ｜ 5分：從不出錯</div><div class="score-stars" id="prod-s4"></div></div>
+          </div>
           <div style="text-align:right;font-size:12px;color:var(--ink-faint);margin-top:5px">總分：<strong id="prod-score-tot" style="color:var(--red);font-size:15px">0</strong> / 100</div>
           <div id="prod-result" style="display:none" class="result-highlight">
             <div class="res-label">季獎金合計</div><div class="res-value" id="prod-total">—</div>
@@ -1195,7 +1207,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('生產部')">產生確認表</button>
             </div>
           </div>
-          <div class="info-box">產出該季已放行的生管獎金明細：件數逐級距算式＋計件品項清單＋準時率獎金算式＋評分四面向＋合計＋異議處理程序＋簽收欄。</div>
+          <div class="info-box">產出該季已放行的生管獎金明細：件數逐級距算式＋計件品項清單＋準時率獎金算式＋評分（2026 Q3 為原四項＋六面向試評；Q4 起六面向加權）＋合計＋異議處理程序＋簽收欄。</div>
         </div>
       </div>
 
@@ -4468,25 +4480,37 @@ async function generateDeptConfirmSheets(dept){
            <tr><td>對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
            <p class="note">級距：16 分以下 0 元｜17–20 分 1,500｜21–24 分 3,000｜25 分 5,000。</p>`);
     } else {
-      const ot = prodOnTimeBonus(Number(sc.ontime||0));
+      const legacyQ = sc.mode!=='v1';
+      const ot = prodOnTimeBonus(legacyQ?0:Number(sc.ontime||0));
       tierNote = '級距：未達 20 件不發；達標後第 1–20 件每件 80、第 21–35 件 120、第 36–50 件 160、第 51 件起 200。';
-      secB = `<h2>二、準時率獎金</h2>
-        <table><tbody><tr><td>本季準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr>
+      const V1N=['交期管理','工單開立與文件正確性','異常與客訴處理','生產流程改善','庫存與效期管控','跨部門協調'];
+      const w=PROD_V1_WEIGHTS.slice(); if(sc.noincident){ w[3]+=w[2]; w[2]=0; }
+      const v1Rows=V1N.map((n,i)=>`<tr><td>${['①','②','③','④','⑤','⑥'][i]} ${n}</td><td class="c">${w[i]}</td><td class="c">${(i===2&&sc.noincident)?'不評':(sc['t'+(i+1)]??'—')}</td></tr>`).join('');
+      const v1Table=(title,total,foot)=>`<table><thead><tr><th>${title}</th><th class="c">權重</th><th class="c">得分（1–5）</th></tr></thead><tbody>${v1Rows}</tbody>
+        <tfoot><tr><td colspan="2">加權總分（Σ 得分 ÷ 5 × 權重）</td><td class="c">${total} / 100</td></tr>${foot}</tfoot></table>
+        ${sc.noincident?'<p class="note">本季無客訴亦無異常案件，第③項不評分，其權重併入第④項。</p>':''}`;
+      secB = `<h2>二、準時率獎金</h2>` + (legacyQ
+        ? `<table><tbody><tr><td>本季準時率獎金</td><td class="r"><b>0</b></td></tr></tbody></table>
+           <p class="note">依制度第八點過渡規定：2026 年第三季尚無承諾交期資料，準時率獎金不計。</p>`
+        : `<table><tbody><tr><td>本季準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr>
         <tr><td>計算式</td><td class="r">${ot.breakdown||'—'}</td></tr>
         <tr><td>準時率獎金</td><td class="r"><b>${fmt(ot.bonus)}</b></td></tr></tbody></table>
-        <p class="note">未達 70% 不發；達標＝2,000 ＋（準時率 − 70）× 200；100% 另加 2,000。準時＝於承諾交期當天或之前出貨。</p>
-        <h2>三、評分加成</h2>
-        <table><thead><tr><th>評分面向</th><th class="c">得分（1–5）</th></tr></thead><tbody>
-          <tr><td>生產排程準確度</td><td class="c">${sc.e1??'—'}</td></tr>
+        <p class="note">未達 70% 不發；達標＝2,000 ＋（準時率 − 70）× 200；100% 另加 2,000。準時＝實際完成日在承諾交期當天或之前；依承諾交期所屬季度計算，到期未完成者計為延遲；以協理核准時之交期正本為準。</p>`)
+        + `<h2>三、評分加成</h2>` + (legacyQ
+        ? `<table><thead><tr><th>評分面向（原四項標準）</th><th class="c">得分（1／3／5）</th></tr></thead><tbody>
+          <tr><td>排程準確性</td><td class="c">${sc.e1??'—'}</td></tr>
           <tr><td>跨部門協調</td><td class="c">${sc.e2??'—'}</td></tr>
-          <tr><td>異常處理</td><td class="c">${sc.e3??'—'}</td></tr>
-          <tr><td>文件與紀錄完整性</td><td class="c">${sc.e4??'—'}</td></tr>
-        </tbody><tfoot><tr><td>加權總分</td><td class="c">${k.score_total||0} / 100</td></tr>
+          <tr><td>異常處理速度</td><td class="c">${sc.e3??'—'}</td></tr>
+          <tr><td>出貨文件準確性</td><td class="c">${sc.e4??'—'}</td></tr>
+        </tbody><tfoot><tr><td>總分（四項合計 × 5）</td><td class="c">${k.score_total||0} / 100</td></tr>
         <tr><td>對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
-        <p class="note">級距：60 分以下 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。</p>`;
+        <p class="note">級距：未達 60 分 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。依制度第八點過渡規定，2026 年第三季以原四項標準計算獎金。</p>
+        ${sc.t1!=null?`<h2>三之二、六面向試評（不影響本季獎金）</h2>${v1Table('評分面向（v1 六面向）',sc.trial_total??'—','')}<p class="note">試評結果作為 2026 年第四季起正式適用之參考。</p>`:''}`
+        : `${v1Table('評分面向',k.score_total||0,`<tr><td colspan="2">對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr>`)}
+        <p class="note">級距：未達 60 分 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。</p>`);
       nSec = 4;
     }
-    const otBonus = dept==='生產部' ? prodOnTimeBonus(Number(sc.ontime||0)).bonus : 0;
+    const otBonus = (dept==='生產部' && sc.mode==='v1') ? prodOnTimeBonus(Number(sc.ontime||0)).bonus : 0;
     const base = (k.ship_bonus||0) + (k.kpi_bonus||0) + otBonus;
     const sumSec = dept==='企劃部' ? 3 : 4;
     pages += `<section class="sheet"><h1>${dept}個人獎金確認表</h1>
@@ -4732,9 +4756,38 @@ function updateProdBar(){
   const color=v>=95?'var(--green)':v>=85?'var(--gold)':v>=70?'#e8a060':'var(--red)';
   document.getElementById('prod-bar-wrap').innerHTML=`<div style="font-size:12px;color:var(--ink-faint);margin-bottom:3px">準時率：<strong style="color:var(--red)">${v}%</strong></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>`;
 }
+// 生管部獎金制度 v1 確認版：2026 Q3 以前依過渡規定（原四項計分、準時率不計、六面向僅試評）；之後六面向加權
+const PROD_V1_WEIGHTS=[20,20,20,15,15,10];
+function prodIsLegacyQuarter(y,q){ y=y??appSettings.year; q=q??appSettings.quarter; return y<2026 || (y===2026 && q<='Q3'); }
+function prodV1Weighted(t, noIncident){
+  const w=PROD_V1_WEIGHTS.slice();
+  if(noIncident){ w[3]+=w[2]; w[2]=0; }
+  return Math.round(t.reduce((sum,v,i)=>sum+(v||0)/5*w[i],0));
+}
+function prodV1Scores(){ return [1,2,3,4,5,6].map(i=>getStarScore('prod-t'+i)); }
+function prodApplyMode(){
+  const legacy=prodIsLegacyQuarter();
+  const el=id=>document.getElementById(id);
+  if(!el('prod-mode-note')) return;
+  el('prod-mode-note').innerHTML = legacy
+    ? `<strong>${appSettings.year} ${appSettings.quarter}｜過渡規定</strong>：準時率獎金不計；評分依原四項標準計算獎金，六面向僅<strong>試評</strong>、不影響本季獎金。`
+    : `<strong>${appSettings.year} ${appSettings.quarter}｜v1 正式適用</strong>：準時率以交期正本計算（承諾交期所屬季度；到期未完成計延遲）；評分六面向加權。`;
+  el('prod-legacy-block').style.display = legacy?'':'none';
+  el('prod-trial-line').style.display = legacy?'':'none';
+  el('prod-v1-title').textContent = legacy ? '六面向試評（不影響本季獎金，供 Q4 起正式適用參考）' : '評分加成：六面向加權（每項 1–5 分，總分 ＝ Σ 得分 ÷ 5 × 權重）';
+  el('prod-ontime').disabled = legacy;
+  el('prod-ontime-note').textContent = legacy ? '2026 Q3 依過渡規定不計準時率' : '數字取自每週一「交期比對週報」該季準時率（以交期正本計算）';
+  calcProdScore();
+}
 function calcProdScore(){
-  const scores=['prod-s1','prod-s2','prod-s3','prod-s4'].map(id=>getStarScore(id));
-  const total=Math.round((scores.reduce((a,b)=>a+b,0)/20)*100);
+  const legacy=prodIsLegacyQuarter();
+  const trial=prodV1Weighted(prodV1Scores(), document.getElementById('prod-noincident')?.checked);
+  let total;
+  if(legacy){
+    const s4=['prod-s1','prod-s2','prod-s3','prod-s4'].map(id=>getStarScore(id));
+    total=s4.reduce((a,b)=>a+b,0)*5;
+    const tt=document.getElementById('prod-trial-tot'); if(tt) tt.textContent=trial;
+  } else total=trial;
   document.getElementById('prod-score-tot').textContent=total; return total;
 }
 
@@ -4777,7 +4830,7 @@ function prodScoreBonus(score){
 
 function calcProduction(){
   const ships=parseInt(document.getElementById('prod-shipments').value)||0;
-  const ontime=parseFloat(document.getElementById('prod-ontime').value)||0;
+  const ontime=prodIsLegacyQuarter()?0:(parseFloat(document.getElementById('prod-ontime').value)||0);
   const ship = prodTieredShipBonus(ships);
   const ot = prodOnTimeBonus(ontime);
   const score = calcProdScore();
@@ -4786,7 +4839,7 @@ function calcProduction(){
   show('prod-result');
   document.getElementById('prod-total').textContent=fmt(total);
   let html = `<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(ship.total)}</strong>${ships>=20?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ship.breakdown+'</span>':''}</div>`;
-  html += `<div class="res-item"><span class="res-item-dot"></span><strong>準時率獎金：${fmt(ot.bonus)}</strong>${ontime>=70?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ot.breakdown+'</span>':''}</div>`;
+  html += `<div class="res-item"><span class="res-item-dot"></span><strong>準時率獎金：${fmt(ot.bonus)}</strong>${prodIsLegacyQuarter()?'（2026 Q3 過渡規定不計）':(ontime>=70?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ot.breakdown+'</span>':'')}</div>`;
   html += `<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(scoreObj.bonus)}</strong>（${scoreObj.label} ／ 總分 ${score}/100）</div>`;
   html += `<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>直接加總：${fmt(ship.total)} ＋ ${fmt(ot.bonus)} ＋ ${fmt(scoreObj.bonus)} = <strong>${fmt(total)}</strong></div>`;
   document.getElementById('prod-breakdown').innerHTML=html;
@@ -4796,18 +4849,21 @@ async function saveProduction(){
   const name=document.getElementById('prod-name').value.trim();
   if(!name){showToast('請輸入姓名');return;}
   const ships=parseInt(document.getElementById('prod-shipments').value)||0;
-  const ontime=parseFloat(document.getElementById('prod-ontime').value)||0;
+  const legacy=prodIsLegacyQuarter();
+  const ontime=legacy?null:(parseFloat(document.getElementById('prod-ontime').value)||0);
   const ship = prodTieredShipBonus(ships);
-  const ot = prodOnTimeBonus(ontime);
+  const ot = prodOnTimeBonus(ontime||0);
   const score = calcProdScore();
   const scoreObj = prodScoreBonus(score);
   const bonus = ship.total + ot.bonus + scoreObj.bonus;
-  const detail = `[未啟用試算] 出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${ontime}%（${fmt(ot.bonus)}）＋ 評分 ${scoreObj.label} ${score}/100（${fmt(scoreObj.bonus)}）`;
+  const t=prodV1Scores(), noinc=!!document.getElementById('prod-noincident')?.checked;
+  const detail = `出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${legacy?'Q3 不計':ontime+'%'}（${fmt(ot.bonus)}）＋ 評分${legacy?'（原四項）':'（六面向）'} ${score}/100（${fmt(scoreObj.bonus)}）${legacy?`｜六面向試評 ${prodV1Weighted(t,noinc)}/100`:''}`;
   const empP=employees.find(e=>e.name===name);
   const pr=empP?probationRatio(empP):{ratio:1,note:''};
   const finalB=Math.round(bonus*pr.ratio);
-  const scores={ontime,e1:getStarScore('prod-s1'),e2:getStarScore('prod-s2'),e3:getStarScore('prod-s3'),e4:getStarScore('prod-s4')};
-  const ok=await saveKpiDraft({employee_id:empP?empP.id:null,dept:'生產部',name,role_title:empP?empP.role_title:'生管',ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:finalB,detail:detail.replace('[未啟用試算] ','')});
+  const scores={mode:legacy?'v1-transition':'v1',ontime,t1:t[0],t2:t[1],t3:t[2],t4:t[3],t5:t[4],t6:t[5],noincident:noinc,trial_total:legacy?prodV1Weighted(t,noinc):null};
+  if(legacy) Object.assign(scores,{e1:getStarScore('prod-s1'),e2:getStarScore('prod-s2'),e3:getStarScore('prod-s3'),e4:getStarScore('prod-s4')});
+  const ok=await saveKpiDraft({employee_id:empP?empP.id:null,dept:'生產部',name,role_title:empP?empP.role_title:'生管',ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:finalB,detail});
   if (ok) showToast(`📝 已存草稿：${name} 試算 ${fmt(finalB)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
@@ -4880,6 +4936,8 @@ async function editKpiDraft(id){
     } else if(r.dept==='生產部'){
       const nm=document.getElementById('prod-name'); if(nm) nm.value=r.name||'';
       ['e1','e2','e3','e4'].forEach((k,i)=>setStarScore('prod-s'+(i+1), s[k]||0));
+      [1,2,3,4,5,6].forEach(i=>setStarScore('prod-t'+i, s['t'+i]||0));
+      { const ni=document.getElementById('prod-noincident'); if(ni) ni.checked=!!s.noincident; }
       if(s.ontime!=null){ const ot=document.getElementById('prod-ontime'); if(ot){ ot.value=s.ontime; if(typeof updateProdBar==='function') updateProdBar(); } }
       if(r.ship_count!=null) document.getElementById('prod-shipments').value=r.ship_count;
       if(typeof calcProdScore==='function') calcProdScore();
@@ -4892,7 +4950,7 @@ async function editKpiDraft(id){
 function initAllStars(){
   ['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5'].forEach(id=>initScoreStars(id,calcPlanScore));
   ['pur-s1','pur-s2','pur-s3','pur-s4'].forEach(id=>initScoreStars(id,calcPurScore));
-  ['prod-s1','prod-s2','prod-s3','prod-s4'].forEach(id=>initScoreStars(id,calcProdScore));
+  ['prod-s1','prod-s2','prod-s3','prod-s4','prod-t1','prod-t2','prod-t3','prod-t4','prod-t5','prod-t6'].forEach(id=>initScoreStars(id,calcProdScore));
 }
 
 // UI HELPERS
@@ -4924,7 +4982,8 @@ function kpiScoreStr(dept,s){
   if(!s) return '';
   if(dept==='企劃部') return s.mgr_rating?`整體評等：${s.mgr_rating}`:`①${s.s1} ②${s.s2} ③${s.s3} ④${s.s4} ⑤${s.s5}`;
   if(dept==='採購部') return `議價${s.s1} 缺料${s.s2} 協調${s.s3} 預測${s.s4}${s.supplement?'｜兼生管':''}`;
-  if(dept==='生產部') return `準時率${s.ontime}%｜排程${s.e1} 協調${s.e2} 異常${s.e3} 文件${s.e4}`;
+  if(dept==='生產部') return s.mode==='v1' ? `準時率${s.ontime}%｜交期${s.t1} 工單${s.t2} 異常客訴${s.t3} 改善${s.t4} 效期${s.t5} 協調${s.t6}${s.noincident?'（無案件）':''}`
+    : `準時率${s.mode?'不計':s.ontime+'%'}｜排程${s.e1} 協調${s.e2} 異常${s.e3} 文件${s.e4}${s.trial_total!=null?`｜試評${s.trial_total}`:''}`;
   return JSON.stringify(s);
 }
 async function loadKpiReview(){
@@ -4987,7 +5046,7 @@ function switchPage(page){
   if(page==='planning')initPlanning();
   if(page==='products')loadProductMaster();
   if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
-  if(page==='production')fillDeptAutoCount('prod-shipments','prod-ship-note');
+  if(page==='production'){fillDeptAutoCount('prod-shipments','prod-ship-note'); prodApplyMode();}
   if(page==='reconcile')loadReconcile();
   if(page==='kpireview')loadKpiReview();
   if(page==='sales-import')loadSalesStaging();
