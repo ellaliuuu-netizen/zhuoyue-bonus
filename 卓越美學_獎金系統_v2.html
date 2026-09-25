@@ -4709,7 +4709,9 @@ async function generatePurConfirmSheets(){
       <p class="note">級距：60 分以下 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。加權總分＝Σ（各項得分 × 權重）÷ 5 × 100。</p>
 
       ${supplement? `<h2>三、兼任生管補貼</h2><table><tbody><tr><td>本季兼任生管補貼</td><td class="r"><b>${fmt(supplement)}</b></td></tr></tbody></table>
-      <p class="note">依制度，於正式生管到職後取消。</p>` : ''}
+      ${(yr===2026&&qq==='Q3')
+        ? `<p class="note" style="font-size:11px;color:#333">依《採購部獎金制度》，正式生管人員到職後，兼任生管補貼即取消。本季（2026 Q3）生管人員仍在試用期間，由您負責帶訓並同步處理生管事務，公司體恤您的辛勞，本季補貼 2,000 元仍全額發給。<b>自 2026 Q4 起，依制度取消本項補貼。</b></p>`
+        : `<p class="note">依制度，於正式生管到職後取消。</p>`}` : ''}
 
       <h2>${supplement?'四':'三'}、本季合計</h2>
       <table><tbody>
