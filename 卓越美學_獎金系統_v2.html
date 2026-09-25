@@ -551,7 +551,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
         <div class="sidebar-card rdmgr-hide" onclick="switchPage('sales');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#4a7c59"></span>業務部獎金</div>
-          <div class="sidebar-card-desc">月獎金＋季達標</div>
+          <div class="sidebar-card-desc">月獎金＋季度回款達標</div>
         </div>
         <div class="sidebar-card rdmgr-hide" onclick="switchPage('planning');setSidebarActive(this)">
           <div class="sidebar-card-title"><span class="dept-icon" style="background:#6b4f8a"></span>企劃部獎金</div>
@@ -671,7 +671,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- SALES -->
       <div class="page" id="page-sales">
         <div class="section-title" style="color:var(--green)">業務部獎金</div>
-        <div class="section-desc">三段式：新客獎金（月）＋ 出貨獎金（月）＋ 季度達標獎金；月底/季底一鍵結算，資料自動從訂單/出貨匯總</div>
+        <div class="section-desc">三段式：新客獎金（月）＋ 出貨獎金（月）＋ 季度回款達標獎金；月底/季底一鍵結算，資料自動從訂單/出貨匯總</div>
         <div id="sales-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="inner-tabs">
           <div class="inner-tab active" onclick="switchInner(this,'sales-m-sec')">月結算</div>
@@ -702,7 +702,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-gold btn-sm" onclick="generateSalesConfirmSheets('month')">產生月確認表</button>
               </div>
             </div>
-            <div class="info-box"><b>月確認表</b>：月底產出當月（新客＋出貨）明細給業務確認，次月同月薪一起發放（每月 5 日）。<b>季確認表</b>：季底彙整三個月＋季達標。<br>產出業務部個人明細：新客獎金（客戶／訂單／訂金入帳日／認列月／發放時間）＋逐月出貨獎金（計獎金額、排除金額、級距）＋季達標＋合計＋異議處理程序＋簽收欄。資料直接取自訂單簿與會計銷貨明細。</div>
+            <div class="info-box"><b>月確認表</b>：月底產出當月（新客＋出貨）明細給業務確認，次月同月薪一起發放（每月 5 日）。<b>季確認表</b>：季底彙整三個月＋季度回款達標。<br>產出業務部個人明細：新客獎金（客戶／訂單／訂金入帳日／認列月／發放時間）＋逐月出貨獎金（計獎金額、排除金額、級距）＋季度回款達標＋合計＋異議處理程序＋簽收欄。資料直接取自訂單簿與會計銷貨明細。</div>
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
             <table><thead><tr><th>出貨金額</th><th class="td-right">比例</th></tr></thead><tbody>
@@ -720,11 +720,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <div class="card-title">🏆 季底結算（自動）</div>
               <button class="btn btn-primary manager-only" onclick="settleSalesQuarter()">執行結算（${appSettings?.quarter||'本季'}）</button>
             </div>
-            <div class="info-box">點「執行結算」會：自動匯總當季「已回款」訂單金額（須在訂單管理頁按「＋記錄回款」標記日期，且非退貨）→ 6 級距達標獎金</div>
+            <div class="info-box">點「執行結算」會：匯總各業務當季回款金額 → 6 級距季度回款達標獎金。回款以會計部每月 1 日前提供之回款資料為準（已出貨未收款不計）；⚠️ 回款資料尚未接入系統，接入前本季無法結算</div>
             <div id="sales-q-content"><div class="empty-state"><div class="empty-icon">🏆</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
           </div>
-          <div class="card"><div class="card-header"><div class="card-title">季達標對照表</div></div>
-            <table><thead><tr><th>個人季業績（已回款）</th><th class="td-right">達標獎金</th></tr></thead><tbody>
+          <div class="card"><div class="card-header"><div class="card-title">季度回款達標對照表</div></div>
+            <table><thead><tr><th>個人當季回款金額</th><th class="td-right">回款達標獎金</th></tr></thead><tbody>
               <tr><td>未達 150 萬</td><td class="td-right">0 元</td></tr>
               <tr><td>150 萬 – 300 萬</td><td class="td-right">6,000 元</td></tr>
               <tr><td>300 萬 – 500 萬</td><td class="td-right">10,000 元</td></tr>
@@ -2347,7 +2347,7 @@ function renderOrderList(containerId, orders, shipMap, emptyLabel, emptyIcon) {
 }
 async function toggleOrderPayment(orderId, hadPayment){
   if(hadPayment){
-    if(!confirm('確定取消這筆訂單的回款紀錄？\n（季達標獎金將從「已回款」金額扣除）'))return;
+    if(!confirm('確定取消這筆訂單的回款紀錄？\n（季度回款達標獎金將從「已回款」金額扣除）'))return;
     const {error}=await sb.from('orders').update({payment_received_at:null}).eq('id',orderId);
     if(error){showToast('❌ '+error.message);return;}
     showToast('✓ 已取消回款記錄');
@@ -2364,7 +2364,7 @@ async function toggleOrderPayment(orderId, hadPayment){
 }
 async function toggleOrderRefund(orderId, isRefunded){
   const action=isRefunded?'取消退貨標記':'標記為退貨';
-  if(!confirm(`確定${action}？\n（退貨後該訂單金額不計入業務月獎金/季達標）`))return;
+  if(!confirm(`確定${action}？\n（退貨後該訂單金額不計入業務月獎金/季度回款達標）`))return;
   const {error}=await sb.from('orders').update({is_refunded:!isRefunded}).eq('id',orderId);
   if(error){showToast('❌ '+error.message);return;}
   showToast(`✓ 已${action}`);
@@ -2997,7 +2997,7 @@ async function settleSalesMonth(){
 }
 async function settleSalesQuarter(){
   const y=appSettings.year,q=appSettings.quarter;
-  if(!confirm(`確定要結算 ${y} ${q} 業務季達標獎金？\n會匯總當季所有已回款訂單金額`))return;
+  if(!confirm(`確定要結算 ${y} ${q} 業務季度回款達標獎金？\n會匯總當季所有已回款訂單金額`))return;
   const qMonths={Q1:[1,3],Q2:[4,6],Q3:[7,9],Q4:[10,12]};
   const [sm,em]=qMonths[q];
   const startDate=`${y}-${String(sm).padStart(2,'0')}-01`;
@@ -4597,15 +4597,15 @@ async function generateSalesConfirmSheets(kind){
       <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
       <p class="note">當月出貨金額整筆適用所屬級距比例：50 萬以下 0.15%｜50–100 萬 0.18%｜100–200 萬 0.22%｜200–400 萬 0.28%｜400 萬以上 0.35%。金額以會計銷貨開發票明細為準（會計於出貨當週開立發票，出貨月＝開票月）；PIF、折讓、已開票補列、代購、原料調度不計。</p>
       ${detRows?`<h2>二之二、本季出貨明細</h2><table><thead><tr><th>出貨日</th><th>發票</th><th>客戶</th><th>編號</th><th>品名</th><th class="r">數量</th><th class="r">金額</th><th>不計原因</th></tr></thead><tbody>${detRows}</tbody></table>`:''}
-      ${isMonth?'':`<h2>三、季度達標獎金</h2>
-      ${sq?`<table><tbody><tr><td>本季已回款業績</td><td class="r">${Math.round(Number(sq.paid_revenue||0)).toLocaleString()}</td></tr><tr><td>級距</td><td class="r">${esc2(sq.level_label||'')}</td></tr><tr><td>達標獎金</td><td class="r"><b>${fmt(qBonus)}</b></td></tr></tbody></table>`
-          :`<table><tbody><tr><td>本季已回款業績</td><td class="r">回款資料建置中</td></tr><tr><td>達標獎金</td><td class="r">待回款資料到位後結算</td></tr></tbody></table>`}
-      <p class="note">以個人當季「已回款入帳」業績計：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900 萬以上 25,000。</p>`}
+      ${isMonth?'':`<h2>三、季度回款達標獎金</h2>
+      ${sq?`<table><tbody><tr><td>本季回款金額</td><td class="r">${Math.round(Number(sq.paid_revenue||0)).toLocaleString()}</td></tr><tr><td>級距</td><td class="r">${esc2(sq.level_label||'')}</td></tr><tr><td>回款達標獎金</td><td class="r"><b>${fmt(qBonus)}</b></td></tr></tbody></table>`
+          :`<table><tbody><tr><td>本季回款金額</td><td class="r">回款資料建置中</td></tr><tr><td>回款達標獎金</td><td class="r">待回款資料到位後結算</td></tr></tbody></table>`}
+      <p class="note">以個人當季回款金額計（客戶實際付款入帳，已出貨未收款不計）：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900 萬以上 25,000。</p>`}
       <h2>${isMonth?'三、本月合計':'四、本季合計'}</h2>
       <table><tbody>
         <tr><td>新客獎金</td><td class="r">${fmt(ncTot)}</td></tr>
         <tr><td>出貨獎金</td><td class="r">${fmt(shipTot)}</td></tr>
-        ${isMonth?'':`<tr><td>季度達標獎金</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>`}
+        ${isMonth?'':`<tr><td>季度回款達標獎金</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>`}
         ${pr.ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(pr.ratio*100).toFixed(1)}%</td></tr>`:''}
       </tbody><tfoot><tr><td><b>${isMonth?'本月實發':'本季實發'}</b></td><td class="r"><b>${fmt(final)}</b></td></tr></tfoot></table>
       ${isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放日：</b>本月獎金於次月同月薪一起發放（${payDay}）。出貨金額以會計銷貨開發票明細為準；月底後才開立發票之出貨，併入開票當月計算。</p>`:''}
@@ -5019,7 +5019,7 @@ async function renderReconcile(){
   if(rM.length) h+=`<table><thead><tr><th>研發</th><th class="td-right">實發</th><th>狀態</th></tr></thead><tbody>${rM.map(r=>`<tr><td>${r.employees?.name||''}</td><td class="td-right"><strong>${fmt(r.total_bonus||0)}</strong></td><td style="font-size:11px">${r.status||''}</td></tr>`).join('')}</tbody></table>`;
   else h+=`<div class="info-box" style="font-size:12px">尚未結算</div>`;
   h+=`</div>`;
-  h+=`<div class="card" style="background:#f3ede0"><div class="card-title" style="font-size:15px">本月已結算合計：<strong>${fmt(grand)}</strong></div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">＝業務月結 ${fmt(salesTotal)} ＋ 研發成交已放行 ${fmt(dealRel)} ＋ 研發打樣 ${fmt(rdTotal)}。不含待覆核成交、季結（業務季達標、企劃/採購/生管）。</div></div>`;
+  h+=`<div class="card" style="background:#f3ede0"><div class="card-title" style="font-size:15px">本月已結算合計：<strong>${fmt(grand)}</strong></div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">＝業務月結 ${fmt(salesTotal)} ＋ 研發成交已放行 ${fmt(dealRel)} ＋ 研發打樣 ${fmt(rdTotal)}。不含待覆核成交、季結（業務季度回款達標、企劃/採購/生管）。</div></div>`;
   el.innerHTML=h;
 }
 function setSidebarActive(el){document.querySelectorAll('.sidebar-card').forEach(c=>c.classList.remove('active'));el.classList.add('active');}
@@ -5076,7 +5076,7 @@ async function renderSalesSummary(){
   const el=document.getElementById('sales-sum-content');
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本季尚無業務部資料</div></div>';return;}
   el.innerHTML=`<table><thead><tr><th>姓名</th><th>類型</th><th>說明</th><th class="td-right">獎金</th></tr></thead>
-    <tbody>${data.map(r=>`<tr><td>${r.name}</td><td>${r.record_type==='monthly'?'月獎金':'季達標'}</td><td style="font-size:12px;color:var(--ink-faint)">${r.detail||''}</td><td class="td-right">${fmt(r.bonus)}</td></tr>`).join('')}</tbody>
+    <tbody>${data.map(r=>`<tr><td>${r.name}</td><td>${r.record_type==='monthly'?'月獎金':'季度回款達標'}</td><td style="font-size:12px;color:var(--ink-faint)">${r.detail||''}</td><td class="td-right">${fmt(r.bonus)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="3" style="padding:10px 13px;font-weight:500">合計</td><td class="td-right" style="font-weight:500;padding:10px 13px;font-family:'Noto Serif TC',serif">${fmt(data.reduce((s,r)=>s+r.bonus,0))}</td></tr></tfoot></table>`;
 }
 function show(id){const el=document.getElementById(id);if(el)el.style.display='block';}
@@ -6177,7 +6177,7 @@ async function loadPayoutSummary(){
     if(r.status==='paid') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'sampling', r.base_bonus);
     else if(r.status==='pending_carryover') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'defer', r.base_bonus);
   });
-  // 2-2) 業務部：月獎金（新客＋出貨，當季三個月）與季達標獎金（2026-09-25 補：原總表完全沒讀這兩張表）
+  // 2-2) 業務部：月獎金（新客＋出貨，當季三個月）與季度回款達標獎金（2026-09-25 補：原總表完全沒讀這兩張表）
   const {data:smm}=await sb.from('sales_monthly_settlement').select('total_bonus, month, employees(name, dept, role_title)').eq('year',yr).in('month',qm);
   (smm||[]).forEach(r=>put(r.employees?.name, r.employees?.dept||'業務部', r.employees?.role_title, 'sales', r.total_bonus));
   const {data:sqq}=await sb.from('sales_quarterly_settlement').select('achievement_bonus, employees(name, dept, role_title)').eq('year',yr).eq('quarter',q);
@@ -6241,7 +6241,7 @@ function renderPayoutSummary(){
     const isSales=dept==='業務部'; // 業務月獎金（新客＋出貨）為業務部專屬
     html+=`<div style="margin-bottom:14px">
       <div style="font-weight:600;margin-bottom:6px;color:var(--ink)">${esc2(dept)}　<span style="font-size:12px;color:var(--ink-faint)">小計 ${sub.toLocaleString()} 元　·　${rows.filter(r=>r.total>0).length}/${rows.length} 人有獎金</span></div>
-      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}${isSales?'<th class="td-right">業務月獎金（新客＋出貨）</th>':''}<th class="td-right">${isSales?'季達標獎金':'部門季獎金'}</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
+      <table><thead><tr><th>姓名</th><th>職稱</th>${isRd?'<th class="td-right">成交獎金</th><th class="td-right">打樣獎金</th>':''}${isSales?'<th class="td-right">業務月獎金（新客＋出貨）</th>':''}<th class="td-right">${isSales?'季度回款達標獎金':'部門季獎金'}</th><th class="td-right">團隊加成／分潤</th><th class="td-right">應發合計</th></tr></thead><tbody>
       ${rows.map(r=>r.total>0?`<tr>
         <td style="font-weight:500">${esc2(r.name)}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${esc2(r.role)}</td>
@@ -6267,7 +6267,7 @@ function renderPayoutSummary(){
 }
 function exportPayoutCSV(){
   if(!_payoutRows.length){showToast('本季無可發放獎金');return;}
-  const head=['部門','姓名','職稱','成交獎金','打樣獎金','業務月獎金（新客＋出貨）','部門季獎金／業務季達標','團隊加成／分潤','應發合計','暫緩累積','本季無獎金之原因'];
+  const head=['部門','姓名','職稱','成交獎金','打樣獎金','業務月獎金（新客＋出貨）','部門季獎金／業務季度回款達標','團隊加成／分潤','應發合計','暫緩累積','本季無獎金之原因'];
   const lines=[head.join(',')].concat(_payoutRows.map(r=>
     [r.dept,r.name,r.role,r.deal,r.sampling,r.sales,r.dept_bonus,r.team,r.total,r.defer,r.zeroReason||''].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')));
   const grand=_payoutRows.reduce((s,r)=>s+r.total,0);
