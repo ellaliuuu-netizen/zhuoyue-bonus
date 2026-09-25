@@ -1049,6 +1049,18 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-primary manager-only" onclick="savePlanning()">存草稿</button>
           </div>
         </div>
+        <div class="card manager-only" style="border-color:#7a5c3d">
+          <div class="card-header">
+            <div class="card-title">🖨️ 個人獎金確認表</div>
+            <div>
+              <select class="form-select" id="plan-sheet-q" style="width:auto;display:inline-block;margin-right:6px">
+                <option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3" selected>Q3</option><option value="Q4">Q4</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('企劃部')">產生確認表</button>
+            </div>
+          </div>
+          <div class="info-box">產出該季已放行的企劃部獎金明細：件數逐級距算式＋計件品項清單＋KPI 五項評分＋主管加給＋合計＋異議處理程序＋簽收欄。</div>
+        </div>
       </div>
 
       <!-- PRODUCT MASTER -->
@@ -1153,6 +1165,18 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-gold" onclick="calcProduction()">試算</button>
             <button class="btn btn-primary manager-only" onclick="saveProduction()">存草稿</button>
           </div>
+        </div>
+        <div class="card manager-only" style="border-color:#7a5c3d">
+          <div class="card-header">
+            <div class="card-title">🖨️ 個人獎金確認表</div>
+            <div>
+              <select class="form-select" id="prod-sheet-q" style="width:auto;display:inline-block;margin-right:6px">
+                <option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3" selected>Q3</option><option value="Q4">Q4</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('生產部')">產生確認表</button>
+            </div>
+          </div>
+          <div class="info-box">產出該季已放行的生管獎金明細：件數逐級距算式＋計件品項清單＋準時率獎金算式＋評分四面向＋合計＋異議處理程序＋簽收欄。</div>
         </div>
       </div>
 
@@ -4344,6 +4368,113 @@ async function savePurchase(){
   if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
+// ===== 各部門個人獎金確認表：企劃部／生產部（2026-09-25，與採購部同格式）=====
+async function generateDeptConfirmSheets(dept){
+  const yr = appSettings.year;
+  const selId = dept==='企劃部' ? 'plan-sheet-q' : 'prod-sheet-q';
+  const qq = document.getElementById(selId).value;
+  const {data:ks} = await sb.from('kpi_scores').select('*').eq('dept',dept).eq('year',yr).eq('quarter',qq);
+  if(!ks || !ks.length){ showToast(`${yr} ${qq} ${dept}尚無評分紀錄（要先存草稿並在 KPI 覆核放行）`); return; }
+  const {data:lines} = await sb.from('order_lines')
+    .select('product_code,item_name_raw,customer_name,order_qty,shipped_qty,bonus_settled_month')
+    .eq('bonus_settled_year',yr).eq('bonus_settled_quarter',qq).order('bonus_settled_month');
+  const pname = c => (products.find(p=>p.product_code===c)||{}).product_name || '';
+  const itemRows = (lines||[]).map((l,i)=>`<tr><td class="c">${i+1}</td><td>${l.product_code}</td><td>${pname(l.product_code)||l.item_name_raw||''}</td><td>${l.customer_name||''}</td><td class="r">${(l.order_qty||0).toLocaleString()}</td><td class="r">${(l.shipped_qty||0).toLocaleString()}</td><td class="c">${l.bonus_settled_month} 月</td></tr>`).join('');
+  const DISPUTE = (n)=>`<h2>${n}、確認與異議處理程序</h2>
+      <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
+        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 7 個日曆日</td></tr>
+        <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
+        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 10 個工作日</td></tr>
+        <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
+        <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
+      </tbody></table>
+      <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正，不因異議而延後發放。</p>`;
+  let pages='';
+  ks.forEach(k=>{
+    const sc = k.scores||{};
+    const ratio = Number(k.probation_ratio||1);
+    const addon = Number(k.mgr_addon||0);
+    let secA='', secB='', tierNote='', nSec=3;
+    if(dept==='企劃部'){
+      const isMgr = (k.role_title||'').includes('主管');
+      const tier = isMgr ? '主管 300／400／500／600' : '同仁 150／200／250／300';
+      tierNote = `級距：未達 15 件不發；達標後第 1–15 件、16–25 件、26–35 件、36 件起單價為 ${tier}（元／件）。公司過往項目之件數照計，該件獎金折半。`;
+      secB = `<h2>二、KPI 表現獎金</h2>` + (isMgr
+        ? `<table><tbody><tr><td>主管評等</td><td class="r">${sc.mgr_rating||'—'}</td></tr><tr><td>對應獎金</td><td class="r"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tbody></table>
+           <p class="note">評等級距：待改進 0｜普通 1,500｜滿意 3,000｜非常滿意 5,000。</p>`
+        : `<table><thead><tr><th>評分項目</th><th class="c">得分（1–5）</th></tr></thead><tbody>
+            <tr><td>文案字卡品質</td><td class="c">${sc.s1??'—'}</td></tr>
+            <tr><td>訂單追蹤與執行效率</td><td class="c">${sc.s2??'—'}</td></tr>
+            <tr><td>主動服務客戶程度</td><td class="c">${sc.s3??'—'}</td></tr>
+            <tr><td>學習成長速度</td><td class="c">${sc.s4??'—'}</td></tr>
+            <tr><td>客戶滿意度</td><td class="c">${sc.s5??'—'}</td></tr>
+           </tbody><tfoot><tr><td>總分</td><td class="c">${k.score_total||0} / 25</td></tr>
+           <tr><td>對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
+           <p class="note">級距：16 分以下 0 元｜17–20 分 1,500｜21–24 分 3,000｜25 分 5,000。</p>`);
+    } else {
+      const ot = prodOnTimeBonus(Number(sc.ontime||0));
+      tierNote = '級距：未達 20 件不發；達標後第 1–20 件每件 80、第 21–35 件 120、第 36–50 件 160、第 51 件起 200。';
+      secB = `<h2>二、準時率獎金</h2>
+        <table><tbody><tr><td>本季準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr>
+        <tr><td>計算式</td><td class="r">${ot.breakdown||'—'}</td></tr>
+        <tr><td>準時率獎金</td><td class="r"><b>${fmt(ot.bonus)}</b></td></tr></tbody></table>
+        <p class="note">未達 70% 不發；達標＝2,000 ＋（準時率 − 70）× 200；100% 另加 2,000。準時＝於承諾交期當天或之前出貨。</p>
+        <h2>三、評分加成</h2>
+        <table><thead><tr><th>評分面向</th><th class="c">得分（1–5）</th></tr></thead><tbody>
+          <tr><td>生產排程準確度</td><td class="c">${sc.e1??'—'}</td></tr>
+          <tr><td>跨部門協調</td><td class="c">${sc.e2??'—'}</td></tr>
+          <tr><td>異常處理</td><td class="c">${sc.e3??'—'}</td></tr>
+          <tr><td>文件與紀錄完整性</td><td class="c">${sc.e4??'—'}</td></tr>
+        </tbody><tfoot><tr><td>加權總分</td><td class="c">${k.score_total||0} / 100</td></tr>
+        <tr><td>對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
+        <p class="note">級距：60 分以下 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。</p>`;
+      nSec = 4;
+    }
+    const otBonus = dept==='生產部' ? prodOnTimeBonus(Number(sc.ontime||0)).bonus : 0;
+    const base = (k.ship_bonus||0) + (k.kpi_bonus||0) + otBonus;
+    const sumSec = dept==='企劃部' ? 3 : 4;
+    pages += `<section class="sheet"><h1>${dept}個人獎金確認表</h1>
+      <div class="meta">${yr} ${qq}｜${k.name}（${k.role_title||''}）｜產出日 ${new Date().toISOString().slice(0,10)}</div>
+      <h2>一、出貨件數獎金</h2>
+      <table><tbody>
+        <tr><td>本季計件件數</td><td class="r"><b>${k.ship_count||0} 件</b></td></tr>
+        <tr><td>件數獎金小計</td><td class="r"><b>${fmt(k.ship_bonus||0)}</b></td></tr>
+      </tbody></table>
+      <p class="note">${tierNote}</p>
+      <h2>一之二、本季計件品項明細（共 ${(lines||[]).length} 件）</h2>
+      <table><thead><tr><th class="c">#</th><th>產品編號</th><th>品名</th><th>客戶</th><th class="r">下單量</th><th class="r">累計出貨</th><th class="c">結算月</th></tr></thead>
+      <tbody>${itemRows||'<tr><td colspan="7" class="c">本季無計件品項</td></tr>'}</tbody></table>
+      <p class="note">件的定義：以每張訂單的每個品項為單位，該品項累計出貨達下單量 80% 時計 1 件，一個訂單品項一生只計一次；認列月份＝使累計跨過 80% 的那批出貨之銷貨日所屬月份。${dept==='企劃部'?'本表為部門共用件數，個人計件依品項之負責企劃歸屬。':''}</p>
+      ${secB}
+      <h2>${sumSec}、本季合計</h2>
+      <table><tbody>
+        <tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr>
+        ${otBonus?`<tr><td>準時率獎金</td><td class="r">${fmt(otBonus)}</td></tr>`:''}
+        <tr><td>${dept==='企劃部'?'KPI 表現獎金':'評分加成'}</td><td class="r">${fmt(k.kpi_bonus||0)}</td></tr>
+        ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
+        ${addon?`<tr><td>主管加給（協理個案核給，不受試用期比例影響）</td><td class="r">${fmt(addon)}</td></tr>`:''}
+      </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
+      ${DISPUTE(sumSec+1)}
+      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 7 日內提出。
+      <p>異議／補充：____________________________________________________</p>
+      <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+  });
+  const css=`<style>@page{size:A4;margin:16mm}body{font-family:"Noto Sans TC",sans-serif;color:#1a1a1a;font-size:13px;line-height:1.6;margin:0}
+    .sheet{page-break-after:always;max-width:720px;margin:0 auto 24px}
+    h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;border-left:4px solid #c99a2e;padding-left:8px}
+    .meta{color:#555;font-size:12px;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin:4px 0}
+    th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px}.r{text-align:right}.c{text-align:center}
+    thead th{background:#f3ede0}tfoot td{font-weight:600;background:#faf7f0}
+    .note{font-size:10px;color:#777;margin:4px 0 0}
+    .cbox{margin-top:16px;border:1px dashed #999;padding:10px 12px;font-size:12px}.sign{margin-top:14px}
+    @media screen{body{background:#eee;padding:20px}.sheet{background:#fff;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.15)}}
+    .tb{position:fixed;top:10px;right:10px}@media print{.tb{display:none}}</style>`;
+  const w=window.open('','_blank');
+  if(!w){showToast('請允許彈出視窗後再試');return;}
+  w.document.write(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${dept}個人獎金確認表 ${yr}${qq}</title>${css}</head><body><div class="tb"><button onclick="window.print()">🖨️ 列印 / 存 PDF</button></div>${pages}</body></html>`);
+  w.document.close();
+}
+
 // ===== 採購部個人獎金確認表（2026-09-25 新增，比照研發部格式）=====
 async function generatePurConfirmSheets(){
   const yr = appSettings.year;
@@ -4398,7 +4529,17 @@ async function generatePurConfirmSheets(){
         ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
       </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
 
-      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請於下方註明，交協理覆核。
+      <h2>${supplement?'五':'四'}、確認與異議處理程序</h2>
+      <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
+        <tr><td class="c">1</td><td>同仁核對本表之件數、評分與金額；如有疑義，於「異議／補充」欄具體載明品項或項目後交回</td><td class="c">收到起 7 個日曆日</td></tr>
+        <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
+        <tr><td class="c">3</td><td>協理就異議項目調閱三項原始單據核對：訂購確認單（下單量）、生管出貨單（出貨量與訂購日）、會計銷貨開發票明細</td><td class="c">收到異議起 10 個工作日</td></tr>
+        <tr><td class="c">4</td><td>核對結果為資料有誤：更正後重新產出本表，差額併入次季獎金發放</td><td class="c">—</td></tr>
+        <tr><td class="c">5</td><td>核對結果為資料無誤：以書面說明計算依據，該季金額維持原數</td><td class="c">—</td></tr>
+      </tbody></table>
+      <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正，不因異議而延後發放。</p>
+
+      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 7 日內提出。
       <p>異議／補充：____________________________________________________</p>
       <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
   });
@@ -5959,22 +6100,17 @@ let _stgRows=[];
 function _custKey(s){
   return String(s||'').replace(/[（(][^）)]*[）)]/g,'').replace(/股份有限公司|有限公司|公司/g,'').replace(/\s+/g,'');
 }
-let _custRep={}, _custRepFixed={};
+let _custRep={};
 async function _loadCustRep(){
   const {data}=await sb.from('order_lines').select('customer_name, sales_person, sign_date')
     .not('sales_person','is',null).order('sign_date',{ascending:false});
   _custRep={};
   (data||[]).forEach(o=>{ const k=_custKey(o.customer_name), sp=(o.sales_person||'').trim();
     if(k && sp && !_custRep[k]) _custRep[k]=sp; });   // 依簽單日新到舊，第一筆＝最近一張單的業務
-  // 系統裡沒有訂單的客戶（例：橋渼、昱汝、艾藤美容），由協理指定的歸屬表補位：system_settings.customer_sales_rep（JSON）
-  _custRepFixed={};
-  const {data:st}=await sb.from('system_settings').select('value').eq('key','customer_sales_rep').maybeSingle();
-  try{ Object.entries(JSON.parse(st?.value||'{}')).forEach(([c,sp])=>{ const k=_custKey(c); if(k&&sp) _custRepFixed[k]=String(sp).trim(); }); }catch(e){ console.warn('customer_sales_rep 格式錯誤',e); }
 }
 function _repOf(cust){
   const k=_custKey(cust); if(!k) return null;
   if(_custRep[k]) return _custRep[k];
-  if(_custRepFixed[k]) return _custRepFixed[k];
   // 會計與訂單簿寫法略有不同（例「飲美科」vs「飲美科妍」）→ 退一步用包含比對，但只接受唯一結果
   const hits=[...new Set(Object.keys(_custRep).filter(x=>x.includes(k)||k.includes(x)).map(x=>_custRep[x]))];
   return hits.length===1?hits[0]:null;
