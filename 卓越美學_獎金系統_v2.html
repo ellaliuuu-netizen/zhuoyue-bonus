@@ -687,7 +687,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
                 <button class="btn btn-primary manager-only" onclick="settleSalesMonth()">執行結算</button>
               </div>
             </div>
-            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（全公司首次訂單，且訂金收款日落在該月；訂金在「🔔待辦→新客訂金待登記」登記）→ ×1,500，次月同月薪一起發放 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段階梯比例</div>
+            <div class="info-box">點「執行結算」會：(1) 找該月各業務「新客戶」（全公司首次訂單，且訂金收款日落在該月；訂金在「🔔待辦→新客訂金待登記」登記）→ ×1,500，次月同月薪一起發放 (2) 該月「出貨金額」（取自會計銷貨明細匯入，按業務員對應）→ 5 段級距千分比（千分之 1.5～3.5，不設上限）。依《業務部業績獎金制度 v1 確認版》</div>
             <div id="sales-m-content"><div class="empty-state"><div class="empty-icon">💰</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
           </div>
           <div class="card manager-only" style="border-color:#7a5c3d">
@@ -706,11 +706,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <div class="card"><div class="card-header"><div class="card-title">出貨獎金對照表</div></div>
             <table><thead><tr><th>出貨金額</th><th class="td-right">比例</th></tr></thead><tbody>
-              <tr><td>50萬以下</td><td class="td-right">0.15%</td></tr>
-              <tr><td>50萬–100萬</td><td class="td-right">0.18%</td></tr>
-              <tr><td>100萬–200萬</td><td class="td-right">0.22%</td></tr>
-              <tr><td>200萬–400萬</td><td class="td-right">0.28%</td></tr>
-              <tr><td>400萬以上</td><td class="td-right">0.35%</td></tr>
+              <tr><td>未滿 50 萬</td><td class="td-right">千分之 1.5</td></tr>
+              <tr><td>50 萬以上、未滿 100 萬</td><td class="td-right">千分之 1.8</td></tr>
+              <tr><td>100 萬以上、未滿 200 萬</td><td class="td-right">千分之 2.2</td></tr>
+              <tr><td>200 萬以上、未滿 400 萬</td><td class="td-right">千分之 2.8</td></tr>
+              <tr><td>400 萬以上（不設上限）</td><td class="td-right">千分之 3.5</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -2979,11 +2979,11 @@ async function settleSalesMonth(){
     const ncCount=(ncByEmp[emp.id]||new Set()).size;
     const ncBonus=ncCount*ncUnit;
     const amt=amtByEmp[emp.id]||0;
-    let ratio=0.0015,rlabel='0.15%';
-    if(amt>=4000000){ratio=0.0035;rlabel='0.35%';}
-    else if(amt>=2000000){ratio=0.0028;rlabel='0.28%';}
-    else if(amt>=1000000){ratio=0.0022;rlabel='0.22%';}
-    else if(amt>=500000){ratio=0.0018;rlabel='0.18%';}
+    let ratio=0.0015,rlabel='千分之 1.5';
+    if(amt>=4000000){ratio=0.0035;rlabel='千分之 3.5';}
+    else if(amt>=2000000){ratio=0.0028;rlabel='千分之 2.8';}
+    else if(amt>=1000000){ratio=0.0022;rlabel='千分之 2.2';}
+    else if(amt>=500000){ratio=0.0018;rlabel='千分之 1.8';}
     const shipBonus=Math.round(amt*ratio);
     if(ncCount===0&&amt===0){
       results.push({name:emp.name,nc:0,amt:0,rlabel:'—',ncBonus:0,shipBonus:0,total:0,status:'— 無業績'});
@@ -4584,7 +4584,7 @@ async function generateSalesConfirmSheets(kind){
   const {data:recs}=await sb.from('sales_records').select('ship_date,invoice_no,customer_name,item_name_raw,product_code,qty,amount,sales_person,month').eq('year',yr).in('month',qm).order('ship_date');
   const {data:sqs}=await sb.from('sales_quarterly_settlement').select('*').eq('year',yr).eq('quarter',qq);
   const ncUnit=appSettings.newClientBonus||1500;
-  const tierOf=a=>a>=4000000?[0.0035,'0.35%']:a>=2000000?[0.0028,'0.28%']:a>=1000000?[0.0022,'0.22%']:a>=500000?[0.0018,'0.18%']:[0.0015,'0.15%'];
+  const tierOf=a=>a>=4000000?[0.0035,'千分之 3.5']:a>=2000000?[0.0028,'千分之 2.8']:a>=1000000?[0.0022,'千分之 2.2']:a>=500000?[0.0018,'千分之 1.8']:[0.0015,'千分之 1.5'];
   const nextYm=d=>{const [y,m]=d.slice(0,7).split('-').map(Number); return m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;};
   const DISPUTE=(n)=>`<h2>${n}、確認與異議處理程序</h2>
     <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
@@ -4630,7 +4630,7 @@ async function generateSalesConfirmSheets(kind){
       <h2>二、出貨獎金（逐月）</h2>
       <table><thead><tr><th>月份</th><th class="r">計獎出貨金額（未稅）</th><th class="r">不計獎金額</th><th class="c">適用比例</th><th class="r">出貨獎金</th></tr></thead>
       <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
-      <p class="note">當月出貨金額整筆適用所屬級距比例：50 萬以下 0.15%｜50–100 萬 0.18%｜100–200 萬 0.22%｜200–400 萬 0.28%｜400 萬以上 0.35%。金額以會計銷貨開發票明細為準（會計於出貨當週開立發票，出貨月＝開票月）；PIF、折讓、已開票補列、代購、原料調度不計。</p>
+      <p class="note">當月出貨金額整筆適用所屬級距千分比：未滿 50 萬 千分之 1.5｜50–100 萬 千分之 1.8｜100–200 萬 千分之 2.2｜200–400 萬 千分之 2.8｜400 萬以上 千分之 3.5（出貨獎金不設上限）。金額以會計銷貨開發票明細為準（會計於出貨當週開立發票，出貨月＝開票月）；PIF、折讓、已開票補列、代購、原料調度不計。</p>
       ${detRows?`<h2>二之二、本季出貨明細</h2><table><thead><tr><th>出貨日</th><th>發票</th><th>客戶</th><th>編號</th><th>品名</th><th class="r">數量</th><th class="r">金額</th><th>不計原因</th></tr></thead><tbody>${detRows}</tbody></table>`:''}
       ${isMonth?'':`<h2>三、季度回款達標獎金</h2>
       ${sq?`<table><tbody><tr><td>本季回款金額</td><td class="r">${Math.round(Number(sq.paid_revenue||0)).toLocaleString()}</td></tr><tr><td>級距</td><td class="r">${esc2(sq.level_label||'')}</td></tr><tr><td>回款達標獎金</td><td class="r"><b>${fmt(qBonus)}</b></td></tr></tbody></table>`
