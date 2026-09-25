@@ -1104,6 +1104,19 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <button class="btn btn-primary manager-only" onclick="savePurchase()">存草稿</button>
           </div>
         </div>
+
+        <div class="card manager-only" style="border-color:#7a5c3d">
+          <div class="card-header">
+            <div class="card-title">🖨️ 個人獎金確認表</div>
+            <div>
+              <select class="form-select" id="pur-sheet-q" style="width:auto;display:inline-block;margin-right:6px">
+                <option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3" selected>Q3</option><option value="Q4">Q4</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="generatePurConfirmSheets()">產生確認表</button>
+            </div>
+          </div>
+          <div class="info-box">產出該季已放行的採購部獎金明細：件數逐級距算式＋計件品項清單＋評分四面向得分＋兼任補貼＋合計，可列印或存 PDF 給同仁簽收。未放行的季度不會有資料。</div>
+        </div>
       </div>
 
       <!-- PRODUCTION -->
@@ -4329,6 +4342,80 @@ async function savePurchase(){
   const scores={s1:getStarScore('pur-s1'),s2:getStarScore('pur-s2'),s3:getStarScore('pur-s3'),s4:getStarScore('pur-s4'),supplement:concurrent?1:0};
   const ok=await saveKpiDraft({employee_id:emp.id,dept:'採購部',name:emp.name,role_title:emp.role_title,ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
   if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
+}
+
+// ===== 採購部個人獎金確認表（2026-09-25 新增，比照研發部格式）=====
+async function generatePurConfirmSheets(){
+  const yr = appSettings.year;
+  const qq = document.getElementById('pur-sheet-q').value;
+  const {data:ks} = await sb.from('kpi_scores').select('*').eq('dept','採購部').eq('year',yr).eq('quarter',qq);
+  if(!ks || !ks.length){ showToast(`${yr} ${qq} 採購部尚無評分紀錄（要先存草稿並在 KPI 覆核放行）`); return; }
+  const qm = ({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[qq];
+  const {data:lines} = await sb.from('order_lines')
+    .select('product_code,item_name_raw,customer_name,order_qty,shipped_qty,sign_date,bonus_settled_month')
+    .eq('bonus_settled_year',yr).eq('bonus_settled_quarter',qq).order('bonus_settled_month');
+  const pname = c => (products.find(p=>p.product_code===c)||{}).product_name || '';
+  const WEI = [['議價與供應商管理',40,'s1'],['缺料危機處理',30,'s2'],['跨部門協調追蹤',20,'s3'],['備料預測與成本優化',10,'s4']];
+  let pages='';
+  ks.forEach(k=>{
+    const ship = purTieredShipBonus(k.ship_count||0);
+    const sc = k.scores||{};
+    const supplement = (sc.supplement? appSettings.purSupplement : 0);
+    const base = (k.ship_bonus||0) + (k.kpi_bonus||0) + supplement;
+    const ratio = Number(k.probation_ratio||1);
+    const rows = (lines||[]).map((l,i)=>`<tr><td class="c">${i+1}</td><td>${l.product_code}</td><td>${pname(l.product_code)||l.item_name_raw||''}</td><td>${l.customer_name||''}</td><td class="r">${(l.order_qty||0).toLocaleString()}</td><td class="r">${(l.shipped_qty||0).toLocaleString()}</td><td class="c">${l.bonus_settled_month} 月</td></tr>`).join('');
+    pages += `<section class="sheet"><h1>採購部個人獎金確認表</h1>
+      <div class="meta">${yr} ${qq}｜${k.name}（${k.role_title||'採購'}）｜產出日 ${new Date().toISOString().slice(0,10)}</div>
+
+      <h2>一、出貨件數獎金</h2>
+      <table><tbody>
+        <tr><td>本季計件件數</td><td class="r"><b>${k.ship_count||0} 件</b></td></tr>
+        <tr><td>級距計算</td><td class="r">${ship.breakdown||'—'}</td></tr>
+        <tr><td>件數獎金小計</td><td class="r"><b>${fmt(k.ship_bonus||0)} 元</b></td></tr>
+      </tbody></table>
+      <p class="note">級距：未達 20 件不發；達標後第 1–20 件每件 100、第 21–35 件 150、第 36–50 件 200、第 51 件起 250。</p>
+
+      <h2>一之二、本季計件品項明細（共 ${(lines||[]).length} 件）</h2>
+      <table><thead><tr><th class="c">#</th><th>產品編號</th><th>品名</th><th>客戶</th><th class="r">下單量</th><th class="r">累計出貨</th><th class="c">結算月</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="c">本季無計件品項</td></tr>'}</tbody></table>
+      <p class="note">件的定義：以每張訂單的每個品項為單位，該品項累計出貨達下單量 80% 時計 1 件，一個訂單品項一生只計一次；認列月份＝使累計跨過 80% 的那批出貨之銷貨日所屬月份。</p>
+
+      <h2>二、評分加成</h2>
+      <table><thead><tr><th>評分面向</th><th class="c">權重</th><th class="c">得分（1–5）</th></tr></thead><tbody>
+        ${WEI.map(([n,w,key])=>`<tr><td>${n}</td><td class="c">${w}%</td><td class="c">${sc[key]!=null?sc[key]:'—'}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td>加權總分</td><td class="c">—</td><td class="c">${k.score_total||0} / 100</td></tr>
+        <tr><td>對應級距獎金</td><td class="c">—</td><td class="c"><b>${fmt(k.kpi_bonus||0)} 元</b></td></tr></tfoot></table>
+      <p class="note">級距：60 分以下 0 元｜60–74 分 1,000｜75–84 分 2,000｜85 分以上 3,000。加權總分＝Σ（各項得分 × 權重）÷ 5 × 100。</p>
+
+      ${supplement? `<h2>三、兼任生管補貼</h2><table><tbody><tr><td>本季兼任生管補貼</td><td class="r"><b>${fmt(supplement)} 元</b></td></tr></tbody></table>
+      <p class="note">依制度，於正式生管到職後取消。</p>` : ''}
+
+      <h2>${supplement?'四':'三'}、本季合計</h2>
+      <table><tbody>
+        <tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr>
+        <tr><td>評分加成</td><td class="r">${fmt(k.kpi_bonus||0)}</td></tr>
+        ${supplement?`<tr><td>兼任生管補貼</td><td class="r">${fmt(supplement)}</td></tr>`:''}
+        ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
+      </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)} 元</b></td></tr></tfoot></table>
+
+      <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請於下方註明，交協理覆核。
+      <p>異議／補充：____________________________________________________</p>
+      <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+  });
+  const css=`<style>@page{size:A4;margin:16mm}body{font-family:"Noto Sans TC",sans-serif;color:#1a1a1a;font-size:13px;line-height:1.6;margin:0}
+    .sheet{page-break-after:always;max-width:720px;margin:0 auto 24px}
+    h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;border-left:4px solid #c99a2e;padding-left:8px}
+    .meta{color:#555;font-size:12px;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin:4px 0}
+    th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px}.r{text-align:right}.c{text-align:center}
+    thead th{background:#f3ede0}tfoot td{font-weight:600;background:#faf7f0}
+    .note{font-size:10px;color:#777;margin:4px 0 0}
+    .cbox{margin-top:16px;border:1px dashed #999;padding:10px 12px;font-size:12px}.sign{margin-top:14px}
+    @media screen{body{background:#eee;padding:20px}.sheet{background:#fff;padding:28px 32px;box-shadow:0 2px 12px rgba(0,0,0,.15)}}
+    .tb{position:fixed;top:10px;right:10px}@media print{.tb{display:none}}</style>`;
+  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>採購部個人獎金確認表 ${yr}${qq}</title>${css}</head><body><div class="tb"><button onclick="window.print()">🖨️ 列印 / 存 PDF</button></div>${pages}</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){showToast('請允許彈出視窗後再試');return;}
+  w.document.write(html); w.document.close();
 }
 
 // PRODUCTION
