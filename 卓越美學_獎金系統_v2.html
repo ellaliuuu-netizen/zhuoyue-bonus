@@ -5959,17 +5959,22 @@ let _stgRows=[];
 function _custKey(s){
   return String(s||'').replace(/[（(][^）)]*[）)]/g,'').replace(/股份有限公司|有限公司|公司/g,'').replace(/\s+/g,'');
 }
-let _custRep={};
+let _custRep={}, _custRepFixed={};
 async function _loadCustRep(){
   const {data}=await sb.from('order_lines').select('customer_name, sales_person, sign_date')
     .not('sales_person','is',null).order('sign_date',{ascending:false});
   _custRep={};
   (data||[]).forEach(o=>{ const k=_custKey(o.customer_name), sp=(o.sales_person||'').trim();
     if(k && sp && !_custRep[k]) _custRep[k]=sp; });   // 依簽單日新到舊，第一筆＝最近一張單的業務
+  // 系統裡沒有訂單的客戶（例：橋渼、昱汝、艾藤美容），由協理指定的歸屬表補位：system_settings.customer_sales_rep（JSON）
+  _custRepFixed={};
+  const {data:st}=await sb.from('system_settings').select('value').eq('key','customer_sales_rep').maybeSingle();
+  try{ Object.entries(JSON.parse(st?.value||'{}')).forEach(([c,sp])=>{ const k=_custKey(c); if(k&&sp) _custRepFixed[k]=String(sp).trim(); }); }catch(e){ console.warn('customer_sales_rep 格式錯誤',e); }
 }
 function _repOf(cust){
   const k=_custKey(cust); if(!k) return null;
   if(_custRep[k]) return _custRep[k];
+  if(_custRepFixed[k]) return _custRepFixed[k];
   // 會計與訂單簿寫法略有不同（例「飲美科」vs「飲美科妍」）→ 退一步用包含比對，但只接受唯一結果
   const hits=[...new Set(Object.keys(_custRep).filter(x=>x.includes(k)||k.includes(x)).map(x=>_custRep[x]))];
   return hits.length===1?hits[0]:null;
