@@ -6215,7 +6215,7 @@ function _stgSetRep(id,sp){
 }
 async function rejectStaging(batch){
   const ok=await confirmCard('退回這批自動匯入',
-    `將 <b>${esc2(batch)}</b> 的待確認資料整批標記為「已退回」，<b>不會寫入正式資料</b>。<br><br>下次 NAS 排程仍會重新讀取該月檔案並再次送來待確認。`,'確認退回');
+    `將 <b>${esc2(batch)}</b> 的待確認資料整批標記為「已退回」，<b>不會寫入正式資料</b>。<br><br>同一版會計檔不會再送來；<b>會計改檔或給出新版（例如月底最終版）時，每日排程會自動整批重新送來待確認</b>。`,'確認退回');
   if(!ok) return;
   const {error}=await sb.from('sales_staging').update({status:'rejected'}).eq('batch',batch).eq('status','pending');
   if(error){showToast('退回失敗：'+error.message);return;}
