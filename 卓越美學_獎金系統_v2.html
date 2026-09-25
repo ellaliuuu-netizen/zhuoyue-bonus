@@ -624,8 +624,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>產品編號</th><th>品名</th><th>本次件數</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
-            <tbody id="shipments-tbody"><tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
+            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>產品編號</th><th>品名</th><th>本次件數</th><th>系統配對訂單</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
+            <tbody id="shipments-tbody"><tr><td colspan="10" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -2737,7 +2737,7 @@ async function saveOrder() {
 async function loadShipments() {
   // 同 loadOrders：出貨的真實來源是會計銷貨明細 sales_records（舊 shipments 表未使用）
   const { data: recs } = await sb.from('sales_records')
-    .select('id, ship_date, invoice_no, customer_name, item_name_raw, product_code, qty, note')
+    .select('id, ship_date, invoice_no, customer_name, item_name_raw, product_code, qty, note, source_order_no, matched_order_no, match_note')
     .eq('year', appSettings.year).eq('quarter', appSettings.quarter)
     .order('ship_date', { ascending: false });
   // 訂單量與累計出貨：依「品號＋客戶」歸戶。不可限本季——訂單常在前一季（甚至前一年）簽回、本季才出貨，
@@ -2760,6 +2760,7 @@ async function loadShipments() {
     const m = ordMap[key(r.product_code)] || { total: 0, shipped: 0, n: 0, done: 0 };
     return {
       id: r.id, ship_date: r.ship_date, shipment_no: r.invoice_no, product_code: r.product_code,
+      src_order_no: r.source_order_no, matched_order_no: r.matched_order_no, match_note: r.match_note,
       ship_qty: r.qty || 0, is_on_time: true, is_refunded: (r.qty || 0) < 0,
       _totalShipped: m.shipped, _total: m.total, _ord: m,
       order: { customer_name: r.customer_name, product_name: r.item_name_raw, total_qty: m.total }
@@ -2769,7 +2770,7 @@ async function loadShipments() {
   if (!data.length) {
     // 銷貨明細含金額，讀取政策僅開放協理／財務；對課長要講清楚是權限而非沒資料，否則會誤判成匯入失敗
     const noPerm = currentRole === 'rd_manager';
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--ink-faint);padding:24px">${noPerm ? '🔒 出貨明細含金額資訊，研發課長權限不開放檢視' : '本季尚無出貨紀錄'}</td></tr>`;
     return;
   }
 
@@ -2785,6 +2786,7 @@ async function loadShipments() {
       <td style="font-size:12px;white-space:nowrap">${s.product_code||'<span style="color:#b3541e">未對應</span>'}</td>
       <td>${s.order?.product_name||'—'}</td>
       <td class="td-right">${fmtNum(s.ship_qty)}</td>
+      <td style="font-size:12px;white-space:nowrap">${s.matched_order_no?esc2(s.matched_order_no)+(s.src_order_no&&s.src_order_no!==s.matched_order_no?`<div style="font-size:10px;color:#b3541e">會計填 ${esc2(s.src_order_no)}</div>`:(s.src_order_no?'<div style="font-size:10px;color:var(--green)">與會計單號一致</div>':'')):(s.match_note?`<span style="font-size:11px;color:${String(s.match_note).startsWith('剔除')?'var(--ink-faint)':'#b3541e'}">${esc2(s.match_note)}</span>`:'<span style="font-size:11px;color:var(--ink-faint)">尚未配對</span>')}</td>
       <td>${!total?'<span style="color:var(--ink-faint);font-size:11px">查無對應訂單</span>'
         :(m.n>1
           ? `<div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">${m.n} 張訂單（每張 ${fmtNum(Math.round(total/m.n))}）·已結清 <b style="color:${m.done===m.n?'var(--green)':'var(--gold)'}">${m.done}/${m.n}</b> 張</div><div style="font-size:11px;color:var(--ink-faint)">累計出貨 ${fmtNum(totalShipped)}</div>`
@@ -5880,7 +5882,7 @@ const _RAW_MATERIAL_KEYWORDS=['lipobelle','奈米冰川水'];
 // 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
   const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date');
-  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, source_order_date, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter').not('product_code','is',null).or('new_or_repeat.is.null,new_or_repeat.neq.其他');  // ⛔ 勿改回 .neq：neq 會把 NULL 一起濾掉（2026-09-25 自動匯入的 9 月銷貨因此整批沒配對、訂單進度顯示 0%）
+  const {data:sales}=await sb.from('sales_records').select('id, source_order_no, source_order_date, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter, matched_order_no, match_note').not('product_code','is',null).or('new_or_repeat.is.null,new_or_repeat.neq.其他');  // ⛔ 勿改回 .neq：neq 會把 NULL 一起濾掉（2026-09-25 自動匯入的 9 月銷貨因此整批沒配對、訂單進度顯示 0%）
   const matched={}; _orderAmbiguous=[]; _orderExcluded=[];
   const cumq={};   // ol.id -> 已累計量（FIFO 判斷是否已滿）
   const byCode={}; // code -> [ol]
@@ -5948,6 +5950,22 @@ async function matchSalesToOrders(){
       upd.bonus_settled_quarter=mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'; upd.bonus_settled_month=mo;
     } else { upd.bonus_settled_at=null; upd.bonus_settled_year=null; upd.bonus_settled_quarter=null; upd.bonus_settled_month=null; }
     await sb.from('order_lines').update(upd).eq('id',o.id);
+  }
+  // 把配對結果寫回每筆銷貨（出貨紀錄頁「系統配對訂單」欄顯示用；2026-09-25 協理裁示）
+  // 只寫有變動的列，並以「相同結果」分組批次更新，避免每次進部門頁都逐筆寫入
+  const want={};
+  for(const o of (ols||[])) for(const r of (matched[o.id]||[])) want[r.id]={matched_order_no:o.order_no||'(無單號)', match_note:null};
+  for(const r of _orderAmbiguous) want[r.id]={matched_order_no:null, match_note:r.reason||'對不到訂單'};
+  for(const r of _orderExcluded)  want[r.id]={matched_order_no:null, match_note:'剔除：'+(r.reason||'')};
+  const groups={};
+  for(const r of (sales||[])){
+    const w=want[r.id]; if(!w) continue;
+    if((r.matched_order_no||null)===w.matched_order_no && (r.match_note||null)===w.match_note) continue;
+    const k=JSON.stringify(w); (groups[k]=groups[k]||[]).push(r.id);
+  }
+  for(const [k,ids] of Object.entries(groups)){
+    const w=JSON.parse(k);
+    for(let i=0;i<ids.length;i+=100) await sb.from('sales_records').update(w).in('id',ids.slice(i,i+100));
   }
   return _orderAmbiguous;
 }
@@ -6228,7 +6246,7 @@ async function confirmImportStaging(batch){
     const d=r.ship_date||''; const mo=Number(d.slice(5,7))||0;
     return {import_batch:'AUTO-'+batch, customer_name:r.customer_name, item_name_raw:r.item_name_raw,
       product_code:r.product_code||null, qty:r.qty, unit_price:r.unit_price, amount:r.amount,
-      sales_person:r._rep, new_or_repeat:'', ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
+      sales_person:r._rep, new_or_repeat:'', source_order_no:r.source_order_no||null, ship_date:r.ship_date, invoice_no:r.invoice_no, note:r.note,
       year:Number(d.slice(0,4))||null, month:mo||null,
       quarter:mo?(mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'):null};
   });
