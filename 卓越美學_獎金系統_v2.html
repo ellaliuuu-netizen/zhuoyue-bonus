@@ -4096,8 +4096,8 @@ async function loadAuditLogs(){
 
 // PLANNING
 // v5 規則：5 項評分（每項 1-5），總分 5-25
-// 企劃部 v1 確認版（2026 Q4 起）：KPI 六項（新增⑥專案企劃），總分 6–30；2026 Q3 以前依 v7 五項
-function planIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && appSettings.quarter==='Q4'); }
+// 企劃部 v1 確認版（2026 Q3 起；協理 2026-09-28 裁示 Q3 即適用）：KPI 六項（新增⑥專案企劃），總分 6–30；2026 Q2 以前依 v7 五項
+function planIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && (appSettings.quarter==='Q3'||appSettings.quarter==='Q4')); }
 function planApplyVersion(){
   const v1=planIsV1(); const g=document.getElementById('plan-s6-group'); if(g) g.style.display=v1?'':'none';
   const h=document.getElementById('plan-score-head'); if(h) h.textContent=v1?'評分項目（每項 1–5 分，共 6 項，總分 6–30）':'評分項目（每項 1–5 分，共 5 項，總分 5–25）';
