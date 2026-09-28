@@ -1040,13 +1040,14 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div id="plan-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           <div id="plan-staff-scores">
             <hr class="divider">
-            <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--purple)">評分項目（每項 1–5 分，共 5 項，總分 5–25）</div>
+            <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--purple)" id="plan-score-head">評分項目（每項 1–5 分，共 5 項，總分 5–25）</div>
             <div class="score-group"><div class="score-title">① 文案字卡品質</div><div class="score-desc">1分：內容粗糙 ｜ 3分：品質普通 ｜ 5分：品質優秀</div><div class="score-stars" id="plan-s1"></div></div>
             <div class="score-group"><div class="score-title">② 訂單追蹤與執行效率</div><div class="score-desc">1分：經常延誤 ｜ 3分：偶爾延誤 ｜ 5分：準時完成</div><div class="score-stars" id="plan-s2"></div></div>
             <div class="score-group"><div class="score-title">③ 主動服務客戶程度</div><div class="score-desc">1分：被動等待 ｜ 3分：偶爾主動 ｜ 5分：積極主動</div><div class="score-stars" id="plan-s3"></div></div>
             <div class="score-group"><div class="score-title">④ 學習成長速度</div><div class="score-desc">1分：進步緩慢 ｜ 3分：穩定進步 ｜ 5分：快速成長</div><div class="score-stars" id="plan-s4"></div></div>
             <div class="score-group"><div class="score-title">⑤ 客戶滿意度</div><div class="score-desc">1分：客戶投訴/棄單 ｜ 3分：客戶 6 個月內未回購但無負面回饋 ｜ 5分：客戶 3 個月內回購且無投訴</div><div class="score-stars" id="plan-s5"></div></div>
-            <div style="text-align:right;font-size:13px;color:var(--ink-faint);margin-top:5px">總分：<strong id="plan-score-tot" style="color:var(--purple);font-size:16px">0</strong> / 25</div>
+            <div class="score-group" id="plan-s6-group" style="display:none"><div class="score-title">⑥ 專案企劃</div><div class="score-desc">協理指派之專案（成本估算、獎項申請、人體試驗、內部功效測試、展會）：1分：延誤或品質不足 ｜ 3分：如期完成（當季未指派以 3 分計） ｜ 5分：如期完成且成果優異</div><div class="score-stars" id="plan-s6"></div></div>
+            <div style="text-align:right;font-size:13px;color:var(--ink-faint);margin-top:5px">總分：<strong id="plan-score-tot" style="color:var(--purple);font-size:16px">0</strong> / <span id="plan-score-max">25</span></div>
           </div>
           <div id="plan-mgr-scores" style="display:none">
             <hr class="divider">
@@ -4095,8 +4096,17 @@ async function loadAuditLogs(){
 
 // PLANNING
 // v5 規則：5 項評分（每項 1-5），總分 5-25
+// 企劃部 v1 確認版（2026 Q4 起）：KPI 六項（新增⑥專案企劃），總分 6–30；2026 Q3 以前依 v7 五項
+function planIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && appSettings.quarter==='Q4'); }
+function planApplyVersion(){
+  const v1=planIsV1(); const g=document.getElementById('plan-s6-group'); if(g) g.style.display=v1?'':'none';
+  const h=document.getElementById('plan-score-head'); if(h) h.textContent=v1?'評分項目（每項 1–5 分，共 6 項，總分 6–30）':'評分項目（每項 1–5 分，共 5 項，總分 5–25）';
+  const m=document.getElementById('plan-score-max'); if(m) m.textContent=v1?'30':'25';
+}
+function planScoreIds(){ return planIsV1()?['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5','plan-s6']:['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5']; }
 function calcPlanScore(){
-  const scores=['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5'].map(id=>getStarScore(id));
+  planApplyVersion();
+  const scores=planScoreIds().map(id=>getStarScore(id));
   const total=scores.reduce((a,b)=>a+b,0);
   document.getElementById('plan-score-tot').textContent=total; return total;
 }
@@ -4124,6 +4134,12 @@ function planTieredShipBonus(ships, isMgr){
 
 // v5 KPI 同仁：總分 5-25 區間
 function planStaffKpiBonus(totalScore){
+  if(planIsV1()){   // v1 確認版：30 分制
+    if(totalScore<=19) return {bonus:0, label:'普通'};
+    if(totalScore<=24) return {bonus:1500, label:'良好'};
+    if(totalScore<=29) return {bonus:3000, label:'優秀'};
+    return {bonus:5000, label:'非常優秀'};
+  }
   if(totalScore<=16) return {bonus:0, label:'普通'};
   if(totalScore<=20) return {bonus:1500, label:'良好'};
   if(totalScore<=24) return {bonus:3000, label:'優秀'};
@@ -4227,6 +4243,7 @@ function refreshPlanShipCount(){
   if(note) note.innerHTML=`✅ ${nm} 本季負責 <strong>${normal+legacy}</strong> 件（正常 ${normal}＋公司過往 ${legacy}·折半${unassigned?`；⚠️尚有 ${unassigned} 件未指派`:''}）`;
 }
 async function initPlanning(){
+  planApplyVersion();
   try{ await matchSalesToOrders(); }catch(e){console.warn('matchSalesToOrders',e);}
   await renderPlanAttribution();
 }
@@ -4257,7 +4274,7 @@ function calcPlanning(){
   show('plan-result');
   document.getElementById('plan-total').textContent=fmt(total);
   let html = `<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(ship.total)}</strong>${ships>=15?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ship.breakdown+'</span>':''}</div>`;
-  html += `<div class="res-item"><span class="res-item-dot"></span><strong>KPI 獎金：${fmt(kpi.bonus)}</strong>（${kpi.label}${!isMgr?` ／ 總分 ${kpi.totalScore}/25`:''}）</div>`;
+  html += `<div class="res-item"><span class="res-item-dot"></span><strong>KPI 獎金：${fmt(kpi.bonus)}</strong>（${kpi.label}${!isMgr?` ／ 總分 ${kpi.totalScore}/${planIsV1()?30:25}`:''}）</div>`;
   html += `<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>直接加總：${fmt(ship.total)} ＋ ${fmt(kpi.bonus)} = <strong>${fmt(base)}</strong></div>`;
   if (pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(base)}、實發 ${fmt(total)}${pr.note}</div>`;
   document.getElementById('plan-breakdown').innerHTML=html;
@@ -4284,8 +4301,8 @@ async function savePlanning(){
   const base = ship.total + kpi.bonus;
   const pr=probationRatio(emp);
   const bonus=Math.round(base*pr.ratio);
-  const detail=`${role}｜出貨 ${ships} 件（件數 ${fmt(ship.total)}）＋ KPI ${kpi.label}（${fmt(kpi.bonus)}）${!isMgr?`，總分 ${kpi.totalScore}/25`:''}${pr.note}`;
-  const scores = isMgr ? {mgr_rating:document.getElementById('plan-mgr-rating').value} : {s1:getStarScore('plan-s1'),s2:getStarScore('plan-s2'),s3:getStarScore('plan-s3'),s4:getStarScore('plan-s4'),s5:getStarScore('plan-s5')};
+  const detail=`${role}｜出貨 ${ships} 件（件數 ${fmt(ship.total)}）＋ KPI ${kpi.label}（${fmt(kpi.bonus)}）${!isMgr?`，總分 ${kpi.totalScore}/${planIsV1()?30:25}`:''}${pr.note}`;
+  const scores = isMgr ? {mgr_rating:document.getElementById('plan-mgr-rating').value} : Object.assign({s1:getStarScore('plan-s1'),s2:getStarScore('plan-s2'),s3:getStarScore('plan-s3'),s4:getStarScore('plan-s4'),s5:getStarScore('plan-s5')}, planIsV1()?{s6:getStarScore('plan-s6'),mode:'v1'}:{});
   const ok=await saveKpiDraft({employee_id:emp.id,dept:'企劃部',name:emp.name,role_title:role,ship_count:ships,scores,score_total:isMgr?null:kpi.totalScore,kpi_bonus:kpi.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
   if (ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
@@ -4476,9 +4493,10 @@ async function generateDeptConfirmSheets(dept){
             <tr><td>主動服務客戶程度</td><td class="c">${sc.s3??'—'}</td></tr>
             <tr><td>學習成長速度</td><td class="c">${sc.s4??'—'}</td></tr>
             <tr><td>客戶滿意度</td><td class="c">${sc.s5??'—'}</td></tr>
-           </tbody><tfoot><tr><td>總分</td><td class="c">${k.score_total||0} / 25</td></tr>
+            ${sc.mode==='v1'?`<tr><td>專案企劃</td><td class="c">${sc.s6??'—'}</td></tr>`:''}
+           </tbody><tfoot><tr><td>總分</td><td class="c">${k.score_total||0} / ${sc.mode==='v1'?30:25}</td></tr>
            <tr><td>對應級距獎金</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr></tfoot></table>
-           <p class="note">級距：16 分以下 0 元｜17–20 分 1,500｜21–24 分 3,000｜25 分 5,000。</p>`);
+           <p class="note">${sc.mode==='v1'?'級距：19 分以下 0 元｜20–24 分 1,500｜25–29 分 3,000｜30 分 5,000。專案企劃自協理指派之日起評分，當季未指派以 3 分計。':'級距：16 分以下 0 元｜17–20 分 1,500｜21–24 分 3,000｜25 分 5,000。'}</p>`);
     } else {
       const legacyQ = sc.mode!=='v1';
       const ot = prodOnTimeBonus(legacyQ?0:Number(sc.ontime||0));
@@ -4923,7 +4941,7 @@ async function editKpiDraft(id){
         const rating=s.mgr_rating||'待改進';
         document.getElementById('plan-mgr-rating').value=rating;
         document.querySelectorAll('#plan-mgr-scores .tier-btn').forEach(b=>b.classList.toggle('active', b.textContent===rating));
-      } else { ['s1','s2','s3','s4','s5'].forEach(k=>setStarScore('plan-'+k, s[k]||0)); calcPlanScore(); }
+      } else { ['s1','s2','s3','s4','s5','s6'].forEach(k=>setStarScore('plan-'+k, s[k]||0)); calcPlanScore(); }
       if(r.ship_count!=null) document.getElementById('plan-shipments').value=r.ship_count;
       calcPlanning();
     } else if(r.dept==='採購部'){
@@ -4950,7 +4968,7 @@ async function editKpiDraft(id){
   }, 900);
 }
 function initAllStars(){
-  ['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5'].forEach(id=>initScoreStars(id,calcPlanScore));
+  ['plan-s1','plan-s2','plan-s3','plan-s4','plan-s5','plan-s6'].forEach(id=>initScoreStars(id,calcPlanScore)); planApplyVersion();
   ['pur-s1','pur-s2','pur-s3','pur-s4'].forEach(id=>initScoreStars(id,calcPurScore));
   ['prod-s1','prod-s2','prod-s3','prod-s4','prod-t1','prod-t2','prod-t3','prod-t4','prod-t5','prod-t6'].forEach(id=>initScoreStars(id,calcProdScore));
 }
@@ -4982,7 +5000,7 @@ async function saveKpiDraft(b){
 }
 function kpiScoreStr(dept,s){
   if(!s) return '';
-  if(dept==='企劃部') return s.mgr_rating?`整體評等：${s.mgr_rating}`:`①${s.s1} ②${s.s2} ③${s.s3} ④${s.s4} ⑤${s.s5}`;
+  if(dept==='企劃部') return s.mgr_rating?`整體評等：${s.mgr_rating}`:`①${s.s1} ②${s.s2} ③${s.s3} ④${s.s4} ⑤${s.s5}${s.s6!=null?` ⑥${s.s6}`:''}`;
   if(dept==='採購部') return `議價${s.s1} 缺料${s.s2} 協調${s.s3} 預測${s.s4}${s.supplement?'｜兼生管':''}`;
   if(dept==='生產部') return s.mode==='v1' ? `準時率${s.ontime}%｜交期${s.t1} 工單${s.t2} 異常客訴${s.t3} 改善${s.t4} 效期${s.t5} 協調${s.t6}${s.noincident?'（無案件）':''}`
     : `準時率${s.mode?'不計':s.ontime+'%'}｜排程${s.e1} 協調${s.e2} 異常${s.e3} 文件${s.e4}${s.trial_total!=null?`｜試評${s.trial_total}`:''}`;
