@@ -4495,7 +4495,7 @@ async function generateDeptConfirmSheets(dept){
         : `<table><tbody><tr><td>本季準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr>
         <tr><td>計算式</td><td class="r">${ot.breakdown||'—'}</td></tr>
         <tr><td>準時率獎金</td><td class="r"><b>${fmt(ot.bonus)}</b></td></tr></tbody></table>
-        <p class="note">未達 70% 不發；達標＝2,000 ＋（準時率 − 70）× 200；100% 另加 2,000。準時＝實際完成日在承諾交期當天或之前；依承諾交期所屬季度計算，到期未完成者計為延遲；以協理核准時之交期正本為準。</p>`)
+        <p class="note">未達 70% 不發；達標＝1,000 ＋（準時率 − 70）× 100；100% 另加 1,000。準時＝實際完成日在承諾交期當天或之前；依承諾交期所屬季度計算，到期未完成者計為延遲；以協理核准時之交期正本為準。</p>`)
         + `<h2>三、評分加成</h2>` + (legacyQ
         ? `<table><thead><tr><th>評分面向（原四項標準）</th><th class="c">得分（1／3／5）</th></tr></thead><tbody>
           <tr><td>排程準確性</td><td class="c">${sc.e1??'—'}</td></tr>
@@ -4812,14 +4812,14 @@ function prodTieredShipBonus(ships){
   return {total, breakdown:parts.join(' ＋ ')};
 }
 
-// v2 準時率獎金：公式 2,000 + (率-70)×200，100% 再 +2,000
+// 生管 v1 確認版（2026-09-28 協理調整）準時率獎金：1,000 + (率-70)×100，100% 再 +1,000
 function prodOnTimeBonus(rate){
   if(rate<70) return {bonus:0, breakdown:'未達 70% 門檻'};
-  const base = Math.round(2000 + (rate-70)*200);
-  const fullBonus = rate>=100 ? 2000 : 0;
+  const base = Math.round(1000 + (rate-70)*100);
+  const fullBonus = rate>=100 ? 1000 : 0;
   const total = base + fullBonus;
-  const parts = [`基礎 2,000 + (${rate}% − 70) × 200 = ${base.toLocaleString()}`];
-  if(fullBonus) parts.push(`全達獎金 +2,000`);
+  const parts = [`基礎 1,000 + (${rate}% − 70) × 100 = ${base.toLocaleString()}`];
+  if(fullBonus) parts.push(`全達獎金 +1,000`);
   return {bonus:total, breakdown:parts.join('；')};
 }
 
