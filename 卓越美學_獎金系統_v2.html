@@ -1020,7 +1020,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- PLANNING -->
       <div class="page" id="page-planning">
         <div class="section-title" style="color:var(--purple)">企劃部獎金計算</div>
-        <div class="section-desc">季獎金 = 出貨件數獎金（階梯逐件累加）＋ KPI 表現獎金（依 v5 文件）</div>
+        <div class="section-desc">2026 Q3 起依《產品企劃部獎金制度 v1 確認版》：季獎金＝件數獎金（依字卡等級）× 季度加成 ＋ KPI 表現獎金。2026 Q2 以前依 v7（階梯逐件累加）。</div>
         <div id="plan-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card manager-only" id="plan-attrib-card">
           <div class="card-header"><div class="card-title">🎯 本季結算品項 → 負責企劃 歸屬</div></div>
@@ -1038,6 +1038,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="form-group"><label class="form-label">本企劃本季負責件數（依歸屬自動帶，可手改）</label>
             <input class="form-input" type="number" id="plan-shipments" placeholder="0" min="0" style="max-width:180px" />
             <div id="plan-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
+          <div class="form-group" id="plan-grace-box" style="display:none"><label class="form-label">核定理由（印在個人獎金確認表）</label>
+            <div id="plan-grace-note" style="font-size:11px;color:#6b4f8a;margin-bottom:4px"></div>
+            <input class="form-input" id="plan-grace-reason" placeholder="例：試用期間表現良好、具上進心" /></div>
           <div id="plan-staff-scores">
             <hr class="divider">
             <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--purple)" id="plan-score-head">評分項目（每項 1–5 分，共 5 項，總分 5–25）</div>
@@ -1079,7 +1082,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('企劃部')">產生確認表</button>
             </div>
           </div>
-          <div class="info-box">產出該季已放行的企劃部獎金明細：件數逐級距算式＋計件品項清單＋KPI 五項評分＋主管加給＋合計＋異議處理程序＋簽收欄。</div>
+          <div class="info-box">產出該季已放行的企劃部獎金明細。2026 Q3 起（v1）：計件品項逐筆（字卡等級、首發／追加／承接、單價）＋季度加成＋KPI 六項＋公司核定事項＋合計＋異議處理程序＋簽收欄。</div>
         </div>
       </div>
 
@@ -1091,7 +1094,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">📋 產品清單</div></div>
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
             <input class="form-input" id="pm-search" placeholder="搜尋 編號 / 品名" style="max-width:220px" oninput="renderProductMaster()" />
-            <label style="font-size:12px;white-space:nowrap"><input type="checkbox" id="pm-only-unassigned" onchange="renderProductMaster()"> 只看企劃未指派</label>
+            <label style="font-size:12px;white-space:nowrap"><input type="checkbox" id="pm-only-unassigned" onchange="renderProductMaster()"> 只看待設定（字卡等級／歸屬／負責企劃）</label>
             <button class="btn btn-gold btn-sm" onclick="loadProductMaster()">🔄 重新載入</button>
           </div>
           <div id="pm-summary" style="font-size:12px;margin-bottom:8px;color:var(--ink-faint)"></div>
@@ -1102,7 +1105,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       <!-- PURCHASE -->
       <div class="page" id="page-purchase">
         <div class="section-title" style="color:var(--teal)">採購部獎金計算</div>
-        <div class="section-desc">季獎金 = 出貨件數獎金 ＋ 評分加成 ＋ 兼任生管補貼</div>
+        <div class="section-desc" id="pur-desc">季獎金 = 出貨件數獎金 ＋ 評分加成 ＋ 兼任生管補貼</div>
         <div id="pur-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
         <div class="card">
           <div class="card-header"><div class="card-title">🛒 採購部試算</div></div>
@@ -1112,7 +1115,20 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <input class="form-input" type="number" id="pur-shipments" placeholder="0" min="0" />
               <div id="pur-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
           </div>
-          <div class="form-group">
+          <div class="form-group" id="pur-v1-box" style="display:none">
+            <hr class="divider">
+            <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--teal)">v1 新增三項（2026 Q4 起）</div>
+            <label class="form-label">① 到料準時率 %（系統依 Notion 到料正本自動計算，可手改）</label>
+            <input class="form-input" type="number" id="pur-ontime" min="0" max="100" step="0.1" style="max-width:160px" />
+            <div id="pur-ot-info" style="font-size:11px;color:var(--ink-faint);margin:4px 0 10px"></div>
+            <label class="form-label">② 本季議價節省金額（元）</label>
+            <input class="form-input" type="number" id="pur-save" min="0" step="100" placeholder="0" style="max-width:160px" />
+            <div style="font-size:11px;color:var(--ink-faint);margin:4px 0 10px">取自 Notion「💰 議價紀錄」本季「協理核准」且「驗收結果＝合格」之「節省金額」合計；獎金＝節省 × 5%，上限 1,000。當季進料不良率超標者填 0。</div>
+            <label class="form-label">③ 本季達成之優質新廠商家數</label>
+            <input class="form-input" type="number" id="pur-newsup" min="0" step="1" placeholder="0" style="max-width:160px" />
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:4px">取自 Notion「🤝 新廠商開發紀錄」本季「達成＝✅」且「協理核定」勾選者；每家 500。</div>
+          </div>
+          <div class="form-group" id="pur-concurrent-group">
             <label class="form-label">是否仍兼任生管工作？</label>
             <div class="tier-select" style="max-width:280px">
               <div class="tier-btn active" onclick="selectTier(this,'pur-concurrent','yes')">是（+補貼）</div>
@@ -1122,10 +1138,10 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           </div>
           <hr class="divider">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--teal)">評分項目（加權）</div>
-          <div class="score-group"><div class="score-title">議價與供應商管理 <span class="badge badge-gold">40%</span></div><div class="score-desc">主動比價、議價成功率、備用供應商開發</div><div class="score-stars" id="pur-s1"></div></div>
-          <div class="score-group"><div class="score-title">缺料危機處理 <span class="badge badge-gold">30%</span></div><div class="score-desc">缺料預警速度、危機處理能力</div><div class="score-stars" id="pur-s2"></div></div>
-          <div class="score-group"><div class="score-title">跨部門協調追蹤 <span class="badge badge-gold">20%</span></div><div class="score-desc">主動追蹤進度、下單時間掌控</div><div class="score-stars" id="pur-s3"></div></div>
-          <div class="score-group"><div class="score-title">備料預測與成本優化 <span class="badge badge-gold">10%</span></div><div class="score-desc">常用原料使用頻率追蹤與建議</div><div class="score-stars" id="pur-s4"></div></div>
+          <div class="score-group" id="pur-s1-group"><div class="score-title">議價與供應商管理 <span class="badge badge-gold">40%</span></div><div class="score-desc">主動比價、議價成功率、備用供應商開發</div><div class="score-stars" id="pur-s1"></div></div>
+          <div class="score-group"><div class="score-title">缺料危機處理 <span class="badge badge-gold" id="pur-w2">30%</span></div><div class="score-desc">缺料預警速度、危機處理能力</div><div class="score-stars" id="pur-s2"></div></div>
+          <div class="score-group"><div class="score-title">跨部門協調追蹤 <span class="badge badge-gold" id="pur-w3">20%</span></div><div class="score-desc">主動追蹤進度、下單時間掌控</div><div class="score-stars" id="pur-s3"></div></div>
+          <div class="score-group"><div class="score-title">備料預測與成本優化 <span class="badge badge-gold" id="pur-w4">10%</span></div><div class="score-desc">常用原料使用頻率追蹤與建議</div><div class="score-stars" id="pur-s4"></div></div>
           <div style="text-align:right;font-size:12px;color:var(--ink-faint);margin-top:5px">加權分數：<strong id="pur-score-tot" style="color:var(--teal);font-size:15px">0</strong> / 100</div>
           <div id="pur-result" style="display:none" class="result-highlight">
             <div class="res-label">季獎金合計</div><div class="res-value" id="pur-total">—</div>
@@ -1147,7 +1163,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <button class="btn btn-outline btn-sm" onclick="generatePurConfirmSheets()">產生確認表</button>
             </div>
           </div>
-          <div class="info-box">產出該季已放行的採購部獎金明細：件數逐級距算式＋計件品項清單＋評分四面向得分＋兼任補貼＋合計，可列印或存 PDF 給同仁簽收。未放行的季度不會有資料。</div>
+          <div class="info-box">產出該季已放行的採購部獎金明細，可列印或存 PDF 給同仁簽收。2026 Q3 以前（v4）：件數＋評分四面向＋兼任補貼；2026 Q4 起（v1）：件數＋到料準時率＋議價成效＋新廠商開發＋評分三面向。未放行的季度不會有資料。</div>
         </div>
       </div>
 
@@ -4152,6 +4168,150 @@ function planMgrKpiBonus(rating){
   return {bonus:map[rating]||0, label:rating};
 }
 
+// ===== 企劃部 v1 確認版（2026 Q3 起）：件數依字卡等級、追加五折、承接 75、試用包／沙貨不另計件、全公司件數加成 =====
+const PLAN_V1_RATE={'字卡自製':600,'字卡外發':400,'產品講解簡報':250,'無字卡':150};
+const PLAN_V1_INHERIT=75;
+const PLAN_TRIAL_RE=/試用|沙貨|小樣|袋裝/;
+let _planFirstIds=new Set();
+function planV1Mult(n){ if(n<=40)return 1; if(n<=50)return 1.1; if(n<=60)return 1.2; if(n<=70)return 1.3; if(n<=80)return 1.4; return 1.5; }
+function planV1Classify(o){
+  const p=_planProducts[o.product_code]||{};
+  const nm=(o.item_name_raw||'')+' '+(p.product_name||'');
+  if(PLAN_TRIAL_RE.test(nm)) return {kind:'試用包／沙貨（不另計件）',level:'',rate:0,company:false};
+  if(o.bonus_forfeit) return {kind:'不發放',level:p.card_level||'',rate:0,company:true};
+  if(p.planner_role==='不計') return {kind:'不計（公司指定）',level:p.card_level||'',rate:0,company:true};
+  if(p.planner_role==='承接') return {kind:'承接・追加',level:p.card_level||'',rate:PLAN_V1_INHERIT,company:true};
+  const level=p.card_level||'無字卡', base=PLAN_V1_RATE[level]||150, first=_planFirstIds.has(o.id);
+  return {kind:first?'首發':'追加（首發五折）',level,rate:first?base:base/2,company:true,pending:!p.card_level||!p.planner_role};
+}
+// 轉正當月整月計入（員工資料「公司核給」開啟時）：該月起件數全計、之前月份不計，KPI 按月數比例；否則依制度按天數比例
+function planV1Grace(emp){
+  if(!emp||!emp.probation_end_date||!emp.probation_grace_month) return {active:false};
+  const pr=probationRatio(emp);
+  if(pr.ratio>=1||pr.ratio<=0) return {active:false};
+  const fs=new Date(emp.probation_end_date); fs.setDate(fs.getDate()+1);
+  const fromMonth=fs.getMonth()+1, qStartM={Q1:1,Q2:4,Q3:7,Q4:10}[appSettings.quarter], months=qStartM+3-fromMonth;
+  return {active:true,fromMonth,months,kpiFactor:months/3,note:`公司核定：自 ${fromMonth} 月起整月計入（${fromMonth} 月前之件數不計，不以轉正日切分）；KPI 表現獎金按 ${months}/3 計`};
+}
+function planV1Compute(emp){
+  const all=(_planSettled||[]).map(o=>({o,c:planV1Classify(o)}));
+  const companyN=all.filter(x=>x.c.company).length, mult=planV1Mult(companyN);
+  const g=planV1Grace(emp);
+  const mine=all.filter(x=>{ if(x.c.rate===0&&!emp) return false; const r=resolvedPlanner(x.o); return emp&&r.status==='ok'&&r.emp.id===emp.id; })
+    .map(x=>(g.active&&(x.o.bonus_settled_month||0)<g.fromMonth&&x.c.rate>0)?{o:x.o,c:Object.assign({},x.c,{kind:x.c.kind+'（轉正前月份，不計）',rate:0,before:true})}:x);
+  const pieceRaw=mine.reduce((s,x)=>s+x.c.rate,0), counted=mine.filter(x=>x.c.rate>0).length;
+  const cnt=k=>mine.filter(x=>x.c.rate>0&&x.c.kind.startsWith(k)).length;
+  return {all,mine,companyN,mult,g,pieceRaw,counted,piece:Math.round(pieceRaw*mult),nFirst:cnt('首發'),nRe:cnt('追加'),nInh:cnt('承接')};
+}
+function planV1Result(){
+  const empId=document.getElementById('plan-emp-sel').value;
+  const emp=employees.find(e=>e.id===empId);
+  const v=planV1Compute(emp);
+  const t=calcPlanScore(), kpi=planStaffKpiBonus(t);
+  let pr={ratio:1,note:''}, kpiEff=kpi.bonus, total;
+  if(v.g.active){ kpiEff=Math.round(kpi.bonus*v.g.kpiFactor); total=v.piece+kpiEff; }
+  else { pr=emp?probationRatio(emp):pr; total=Math.round((v.piece+kpi.bonus)*pr.ratio); }
+  return {emp,v,t,kpi,kpiEff,pr,total};
+}
+async function loadPlanFirstIds(){
+  _planFirstIds=new Set();
+  const codes=[...new Set((_planSettled||[]).map(o=>o.product_code).filter(Boolean))];
+  if(!codes.length) return;
+  const {data}=await sb.from('order_lines').select('id,product_code,item_name_raw,sign_date,order_no').in('product_code',codes);
+  const best={};
+  (data||[]).forEach(l=>{
+    if(PLAN_TRIAL_RE.test(l.item_name_raw||'')) return;
+    const k=(l.sign_date||'9999')+'|'+(l.order_no||'');
+    if(!best[l.product_code]||k<best[l.product_code].k) best[l.product_code]={k,id:l.id};
+  });
+  Object.values(best).forEach(b=>_planFirstIds.add(b.id));
+}
+function renderPlanAttributionV1(){
+  const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
+  const all=(_planSettled||[]).map(o=>({o,c:planV1Classify(o),r:resolvedPlanner(o)}));
+  const companyN=all.filter(x=>x.c.company).length, mult=planV1Mult(companyN);
+  const nTrial=all.filter(x=>!x.c.company).length, nZero=all.filter(x=>x.c.company&&x.c.rate===0).length;
+  const pend=[...new Set(all.filter(x=>x.c.pending).map(x=>x.o.product_code))];
+  const bad=all.filter(x=>x.c.rate>0&&x.r.status!=='ok').length;
+  const rows=all.map(({o,c,r})=>{
+    const p=_planProducts[o.product_code]||{};
+    const curPid=o.planner_override_id||p.planner_employee_id||'';
+    const opts=`<option value="">— 未指派 —</option>`+planEmps.map(e=>`<option value="${e.id}" ${e.id===curPid?'selected':''}>${e.name}</option>`).join('');
+    const who=c.rate===0?'<span style="color:var(--ink-faint)">—</span>':`<select class="form-select" style="min-width:100px;padding:4px 6px" onchange="assignPlanner('${o.product_code}',this.value)">${opts}</select>`+(r.status==='leaver'?`<div style="color:#c0392b;font-size:11px">⚠️「${r.emp.name}」已離職</div>`:'');
+    const forfeitBox=`<label style="font-size:11px;white-space:nowrap"><input type="checkbox" onchange="setPlanFlag('${o.id}','forfeit',this.checked)" ${o.bonus_forfeit?'checked':''}> 不發放</label>`;
+    const st=c.rate===0?'background:#eee;opacity:.75':(c.pending?'background:#fff8e1':(r.status!=='ok'?'background:#fdecea':''));
+    return `<tr style="${st}"><td>${o.product_code||''} · ${p.product_name||o.item_name_raw||''}</td><td class="td-center">${o.bonus_settled_month||''}月</td><td>${c.level||'—'}${c.pending?' <span style="color:#b3541e;font-size:11px">未設定</span>':''}</td><td>${c.kind}</td><td class="td-right">${c.rate.toLocaleString()}</td><td>${who}</td><td>${forfeitBox}</td></tr>`;
+  }).join('');
+  const sum=document.getElementById('plan-attrib-summary');
+  if(sum) sum.innerHTML=`本季結算 <strong>${all.length}</strong> 筆｜全公司計件 <strong>${companyN}</strong> 件 → 季度加成 <strong>× ${mult}</strong>（40 件以內 ×1.0，每 10 件 +0.1，81 件以上 ×1.5）｜試用包／沙貨不另計件 ${nTrial}｜不計／不發放 ${nZero}`
+    +(pend.length?`<br><span style="color:#b3541e">⚠️ 字卡等級或歸屬未設定：${pend.join('、')}（暫以「無字卡」計，請至「產品主檔」設定）</span>`:'')
+    +(bad?`<br><span style="color:#c0392b">⛔ 有 ${bad} 筆計件品項負責企劃未指派或已離職</span>`:'');
+  const list=document.getElementById('plan-attrib-list');
+  if(list) list.innerHTML=`<table><thead><tr><th>品項</th><th class="td-center">結算月</th><th>字卡等級</th><th>類別</th><th class="td-right">單價</th><th>負責企劃</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--ink-faint)">本季尚無結算品項</td></tr>'}</tbody></table>`;
+  refreshPlanShipCount();
+}
+function planGraceReasonUI(){
+  const box=document.getElementById('plan-grace-box'); if(!box) return;
+  const emp=employees.find(e=>e.id===document.getElementById('plan-emp-sel').value);
+  const g=planIsV1()?planV1Grace(emp):{active:false};
+  box.style.display=g.active?'':'none';
+  const n=document.getElementById('plan-grace-note'); if(n) n.textContent=g.active?g.note:'';
+}
+function calcPlanningV1(){
+  const R=planV1Result(), v=R.v;
+  show('plan-result');
+  document.getElementById('plan-total').textContent=fmt(R.total);
+  let html=`<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(v.piece)}</strong><br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">計件 ${v.counted} 件（首發 ${v.nFirst}、追加 ${v.nRe}、承接 ${v.nInh}）小計 ${v.pieceRaw.toLocaleString()} × 季度加成 ${v.mult}（全公司 ${v.companyN} 件）</span></div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>KPI 獎金：${fmt(R.kpiEff)}</strong>（${R.kpi.label} ／ 總分 ${R.t}/30${v.g.active?`；級距 ${fmt(R.kpi.bonus)} × ${v.g.months}/3`:''}）</div>`;
+  html+=`<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>合計：${fmt(v.piece)} ＋ ${fmt(R.kpiEff)}${R.pr.ratio<1?` ＝ ${fmt(v.piece+R.kpiEff)}，× 試用期比例 ${(R.pr.ratio*100).toFixed(1)}%`:''} ＝ <strong>${fmt(R.total)}</strong></div>`;
+  if(v.g.active) html+=`<div class="res-item" style="color:#6b4f8a"><span class="res-item-dot"></span>⭐ ${v.g.note}</div>`;
+  else if(R.pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派${R.pr.note}</div>`;
+  document.getElementById('plan-breakdown').innerHTML=html;
+}
+async function savePlanningV1(){
+  const R=planV1Result(), v=R.v;
+  if(!R.emp){showToast('請選擇企劃人員');return;}
+  const reason=(document.getElementById('plan-grace-reason')||{}).value||'';
+  if(v.g.active&&!reason.trim()){showToast('請填寫「核定理由」（會印在確認表上）');return;}
+  const pn=c=>(_planProducts[c]||{}).product_name||'';
+  const lines=v.mine.map(x=>({code:x.o.product_code,name:pn(x.o.product_code)||x.o.item_name_raw||'',month:x.o.bonus_settled_month,level:x.c.level||'',kind:x.c.kind,rate:x.c.rate}));
+  const scores={s1:getStarScore('plan-s1'),s2:getStarScore('plan-s2'),s3:getStarScore('plan-s3'),s4:getStarScore('plan-s4'),s5:getStarScore('plan-s5'),s6:getStarScore('plan-s6'),mode:'v1',
+    plan_v1:{lines,companyN:v.companyN,mult:v.mult,pieceRaw:v.pieceRaw,kpiFull:R.kpi.bonus,grace:v.g.active?{fromMonth:v.g.fromMonth,months:v.g.months,note:v.g.note,reason:reason.trim()}:null}};
+  const detail=`v1｜計件 ${v.counted} 件 ${v.pieceRaw.toLocaleString()}×${v.mult}（${fmt(v.piece)}）＋ KPI ${R.kpi.label} ${R.t}/30（${fmt(R.kpiEff)}）${v.g.active?'｜'+v.g.note:R.pr.note}`;
+  const ok=await saveKpiDraft({employee_id:R.emp.id,dept:'企劃部',name:R.emp.name,role_title:R.emp.role_title||'同仁',ship_count:v.counted,scores,score_total:R.t,kpi_bonus:R.kpiEff,ship_bonus:v.piece,probation_ratio:R.pr.ratio,final_bonus:R.total,detail});
+  if(ok) showToast(`📝 已存草稿：${R.emp.name} 試算 ${fmt(R.total)}｜到「KPI覆核」放行`);
+}
+function planV1Sheet(k,yr,qq,DISPUTE){
+  const sc=k.scores||{}, P=sc.plan_v1||{}, g=P.grace, addon=Number(k.mgr_addon||0), ratio=Number(k.probation_ratio||1);
+  const rows=(P.lines||[]).map((l,i)=>`<tr${l.rate?'':' style="color:#999"'}><td class="c">${i+1}</td><td>${l.code}</td><td>${l.name}</td><td class="c">${l.month} 月</td><td>${l.level||'—'}</td><td>${l.kind}</td><td class="r">${(l.rate||0).toLocaleString()}</td></tr>`).join('');
+  const kn=['文案品質','執行效率','主動服務','學習成長','客戶滿意度','專案企劃'];
+  const kr=kn.map((n,i)=>`<tr><td>${['①','②','③','④','⑤','⑥'][i]} ${n}</td><td class="c">${sc['s'+(i+1)]??'—'}</td></tr>`).join('');
+  return `<section class="sheet"><h1>企劃部個人獎金確認表</h1>
+    <div class="meta">${yr} ${qq}｜${k.name}（${k.role_title||''}）｜依《產品企劃部獎金制度 v1 確認版》｜產出日 ${new Date().toISOString().slice(0,10)}</div>
+    ${g?`<div class="cbox" style="margin:8px 0;border-style:solid;border-color:#c99a2e"><b>公司核定事項</b><br>${g.note}。<br>核定理由：${g.reason||'—'}</div>`:''}
+    <h2>一、件數獎金</h2>
+    <table><thead><tr><th class="c">#</th><th>產品編號</th><th>品名</th><th class="c">結算月</th><th>字卡等級</th><th>類別</th><th class="r">單價</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" class="c">本季無計件品項</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="6">小計</td><td class="r">${(P.pieceRaw||0).toLocaleString()}</td></tr>
+    <tr><td colspan="6">季度加成（全公司當季 ${P.companyN??'—'} 件）</td><td class="r">× ${P.mult??1}</td></tr>
+    <tr><td colspan="6">件數獎金</td><td class="r"><b>${fmt(k.ship_bonus||0)}</b></td></tr></tfoot></table>
+    <p class="note">單價（首發／追加）：字卡自製 600／300、字卡外發 400／200、產品講解簡報 250／125、無字卡 150／75；公司既有品項（承接）每件 75。試用包、沙貨與正貨屬同一商品者不另計件；PIF 相關品項不計。季度加成依全公司當季總件數：40 件以內 ×1.0，其後每 10 件 +0.1，81 件以上 ×1.5。件的認列：該訂單品項累計銷貨達訂單量 80% 時計 1 件，以該批銷貨日期所屬月份認列。</p>
+    <h2>二、KPI 表現獎金</h2>
+    <table><thead><tr><th>評分項目</th><th class="c">得分（1–5）</th></tr></thead><tbody>${kr}</tbody>
+    <tfoot><tr><td>總分</td><td class="c">${k.score_total||0} / 30</td></tr><tr><td>對應級距獎金</td><td class="c">${fmt(P.kpiFull??k.kpi_bonus)}</td></tr>
+    ${g?`<tr><td>依公司核定按 ${g.months}/3 計</td><td class="c"><b>${fmt(k.kpi_bonus||0)}</b></td></tr>`:''}</tfoot></table>
+    <p class="note">級距：19 分以下 0 元｜20–24 分 1,500｜25–29 分 3,000｜30 分 5,000。無特殊事例者以 3 分計；專案企劃當季未指派以 3 分計。</p>
+    <h2>三、本季合計</h2>
+    <table><tbody><tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr><tr><td>KPI 表現獎金</td><td class="r">${fmt(k.kpi_bonus||0)}</td></tr>
+    ${ratio<1?`<tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
+    ${addon?`<tr><td>主管加給（協理個案核給）</td><td class="r">${fmt(addon)}</td></tr>`:''}
+    </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
+    ${DISPUTE(4)}
+    <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
+    <p>異議／補充：____________________________________________________</p>
+    <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+}
+
 // ===== v2 品項→企劃 歸屬 =====
 let _planSettled=[], _planProducts={}, _planSplit={normal:0,legacy:0};
 async function loadPlanAttribution(){
@@ -4160,8 +4320,9 @@ async function loadPlanAttribution(){
     .eq('bonus_settled_year',appSettings.year).eq('bonus_settled_quarter',appSettings.quarter)
     .order('bonus_settled_month').order('product_code');
   _planSettled=ols||[];
-  const {data:prods}=await sb.from('products').select('product_code,product_name,planner_employee_id');
+  const {data:prods}=await sb.from('products').select('product_code,product_name,planner_employee_id,card_level,planner_role');
   _planProducts={}; (prods||[]).forEach(p=>_planProducts[p.product_code]=p);
+  if(planIsV1()) await loadPlanFirstIds();
 }
 // 件數獎金：正常件全額、公司過往件該級距費率折半（正常件排前、過往排後；未達15件門檻=0）
 function planTierRate(pos, isMgr){
@@ -4194,6 +4355,7 @@ function planPersonCount(empId){
 }
 async function renderPlanAttribution(){
   await loadPlanAttribution();
+  if(planIsV1()) return renderPlanAttributionV1();
   const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
   let assigned=0,unassigned=0,leaver=0,forfeit=0,legacyN=0;
   const rows=_planSettled.map(o=>{
@@ -4232,6 +4394,15 @@ function refreshPlanShipCount(){
   const empId=document.getElementById('plan-emp-sel').value;
   const el=document.getElementById('plan-shipments');
   const note=document.getElementById('plan-ship-note');
+  if(el) el.readOnly=planIsV1();
+  planGraceReasonUI();
+  if(planIsV1()){
+    if(!empId){ if(note)note.innerHTML='選擇企劃人員後，自動依字卡等級計算'; if(el)el.value=''; return; }
+    const emp=employees.find(e=>e.id===empId), v=planV1Compute(emp);
+    if(el) el.value=v.counted;
+    if(note) note.innerHTML=`✅ ${emp?emp.name:''} 本季計件 <strong>${v.counted}</strong> 件（首發 ${v.nFirst}、追加 ${v.nRe}、承接 ${v.nInh}）｜小計 ${v.pieceRaw.toLocaleString()} × 加成 ${v.mult} ＝ <strong>${v.piece.toLocaleString()}</strong>${v.g.active?`<br>⭐ ${v.g.note}`:''}`;
+    return;
+  }
   let normal=0,legacy=0;
   _planSettled.forEach(o=>{ const r=resolvedPlanner(o); if(r.status==='ok'&&r.emp.id===empId){ if(o.bonus_legacy_half) legacy++; else normal++; } });
   _planSplit={normal,legacy};
@@ -4249,6 +4420,7 @@ async function initPlanning(){
 }
 function calcPlanning(){
   if(planUnassignedGuard())return;
+  if(planIsV1()) return calcPlanningV1();
   const empId=document.getElementById('plan-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   const role=document.getElementById('plan-role').value;
@@ -4282,6 +4454,7 @@ function calcPlanning(){
 
 async function savePlanning(){
   if(planUnassignedGuard())return;
+  if(planIsV1()) return savePlanningV1();
   const empId=document.getElementById('plan-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇企劃人員');return;}
@@ -4311,7 +4484,7 @@ async function savePlanning(){
 let _pmProducts=[], _pmOwnerConfirmed={};
 async function loadProductMaster(){
   const {data:prods}=await sb.from('products')
-    .select('product_code,product_name,formula_type,planner_employee_id,primary_owner_employee_id')
+    .select('product_code,product_name,formula_type,planner_employee_id,primary_owner_employee_id,card_level,planner_role')
     .order('product_code');
   _pmProducts=prods||[];
   // 研發主責：只從「已確樣」帶出（取分潤佔比最高者＝主責 50%），確樣才是權威
@@ -4342,7 +4515,7 @@ function renderProductMaster(){
   const onlyUn=document.getElementById('pm-only-unassigned').checked;
   const planEmps=employees.filter(e=>e.dept==='企劃部'&&e.is_active);
   let rows=_pmProducts.filter(p=>{
-    if(onlyUn && p.planner_employee_id) return false;
+    if(onlyUn && !pmNeedsSetup(p)) return false;
     if(kw && !((p.product_code||'').toLowerCase().includes(kw)||(p.product_name||'').toLowerCase().includes(kw))) return false;
     return true;
   });
@@ -4350,13 +4523,25 @@ function renderProductMaster(){
   const body=rows.map(p=>{
     if(p.planner_employee_id) assigned++; else unassigned++;
     const opts=`<option value="">— 未指派 —</option>`+planEmps.map(e=>`<option value="${e.id}" ${e.id===p.planner_employee_id?'selected':''}>${e.name}</option>`).join('');
-    const rowStyle=p.planner_employee_id?'':'background:#fff8e1';
-    return `<tr style="${rowStyle}"><td><strong>${p.product_code||''}</strong></td><td>${p.product_name||''}</td><td>${rdFormulaLabel(p.formula_type)||'—'}</td><td>${pmOwnerCell(p)}</td><td><select class="form-select" style="min-width:120px;padding:4px 6px" onchange="assignPlannerPM('${p.product_code}',this.value)">${opts}</select></td></tr>`;
+    const rowStyle=pmNeedsSetup(p)?'background:#fff8e1':'';
+    const lv=['字卡自製','字卡外發','產品講解簡報','無字卡'], rl=['自行開發','承接','不計'];
+    const lvSel=`<select class="form-select" style="min-width:110px;padding:4px 6px" onchange="setProductCardField('${p.product_code}','card_level',this.value)"><option value="">— 未設定 —</option>${lv.map(x=>`<option ${x===p.card_level?'selected':''}>${x}</option>`).join('')}</select>`;
+    const rlSel=`<select class="form-select" style="min-width:90px;padding:4px 6px" onchange="setProductCardField('${p.product_code}','planner_role',this.value)"><option value="">— 未設定 —</option>${rl.map(x=>`<option ${x===p.planner_role?'selected':''}>${x}</option>`).join('')}</select>`;
+    return `<tr style="${rowStyle}"><td><strong>${p.product_code||''}</strong></td><td>${p.product_name||''}</td><td>${rdFormulaLabel(p.formula_type)||'—'}</td><td>${pmOwnerCell(p)}</td><td><select class="form-select" style="min-width:120px;padding:4px 6px" onchange="assignPlannerPM('${p.product_code}',this.value)">${opts}</select></td><td>${lvSel}</td><td>${rlSel}</td></tr>`;
   }).join('');
   const sum=document.getElementById('pm-summary');
-  if(sum) sum.innerHTML=`顯示 <strong>${rows.length}</strong> / 全 ${_pmProducts.length} 支｜已指派企劃 <strong style="color:#2e7d32">${assigned}</strong>｜未指派 <strong style="color:#b3541e">${unassigned}</strong>`;
+  const needSet=_pmProducts.filter(pmNeedsSetup).length;
+  if(sum) sum.innerHTML=`顯示 <strong>${rows.length}</strong> / 全 ${_pmProducts.length} 支｜已指派企劃 <strong style="color:#2e7d32">${assigned}</strong>｜未指派 <strong style="color:#b3541e">${unassigned}</strong>｜<span style="color:#b3541e">待設定（字卡等級／歸屬／負責企劃）${needSet} 支</span>`;
   const list=document.getElementById('pm-list');
-  if(list) list.innerHTML=`<table><thead><tr><th>正式編號</th><th>品名</th><th>劑型</th><th>研發主責（確樣認定·只讀）</th><th>負責企劃（可改）</th></tr></thead><tbody>${body||'<tr><td colspan="5" style="text-align:center;color:var(--ink-faint)">無符合的產品</td></tr>'}</tbody></table>`;
+  if(list) list.innerHTML=`<table><thead><tr><th>正式編號</th><th>品名</th><th>劑型</th><th>研發主責（確樣認定·只讀）</th><th>負責企劃（可改）</th><th>字卡等級</th><th>企劃歸屬</th></tr></thead><tbody>${body||'<tr><td colspan="7" style="text-align:center;color:var(--ink-faint)">無符合的產品</td></tr>'}</tbody></table>`;
+}
+function pmNeedsSetup(p){ if(p.planner_role==='不計') return !p.card_level; return !p.card_level||!p.planner_role||!p.planner_employee_id; }
+async function setProductCardField(code,field,val){
+  const {error}=await sb.from('products').update({[field]:val||null}).eq('product_code',code);
+  if(error){showToast('❌ 更新失敗：'+error.message);return;}
+  const row=_pmProducts.find(p=>p.product_code===code); if(row) row[field]=val||null;
+  showToast(`已設定 ${code} ${field==='card_level'?'字卡等級':'企劃歸屬'} → ${val||'未設定'}`);
+  renderProductMaster();
 }
 async function assignPlannerPM(code,empId){
   await sb.from('products').update({planner_employee_id:empId||null}).eq('product_code',code);
@@ -4367,7 +4552,7 @@ async function assignPlannerPM(code,empId){
 }
 // 企劃獎金硬擋：本季已結算品項若有「負責企劃未指派」→ 不准試算/存檔
 function planUnassignedGuard(){
-  const bad=(_planSettled||[]).filter(o=>resolvedPlanner(o).status==='unassigned');
+  const bad=(_planSettled||[]).filter(o=>resolvedPlanner(o).status==='unassigned' && !(planIsV1() && planV1Classify(o).rate===0));
   if(bad.length){
     const lines=bad.slice(0,15).map(o=>`• ${o.product_code||''} · ${o.item_name_raw||''}（${o.bonus_settled_month||''}月）`).join('\n');
     alert(`⛔ 有 ${bad.length} 筆已結算品項「負責企劃未指派」，不能試算/存檔。\n\n請先到「產品主檔」頁或本頁上方歸屬卡指派企劃：\n\n${lines}${bad.length>15?'\n…等 '+(bad.length-15)+' 筆':''}`);
@@ -4377,7 +4562,92 @@ function planUnassignedGuard(){
 }
 
 // PURCHASE
+// 採購部 v1 確認版（2026 Q4 起）：件數＋到料準時率＋議價成效＋新廠商＋評分三面向（議價移出另計）；兼任補貼取消。Q3 以前依 v4
+function purIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && appSettings.quarter==='Q4'); }
+let _purOT=null;
+function purApplyMode(){
+  const v1=purIsV1();
+  const show_=(id,on)=>{const e=document.getElementById(id); if(e) e.style.display=on?'':'none';};
+  show_('pur-v1-box',v1); show_('pur-concurrent-group',!v1); show_('pur-s1-group',!v1);
+  const w=v1?['50%','33%','17%']:['30%','20%','10%'];
+  ['pur-w2','pur-w3','pur-w4'].forEach((id,i)=>{const e=document.getElementById(id); if(e) e.textContent=w[i];});
+  const d=document.getElementById('pur-desc');
+  if(d) d.textContent=v1?'2026 Q4 起依《採購部獎金制度 v1 確認版》：季獎金＝件數 ＋ 到料準時率 ＋ 議價成效 ＋ 新廠商開發 ＋ 評分（五項直接加總）':'2026 Q3 以前依 v4：季獎金＝出貨件數獎金 ＋ 評分加成 ＋ 兼任生管補貼';
+  if(v1) loadPurOnTime();
+}
+function purQuarterBounds(){
+  const y=appSettings.year, q=appSettings.quarter;
+  return {qs:`${y}-${({Q1:'01-01',Q2:'04-01',Q3:'07-01',Q4:'10-01'})[q]}`, qe:`${y}-${({Q1:'03-31',Q2:'06-30',Q3:'09-30',Q4:'12-31'})[q]}`};
+}
+async function loadPurOnTime(){
+  const {qs,qe}=purQuarterBounds(), today=new Date().toISOString().slice(0,10);
+  const {data:ma}=await sb.from('material_arrivals').select('product_code,product_name,customer,kind,expected_date,actual_date,status,exclude_reason').gte('expected_date',qs).lte('expected_date',qe);
+  const {data:ms}=await sb.from('system_settings').select('value,updated_at').eq('key','material_missing');
+  let missing=[]; try{ missing=Object.values(JSON.parse((ms&&ms[0]&&ms[0].value)||'{}')).filter(m=>m.since<=qe); }catch(e){}
+  let ok=0,late=0,overdue=0,ex=0,notDue=0; const lateList=[];
+  (ma||[]).forEach(r=>{
+    if(r.status==='excluded'){ex++;return;}
+    if(r.actual_date){ if(r.actual_date<=r.expected_date) ok++; else {late++; lateList.push(r);} }
+    else if(r.expected_date<today){ overdue++; lateList.push(r); }
+    else notDue++;
+  });
+  const judged=ok+late+overdue+missing.length;
+  const rate=judged?Math.round(ok/judged*1000)/10:null;
+  _purOT={ok,late,overdue,ex,notDue,missing:missing.length,judged,rate,syncedAt:ms&&ms[0]&&ms[0].updated_at};
+  const el=document.getElementById('pur-ontime'); if(el&&rate!=null) el.value=rate;
+  const info=document.getElementById('pur-ot-info');
+  if(info) info.innerHTML=`本季（依預計到貨日）：準時 <b>${ok}</b>｜延遲 ${late}｜逾期未到 ${overdue}｜<span style="color:#b3541e">預計到貨日未登錄 ${missing.length}（以未準時計）</span>｜不列入 ${ex}｜未到期 ${notDue}　→ 準時率 <b>${rate==null?'—':rate+'%'}</b>`
+    +`<br>準時率＝準時 ÷（準時＋延遲＋逾期未到＋未登錄）。未登錄清單每日 09:35 自 Notion 更新${_purOT.syncedAt?`（最近 ${String(_purOT.syncedAt).slice(0,10)}）`:''}；供應商延誤經協理核定者列為不列入。`;
+}
+function purScoreBonusV1(score){
+  if(score<60) return {bonus:0, label:'普通'};
+  if(score<75) return {bonus:600, label:'良好'};
+  if(score<85) return {bonus:1200, label:'優秀'};
+  return {bonus:1800, label:'非常優秀'};
+}
+function purV1Parts(){
+  const ships=parseInt(document.getElementById('pur-shipments').value)||0;
+  const ship=purTieredShipBonus(ships);
+  const otRate=parseFloat(document.getElementById('pur-ontime').value);
+  const ot=isNaN(otRate)?{bonus:0,breakdown:'未填準時率'}:prodOnTimeBonus(otRate);
+  const save=parseInt(document.getElementById('pur-save').value)||0;
+  const bargain=Math.min(1000,Math.round(save*0.05));
+  const nNew=parseInt(document.getElementById('pur-newsup').value)||0;
+  const newsup=nNew*500;
+  const score=calcPurScore(), sc=purScoreBonusV1(score);
+  return {ships,ship,otRate:isNaN(otRate)?null:otRate,ot,save,bargain,nNew,newsup,score,sc,base:ship.total+ot.bonus+bargain+newsup+sc.bonus};
+}
+function calcPurchaseV1(){
+  const emp=employees.find(e=>e.id===document.getElementById('pur-emp-sel').value);
+  const P=purV1Parts(), pr=emp?probationRatio(emp):{ratio:1,note:''}, total=Math.round(P.base*pr.ratio);
+  show('pur-result');
+  document.getElementById('pur-total').textContent=fmt(total);
+  let html=`<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(P.ship.total)}</strong>${P.ships>=20?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+P.ship.breakdown+'</span>':'（'+P.ship.breakdown+'）'}</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>到料準時率獎金：${fmt(P.ot.bonus)}</strong>（${P.otRate==null?'—':P.otRate+'%'}；${P.ot.breakdown}）</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>議價成效獎金：${fmt(P.bargain)}</strong>（節省 ${fmt(P.save)} × 5%，上限 1,000）</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>新廠商開發獎金：${fmt(P.newsup)}</strong>（${P.nNew} 家 × 500）</div>`;
+  html+=`<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(P.sc.bonus)}</strong>（${P.sc.label} ／ 加權總分 ${P.score}/100）</div>`;
+  html+=`<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>五項加總 = <strong>${fmt(P.base)}</strong></div>`;
+  if(pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(P.base)}、實發 ${fmt(total)}${pr.note}</div>`;
+  document.getElementById('pur-breakdown').innerHTML=html;
+}
+async function savePurchaseV1(){
+  const emp=employees.find(e=>e.id===document.getElementById('pur-emp-sel').value);
+  if(!emp){showToast('請選擇採購人員');return;}
+  const P=purV1Parts(), pr=probationRatio(emp), bonus=Math.round(P.base*pr.ratio);
+  const scores={mode:'v1',s2:getStarScore('pur-s2'),s3:getStarScore('pur-s3'),s4:getStarScore('pur-s4'),
+    ontime:P.otRate,ot_bonus:P.ot.bonus,ot_stats:_purOT,save:P.save,bargain:P.bargain,newsup_n:P.nNew,newsup:P.newsup,score_bonus:P.sc.bonus};
+  const detail=`v1｜件數 ${P.ships}（${fmt(P.ship.total)}）＋ 到料準時 ${P.otRate??'—'}%（${fmt(P.ot.bonus)}）＋ 議價 ${fmt(P.bargain)} ＋ 新廠商 ${P.nNew} 家（${fmt(P.newsup)}）＋ 評分 ${P.score}/100（${fmt(P.sc.bonus)}）${pr.note}`;
+  const ok=await saveKpiDraft({employee_id:emp.id,dept:'採購部',name:emp.name,role_title:emp.role_title,ship_count:P.ships,scores,score_total:P.score,
+    kpi_bonus:P.sc.bonus+P.ot.bonus+P.bargain+P.newsup,ship_bonus:P.ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
+  if(ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}｜到「KPI覆核」放行`);
+}
 function calcPurScore(){
+  if(purIsV1()){
+    const sc=[getStarScore('pur-s2'),getStarScore('pur-s3'),getStarScore('pur-s4')];
+    const total=Math.round(((sc[0]*.5+sc[1]*.33+sc[2]*.17)/5)*100);
+    document.getElementById('pur-score-tot').textContent=total; return total;
+  }
   const weights=[.4,.3,.2,.1];
   const scores=['pur-s1','pur-s2','pur-s3','pur-s4'].map(id=>getStarScore(id));
   const weighted=scores.reduce((s,sc,i)=>s+sc*weights[i],0);
@@ -4413,6 +4683,7 @@ function purScoreBonus(score){
 }
 
 function calcPurchase(){
+  if(purIsV1()) return calcPurchaseV1();
   const empId=document.getElementById('pur-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
@@ -4435,6 +4706,7 @@ function calcPurchase(){
 }
 
 async function savePurchase(){
+  if(purIsV1()) return savePurchaseV1();
   const empId=document.getElementById('pur-emp-sel').value;
   const emp=employees.find(e=>e.id===empId);
   if (!emp){showToast('請選擇採購人員');return;}
@@ -4477,6 +4749,7 @@ async function generateDeptConfirmSheets(dept){
   let pages='';
   ks.forEach(k=>{
     const sc = k.scores||{};
+    if(dept==='企劃部' && sc.plan_v1){ pages += planV1Sheet(k,yr,qq,DISPUTE); return; }
     const ratio = Number(k.probation_ratio||1);
     const addon = Number(k.mgr_addon||0);
     let secA='', secB='', tierNote='', nSec=3;
@@ -4684,6 +4957,47 @@ async function generateSalesConfirmSheets(kind){
 }
 
 // ===== 採購部個人獎金確認表（2026-09-25 新增，比照研發部格式）=====
+function purV1Sheet(k,yr,qq,ship,lines,pname){
+  const sc=k.scores||{}, st=sc.ot_stats||{}, ratio=Number(k.probation_ratio||1), addon=Number(k.mgr_addon||0);
+  const rows=(lines||[]).map((l,i)=>`<tr><td class="c">${i+1}</td><td>${l.product_code}</td><td>${pname(l.product_code)||l.item_name_raw||''}</td><td>${l.customer_name||''}</td><td class="r">${(l.order_qty||0).toLocaleString()}</td><td class="r">${(l.shipped_qty||0).toLocaleString()}</td><td class="c">${l.bonus_settled_month} 月</td></tr>`).join('');
+  const W=[['缺料危機處理',50,'s2'],['跨部門協調追蹤',33,'s3'],['備料預測與成本優化',17,'s4']];
+  const ot=prodOnTimeBonus(Number(sc.ontime||0));
+  const sub=(k.ship_bonus||0)+(sc.ot_bonus||0)+(sc.bargain||0)+(sc.newsup||0)+(sc.score_bonus||0);
+  return `<section class="sheet"><h1>採購部個人獎金確認表</h1>
+    <div class="meta">${yr} ${qq}｜${k.name}（${k.role_title||'採購'}）｜依《採購部獎金制度 v1 確認版》｜產出日 ${new Date().toISOString().slice(0,10)}</div>
+    <h2>一、出貨件數獎金</h2>
+    <table><tbody><tr><td>本季計件件數</td><td class="r"><b>${k.ship_count||0} 件</b></td></tr><tr><td>級距計算</td><td class="r">${ship.breakdown||'—'}</td></tr><tr><td>件數獎金</td><td class="r"><b>${fmt(k.ship_bonus||0)}</b></td></tr></tbody></table>
+    <p class="note">級距：未達 20 件不發；第 1–20 件每件 100、21–35 件 150、36–50 件 200、51 件起 250。PIF 相關品項不計。</p>
+    <table><thead><tr><th class="c">#</th><th>產品編號</th><th>品名</th><th>客戶</th><th class="r">下單量</th><th class="r">累計出貨</th><th class="c">結算月</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="c">本季無計件品項</td></tr>'}</tbody></table>
+    <h2>二、到料準時率獎金</h2>
+    <table><tbody><tr><td>準時／延遲／逾期未到／預計到貨日未登錄</td><td class="r">${st.ok??'—'}／${st.late??'—'}／${st.overdue??'—'}／${st.missing??'—'}</td></tr>
+    <tr><td>本季到料準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr><tr><td>計算式</td><td class="r">${ot.breakdown}</td></tr><tr><td>到料準時率獎金</td><td class="r"><b>${fmt(sc.ot_bonus||0)}</b></td></tr></tbody></table>
+    <p class="note">準時＝實際到貨日在預計到貨日（首次登錄之正本）當天或之前；依預計到貨日所屬季度計算，逾期未到者計為延遲；未登錄預計到貨日者以未準時計；供應商延誤經協理核定者不列入。達 70% 起發：1,000＋（準時率−70）×100，100% 另加 1,000。</p>
+    <h2>三、議價成效與新廠商開發</h2>
+    <table><tbody><tr><td>本季議價節省金額（協理核准、驗收合格）</td><td class="r">${fmt(sc.save||0)}</td></tr><tr><td>議價成效獎金（× 5%，上限 1,000）</td><td class="r"><b>${fmt(sc.bargain||0)}</b></td></tr>
+    <tr><td>本季達成之優質新廠商</td><td class="r">${sc.newsup_n||0} 家</td></tr><tr><td>新廠商開發獎金（每家 500）</td><td class="r"><b>${fmt(sc.newsup||0)}</b></td></tr></tbody></table>
+    <p class="note">依 Notion「議價紀錄」「新廠商開發紀錄」。新廠商：首批驗收合格，且其後連續 2 批無品質異常與交期延誤。</p>
+    <h2>四、評分加成</h2>
+    <table><thead><tr><th>評分面向</th><th class="c">權重</th><th class="c">得分（1–5）</th></tr></thead><tbody>${W.map(([n,w,key])=>`<tr><td>${n}</td><td class="c">${w}%</td><td class="c">${sc[key]??'—'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td>加權總分</td><td class="c">—</td><td class="c">${k.score_total||0} / 100</td></tr><tr><td>對應級距獎金</td><td class="c">—</td><td class="c"><b>${fmt(sc.score_bonus||0)}</b></td></tr></tfoot></table>
+    <p class="note">級距：未達 60 分 0 元｜60–74 分 600｜75–84 分 1,200｜85 分以上 1,800。無特殊事例者以 3 分計。</p>
+    <h2>五、本季合計</h2>
+    <table><tbody><tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr><tr><td>到料準時率獎金</td><td class="r">${fmt(sc.ot_bonus||0)}</td></tr><tr><td>議價成效獎金</td><td class="r">${fmt(sc.bargain||0)}</td></tr><tr><td>新廠商開發獎金</td><td class="r">${fmt(sc.newsup||0)}</td></tr><tr><td>評分加成</td><td class="r">${fmt(sc.score_bonus||0)}</td></tr>
+    ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(sub)}</td></tr><tr><td>試用期比例</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
+    ${addon?`<tr><td>主管加給（協理個案核給）</td><td class="r">${fmt(addon)}</td></tr>`:''}
+    </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
+    <h2>六、確認與異議處理程序</h2>
+    <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
+      <tr><td class="c">1</td><td>同仁核對本表之件數、準時率、評分與金額；如有疑義，於「異議／補充」欄具體載明後交回</td><td class="c">收到起 2 個工作日內</td></tr>
+      <tr><td class="c">2</td><td>逾期未提出者，視為確認無誤</td><td class="c">—</td></tr>
+      <tr><td class="c">3</td><td>協理就異議項目調閱原始資料核對（訂購確認單、生管出貨單、會計銷貨開發票明細、Notion 到料與議價紀錄）</td><td class="c">收到異議起 3 個工作日內</td></tr>
+      <tr><td class="c">4</td><td>資料有誤：更正後重新產出本表，差額併入次季發放；資料無誤：書面說明計算依據</td><td class="c">—</td></tr>
+    </tbody></table>
+    <p class="note">異議處理期間，該季獎金仍依本表金額如期發放，差額於核對完成後補正。</p>
+    <div class="cbox">本人確認：以上件數、準時率、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
+    <p>異議／補充：____________________________________________________</p>
+    <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
+}
 async function generatePurConfirmSheets(){
   const yr = appSettings.year;
   const qq = document.getElementById('pur-sheet-q').value;
@@ -4699,6 +5013,7 @@ async function generatePurConfirmSheets(){
   ks.forEach(k=>{
     const ship = purTieredShipBonus(k.ship_count||0);
     const sc = k.scores||{};
+    if(sc.mode==='v1'){ pages += purV1Sheet(k,yr,qq,ship,lines,pname); return; }
     const supplement = (sc.supplement? appSettings.purSupplement : 0);
     const base = (k.ship_bonus||0) + (k.kpi_bonus||0) + supplement;
     const ratio = Number(k.probation_ratio||1);
@@ -4942,6 +5257,7 @@ async function editKpiDraft(id){
         document.getElementById('plan-mgr-rating').value=rating;
         document.querySelectorAll('#plan-mgr-scores .tier-btn').forEach(b=>b.classList.toggle('active', b.textContent===rating));
       } else { ['s1','s2','s3','s4','s5','s6'].forEach(k=>setStarScore('plan-'+k, s[k]||0)); calcPlanScore(); }
+      { const gr=document.getElementById('plan-grace-reason'); if(gr) gr.value=(s.plan_v1&&s.plan_v1.grace&&s.plan_v1.grace.reason)||''; }
       if(r.ship_count!=null) document.getElementById('plan-shipments').value=r.ship_count;
       calcPlanning();
     } else if(r.dept==='採購部'){
@@ -4951,6 +5267,7 @@ async function editKpiDraft(id){
       const ch=document.getElementById('pur-concurrent'); if(ch) ch.value=conc;
       document.querySelectorAll('[onclick*="pur-concurrent"]').forEach(b=>b.classList.toggle('active', (b.getAttribute('onclick').includes("'yes'")?'yes':'no')===conc));
       if(r.ship_count!=null) document.getElementById('pur-shipments').value=r.ship_count;
+      if(s.mode==='v1'){ const set=(id,v)=>{const e=document.getElementById(id); if(e&&v!=null) e.value=v;}; set('pur-ontime',s.ontime); set('pur-save',s.save); set('pur-newsup',s.newsup_n); }
       if(typeof calcPurScore==='function') calcPurScore();
       calcPurchase();
     } else if(r.dept==='生產部'){
@@ -5001,7 +5318,7 @@ async function saveKpiDraft(b){
 function kpiScoreStr(dept,s){
   if(!s) return '';
   if(dept==='企劃部') return s.mgr_rating?`整體評等：${s.mgr_rating}`:`①${s.s1} ②${s.s2} ③${s.s3} ④${s.s4} ⑤${s.s5}${s.s6!=null?` ⑥${s.s6}`:''}`;
-  if(dept==='採購部') return `議價${s.s1} 缺料${s.s2} 協調${s.s3} 預測${s.s4}${s.supplement?'｜兼生管':''}`;
+  if(dept==='採購部') return s.mode==='v1' ? `到料準時${s.ontime??'—'}%｜議價${fmtNum(s.bargain||0)}｜新廠商${s.newsup_n||0}家｜缺料${s.s2} 協調${s.s3} 預測${s.s4}` : `議價${s.s1} 缺料${s.s2} 協調${s.s3} 預測${s.s4}${s.supplement?'｜兼生管':''}`;
   if(dept==='生產部') return s.mode==='v1' ? `準時率${s.ontime}%｜交期${s.t1} 工單${s.t2} 異常客訴${s.t3} 改善${s.t4} 效期${s.t5} 協調${s.t6}${s.noincident?'（無案件）':''}`
     : `準時率${s.mode?'不計':s.ontime+'%'}｜排程${s.e1} 協調${s.e2} 異常${s.e3} 文件${s.e4}${s.trial_total!=null?`｜試評${s.trial_total}`:''}`;
   return JSON.stringify(s);
@@ -5065,7 +5382,7 @@ function switchPage(page){
   if(page==='sales')populateSalesMonthSel();
   if(page==='planning')initPlanning();
   if(page==='products')loadProductMaster();
-  if(page==='purchase')fillDeptAutoCount('pur-shipments','pur-ship-note');
+  if(page==='purchase'){fillDeptAutoCount('pur-shipments','pur-ship-note'); purApplyMode();}
   if(page==='production'){fillDeptAutoCount('prod-shipments','prod-ship-note'); prodApplyMode();}
   if(page==='reconcile')loadReconcile();
   if(page==='kpireview')loadKpiReview();
@@ -6123,7 +6440,7 @@ const _RAW_MATERIAL_KEYWORDS=['lipobelle','奈米冰川水'];
 // 把銷貨配對到訂單品項、累計、達80%結算（冪等，每次重算）
 // 綁定：有訂單編號用編號；否則用訂購日 FIFO（出貨依日期填「最舊、未達80%」的同編號訂單）
 async function matchSalesToOrders(){
-  const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date');
+  const {data:ols}=await sb.from('order_lines').select('id, order_no, product_code, customer_name, order_qty, item_name_raw, sign_date, shipped_qty, bonus_settled_at, bonus_settled_year, bonus_settled_quarter, bonus_settled_month');
   const {data:sales}=await sb.from('sales_records').select('id, source_order_no, source_order_date, product_code, customer_name, qty, ship_date, item_name_raw, new_or_repeat, year, quarter, matched_order_no, match_note').not('product_code','is',null).or('new_or_repeat.is.null,new_or_repeat.neq.其他');  // ⛔ 勿改回 .neq：neq 會把 NULL 一起濾掉（2026-09-25 自動匯入的 9 月銷貨因此整批沒配對、訂單進度顯示 0%）
   const matched={}; _orderAmbiguous=[]; _orderExcluded=[];
   const cumq={};   // ol.id -> 已累計量（FIFO 判斷是否已滿）
@@ -6181,6 +6498,8 @@ async function matchSalesToOrders(){
     (matched[pick.id]=matched[pick.id]||[]).push(s);
     cumq[pick.id]=(cumq[pick.id]||0)+(s.qty||0);
   }
+  // 2026-09-29 效能：只寫回有變動的訂單品項，並分批並行（原本每次進部門頁逐筆寫入全部品項，約 30 秒）
+  const olUpdates=[];
   for(const o of (ols||[])){
     const ss=(matched[o.id]||[]).slice().sort((a,b)=>(a.ship_date||'').localeCompare(b.ship_date||''));
     const total=ss.reduce((x,r)=>x+(r.qty||0),0);
@@ -6191,8 +6510,12 @@ async function matchSalesToOrders(){
       upd.bonus_settled_at=d.toISOString(); upd.bonus_settled_year=d.getFullYear();
       upd.bonus_settled_quarter=mo<=3?'Q1':mo<=6?'Q2':mo<=9?'Q3':'Q4'; upd.bonus_settled_month=mo;
     } else { upd.bonus_settled_at=null; upd.bonus_settled_year=null; upd.bonus_settled_quarter=null; upd.bonus_settled_month=null; }
-    await sb.from('order_lines').update(upd).eq('id',o.id);
+    const tms=x=>x?new Date(x).getTime():null;
+    const same=Number(o.shipped_qty||0)===Number(upd.shipped_qty||0) && tms(o.bonus_settled_at)===tms(upd.bonus_settled_at)
+      && (o.bonus_settled_year??null)===(upd.bonus_settled_year??null) && (o.bonus_settled_quarter??null)===(upd.bonus_settled_quarter??null) && (o.bonus_settled_month??null)===(upd.bonus_settled_month??null);
+    if(!same) olUpdates.push([o.id,upd]);
   }
+  for(let i=0;i<olUpdates.length;i+=10) await Promise.all(olUpdates.slice(i,i+10).map(([id,upd])=>sb.from('order_lines').update(upd).eq('id',id)));
   // 把配對結果寫回每筆銷貨（出貨紀錄頁「系統配對訂單」欄顯示用；2026-09-25 協理裁示）
   // 只寫有變動的列，並以「相同結果」分組批次更新，避免每次進部門頁都逐筆寫入
   const want={};
