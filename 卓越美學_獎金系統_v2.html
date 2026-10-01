@@ -5972,11 +5972,13 @@ async function recognizeFromSales(){
   //（案例 2026-05-08 JP000006：2,879 罐標舊品追加、7 罐標新品），據以過濾會讓真新品整支漏發。
   // 重複發獎由 rd_sample_customers.recognized_at is null 的一次性保護把關。
   const {data:sales}=await sb.from('sales_records')
-    .select('product_code, customer_name, qty, ship_date')
+    .select('product_code, customer_name, qty, ship_date, item_name_raw, amount')
     .not('product_code','is',null);
   if(!sales||!sales.length) return 0;
   const byCode={};
-  sales.forEach(s=>{(byCode[s.product_code]=byCode[s.product_code]||[]).push(s);});
+  // PIF／代購／折讓等不計獎金列不算成交出貨（2026-10-01：JP000082 的 PIF 列出貨日 6/08 被當成首次出貨，
+  // 實際 9/03 才出貨，3 段被認列到已結算的 Q2）。與 matchSalesToOrders 共用 saleExcludeReason 口徑
+  sales.filter(s=>!saleExcludeReason(s)).forEach(s=>{(byCode[s.product_code]=byCode[s.product_code]||[]).push(s);});
   let count=0;
   for(const code of Object.keys(byCode)){
     const rows=byCode[code];
