@@ -3009,6 +3009,11 @@ async function settleSalesMonth(){
     const pr=probationRatio(emp);
     const base=ncBonus+shipBonus;
     const total=Math.round(base*pr.ratio);
+    // 2026-10-02 協理裁示：協理本人的業務獎金只試算、不結算發放（不寫結算表、不進發放總表）
+    if((emp.role_title||'').includes('協理')){
+      results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:'試算（協理不結算）'});
+      continue;
+    }
     const {error}=await sb.from('sales_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,
       new_client_count:ncCount,new_client_bonus:ncBonus,
@@ -4909,7 +4914,9 @@ async function generateSalesConfirmSheets(kind){
     const sq=(sqs||[]).find(x=>x.employee_id===e.id);
     const qBonus=(sq&&!isMonth)?Number(sq.achievement_bonus||0):0;
     const pr=(()=>{ const sv=appSettings.quarter; appSettings.quarter=qq; const r=probationRatio(e); appSettings.quarter=sv; return r; })();   // 以表單所選季度計
-    const base=ncTot+shipTot+qBonus, final=Math.round(base*pr.ratio);
+    // 季表：新客＋出貨屬月獎金（按月另行發放），本季實發只含季度回款達標獎金（2026-10-02 協理裁示）
+    const monthTot=ncTot+shipTot;
+    const base=isMonth?monthTot:qBonus, final=Math.round(base*pr.ratio);
     pages+=`<section class="sheet"><h1>業務部個人獎金確認表${isMonth?'（月）':'（季）'}</h1>
       <div class="meta">${periodLabel}｜${esc2(e.name)}（${esc2(e.role_title||'')}）｜產出日 ${new Date().toISOString().slice(0,10)}</div>
       <h2>一、新客獎金</h2>
@@ -4917,7 +4924,7 @@ async function generateSalesConfirmSheets(kind){
       <tbody>${ncRows||'<tr><td colspan="7" class="c">本季無新客</td></tr>'}</tbody>
       <tfoot><tr><td colspan="6">新客獎金小計（${ncIn.length} 位 × ${fmt(ncUnit)}）</td><td class="r">${fmt(ncTot)}</td></tr></tfoot></table>
       <p class="note">新客＝全公司首次成交之客戶（一客只計一次）；以客戶付清訂金為認列時點，訂金入帳當月認列、次月同月薪一起發放。</p>
-      ${ncIn.length&&!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>本季新客獎金依制度應於次月同月薪一起發放（${[...new Set(ncIn.map(o=>nextYm(o.deposit_paid_at).slice(5)*1+' 月'))].join('、')}），公司尚未另行撥付，<b>併同本季獎金一次發放</b>，金額不受影響。</p>`:''}
+      ${!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>${(yr===2026&&qq==='Q3')?'第三季月獎金（新客、出貨）因制度於 2026/10/2 說明，統一於 2026/10/5 與月薪同日、另筆匯款發放。':'新客、出貨獎金依制度按月結算，於次月同月薪一起發放（另筆匯款）；本表僅彙整列示，不重複發放。'}</p>`:''}
       <h2>二、出貨獎金（逐月）</h2>
       <table><thead><tr><th>月份</th><th class="r">計獎出貨金額（未稅）</th><th class="r">不計獎金額</th><th class="c">適用比例</th><th class="r">出貨獎金</th></tr></thead>
       <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
@@ -4929,9 +4936,10 @@ async function generateSalesConfirmSheets(kind){
       <p class="note">以個人當季回款金額計（客戶實際付款入帳，已出貨未收款不計）：未達 150 萬 0｜150–300 萬 6,000｜300–500 萬 10,000｜500–700 萬 15,000｜700–900 萬 20,000｜900–1,000 萬 25,000｜1,000–1,500 萬 30,000｜1,500–2,000 萬 35,000｜2,000–3,000 萬 40,000｜3,000–5,000 萬 56,000｜5,000 萬以上 66,000。</p>`}
       <h2>${isMonth?'三、本月合計':'四、本季合計'}</h2>
       <table><tbody>
-        <tr><td>新客獎金</td><td class="r">${fmt(ncTot)}</td></tr>
-        <tr><td>出貨獎金</td><td class="r">${fmt(shipTot)}</td></tr>
-        ${isMonth?'':`<tr><td>季度回款達標獎金</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>`}
+        ${isMonth?`<tr><td>新客獎金</td><td class="r">${fmt(ncTot)}</td></tr>
+        <tr><td>出貨獎金</td><td class="r">${fmt(shipTot)}</td></tr>`
+        :`<tr style="color:#777"><td>月獎金小計（新客＋出貨，按月另行發放，不併入本季實發）</td><td class="r">${fmt(monthTot)}</td></tr>
+        <tr><td>季度回款達標獎金（季度結算後之次月發放）</td><td class="r">${sq?fmt(qBonus):'待結算'}</td></tr>`}
         ${pr.ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(pr.ratio*100).toFixed(1)}%</td></tr>`:''}
       </tbody><tfoot><tr><td><b>${isMonth?'本月實發':'本季實發'}</b></td><td class="r"><b>${fmt(final)}</b></td></tr></tfoot></table>
       ${isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放日：</b>本月獎金於次月同月薪一起發放（${payDay}）。出貨金額以會計銷貨開發票明細為準；月底後才開立發票之出貨，併入開票當月計算。</p>`:''}
