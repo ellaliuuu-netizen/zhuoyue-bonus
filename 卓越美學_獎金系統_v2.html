@@ -3009,20 +3009,17 @@ async function settleSalesMonth(){
     const pr=probationRatio(emp);
     const base=ncBonus+shipBonus;
     const total=Math.round(base*pr.ratio);
-    // 2026-10-02 協理裁示：協理本人的業務獎金只試算、不結算發放（不寫結算表、不進發放總表）
-    if((emp.role_title||'').includes('協理')){
-      results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:'試算（協理不結算）'});
-      continue;
-    }
+    // 2026-10-02 協理裁示：協理本人的業務獎金只試算、不發放 → 存 status='trial'，發放總表／月結合計／匯出皆不計
+    const isTrial=(emp.role_title||'').includes('協理');
     const {error}=await sb.from('sales_monthly_settlement').upsert({
       employee_id:emp.id,year:y,month:m,
       new_client_count:ncCount,new_client_bonus:ncBonus,
       ship_amount:amt,ship_ratio:ratio,ship_bonus:shipBonus,
-      total_bonus:total,status:'paid',
-      note:[pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月同月薪一起發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
+      total_bonus:total,status:isTrial?'trial':'paid',
+      note:[isTrial?'協理本人：僅試算、不發放':null, pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月同月薪一起發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
-    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:isTrial?'試算・不發放（已記錄）':(pr.ratio<1?`已發 ${pr.note}`:'已發')});
   }
   document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額（計獎）</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}${r.exc?`<div style="font-size:10px;color:#b3541e">已排除 ${fmtNum(Math.round(r.exc))}</div>`:''}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
   if(excTotal>0){
@@ -5418,7 +5415,7 @@ async function renderReconcile(){
     sb.from('rd_sample_customers').select('id').eq('confirm_status','confirmed').eq('change_lock',false).is('recognized_at',null),
   ]);
   const sM=salesM.data||[], dl=deals.data||[], rM=rdM.data||[];
-  const salesTotal=sM.reduce((s,r)=>s+Number(r.total_bonus||0),0);
+  const salesTotal=sM.filter(r=>r.status!=='trial').reduce((s,r)=>s+Number(r.total_bonus||0),0);   // 協理試算不計
   const dealRel=dl.filter(d=>d.status==='released').reduce((s,d)=>s+Number(d.amount),0);
   const dealPend=dl.filter(d=>d.status==='pending_review').reduce((s,d)=>s+Number(d.amount),0);
   const pendDealN=dl.filter(d=>d.status==='pending_review').length;
@@ -5427,7 +5424,7 @@ async function renderReconcile(){
   let h='';
   h+=`<div class="card" style="margin-bottom:12px;border-color:#c99a2e;background:#fbf6ea"><div class="card-title" style="font-size:14px;margin-bottom:6px">📌 本月待辦</div><div style="font-size:13px;line-height:1.9">• 研發成交待覆核：<strong>${pendDealN}</strong> 段（${fmt(dealPend)}）<br>• 待審改綁／取消申請：<strong>${(pendReq.data||[]).length}</strong> 件<br>• 已確樣未出貨認列：<strong>${(notRec.data||[]).length}</strong> 筆</div></div>`;
   h+=`<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:14px">💰 業務部月結（${ym}）　合計 ${fmt(salesTotal)}</div>`;
-  if(sM.length) h+=`<table><thead><tr><th>業務</th><th class="td-right">出貨金額</th><th class="td-right">新客獎金</th><th class="td-right">出貨獎金</th><th class="td-right">實發</th></tr></thead><tbody>${sM.map(r=>`<tr><td>${r.employees?.name||''}</td><td class="td-right">${fmtNum(Math.round(r.ship_amount||0))}</td><td class="td-right">${fmt(r.new_client_bonus||0)}</td><td class="td-right">${fmt(r.ship_bonus||0)}</td><td class="td-right"><strong>${fmt(r.total_bonus||0)}</strong></td></tr>`).join('')}</tbody></table>`;
+  if(sM.length) h+=`<table><thead><tr><th>業務</th><th class="td-right">出貨金額</th><th class="td-right">新客獎金</th><th class="td-right">出貨獎金</th><th class="td-right">實發</th></tr></thead><tbody>${sM.map(r=>`<tr><td>${r.employees?.name||''}</td><td class="td-right">${fmtNum(Math.round(r.ship_amount||0))}</td><td class="td-right">${fmt(r.new_client_bonus||0)}</td><td class="td-right">${fmt(r.ship_bonus||0)}</td><td class="td-right">${r.status==='trial'?`<span style="color:var(--ink-faint)">${fmt(r.total_bonus||0)}<br><span style="font-size:10px">試算・不發放</span></span>`:`<strong>${fmt(r.total_bonus||0)}</strong>`}</td></tr>`).join('')}</tbody></table>`;
   else h+=`<div class="info-box" style="font-size:12px">尚未結算（到「業務部 → 執行月結」）</div>`;
   h+=`</div>`;
   h+=`<div class="card" style="margin-bottom:12px"><div class="card-title" style="font-size:14px">🧪 研發成交獎金（${ym}）</div><div style="font-size:13px;line-height:1.9">• 已放行：<strong>${fmt(dealRel)}</strong><br>• 待覆核：${fmt(dealPend)}（${pendDealN} 段，到「研發部 → 成交獎金」放行）</div></div>`;
@@ -6602,7 +6599,7 @@ async function loadPayoutSummary(){
     else if(r.status==='pending_carryover') put(nm, r.employees?.dept||'研發部', r.employees?.role_title, 'defer', r.base_bonus);
   });
   // 2-2) 業務部：月獎金（新客＋出貨，當季三個月）與季度回款達標獎金（2026-09-25 補：原總表完全沒讀這兩張表）
-  const {data:smm}=await sb.from('sales_monthly_settlement').select('total_bonus, month, employees(name, dept, role_title)').eq('year',yr).in('month',qm);
+  const {data:smm}=await sb.from('sales_monthly_settlement').select('total_bonus, month, employees(name, dept, role_title)').eq('year',yr).in('month',qm).neq('status','trial');   // 協理試算不進發放
   (smm||[]).forEach(r=>put(r.employees?.name, r.employees?.dept||'業務部', r.employees?.role_title, 'sales', r.total_bonus));
   const {data:sqq}=await sb.from('sales_quarterly_settlement').select('achievement_bonus, employees(name, dept, role_title)').eq('year',yr).eq('quarter',q);
   (sqq||[]).forEach(r=>put(r.employees?.name, r.employees?.dept||'業務部', r.employees?.role_title, 'dept_bonus', r.achievement_bonus));
