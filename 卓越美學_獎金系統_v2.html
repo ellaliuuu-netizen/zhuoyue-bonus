@@ -1186,7 +1186,10 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">姓名</label><select class="form-select" id="prod-name"><option value="">— 請選擇 —</option></select></div>
+            <div class="form-group"><label class="form-label">姓名</label><select class="form-select" id="prod-name" onchange="prodGraceUI()"><option value="">— 請選擇 —</option></select></div>
+            <div class="form-group" id="prod-grace-box" style="display:none"><label class="form-label">核定理由（轉正當月整月計入，印在個人獎金確認表）</label>
+              <input class="form-input" id="prod-grace-reason" placeholder="例：試用期間表現良好" />
+              <div id="prod-grace-note" style="font-size:11px;color:#6b4f8a"></div></div>
             <div class="form-group"><label class="form-label">當季出貨件數（系統自動帶，可手改）</label>
               <input class="form-input" type="number" id="prod-shipments" placeholder="0" min="0" />
               <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
@@ -4891,9 +4894,10 @@ async function generateDeptConfirmSheets(dept){
         <tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr>
         ${otBonus?`<tr><td>準時率獎金</td><td class="r">${fmt(otBonus)}</td></tr>`:''}
         <tr><td>${dept==='企劃部'?'KPI 表現獎金':'評分加成'}</td><td class="r">${fmt(k.kpi_bonus||0)}</td></tr>
-        ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
+        ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(base)}</td></tr><tr><td>${sc.grace?`公司核定：${sc.grace.fromMonth} 月起整月計入（${sc.grace.months} 個月 ÷ 3）`:'試用期比例（正式錄用天數 ÷ 當季總天數）'}</td><td class="r">× ${sc.grace?`${sc.grace.months}/3`:(ratio*100).toFixed(1)+'%'}</td></tr>`:''}
         ${addon?`<tr><td>主管加給（協理個案核給，不受試用期比例影響）</td><td class="r">${fmt(addon)}</td></tr>`:''}
       </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
+      ${sc.grace?`<div class="cbox" style="margin:8px 0;border-style:solid;border-color:#c99a2e"><b>公司核定事項</b><br>試用期於 ${sc.grace.fromMonth} 月期滿，依制度本應按正式錄用天數比例計算；公司核定 ${sc.grace.fromMonth} 月起整月計入，本季獎金按 ${sc.grace.months}/3 計算。<br>核定理由：${sc.grace.reason||'—'}</div>`:''}
       ${DISPUTE(sumSec+1)}
       <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
       <p>異議／補充：____________________________________________________</p>
@@ -5240,6 +5244,21 @@ function prodScoreBonus(score){
   return {bonus:3000, label:'非常優秀'};
 }
 
+// 2026-10-02 協理裁示：生管核給「轉正當月整月計入」時，試用期比例改按月數（轉正當月起整月）÷ 3，
+// 不採企劃「只計轉正月件數」的做法——生管件數有 20 件門檻，只計單月件數反而會掉到門檻下
+function prodRatio(emp){
+  const pr=emp?probationRatio(emp):{ratio:1,note:''};
+  if(!emp||!emp.probation_grace_month||pr.ratio<=0||pr.ratio>=1) return {...pr,grace:null};
+  const fs=new Date(emp.probation_end_date); fs.setDate(fs.getDate()+1);
+  const fromMonth=fs.getMonth()+1, qStartM={Q1:1,Q2:4,Q3:7,Q4:10}[appSettings.quarter], months=qStartM+3-fromMonth;
+  return {ratio:months/3, note:`｜公司核定：${fromMonth} 月起整月計入（按 ${months}/3 計）`, grace:{fromMonth,months}};
+}
+function prodGraceUI(){
+  const emp=employees.find(e=>e.name===(document.getElementById('prod-name')||{}).value);
+  const g=prodRatio(emp).grace, box=document.getElementById('prod-grace-box');
+  if(box) box.style.display=g?'':'none';
+  const n=document.getElementById('prod-grace-note'); if(n) n.textContent=g?`公司核定：${g.fromMonth} 月起整月計入，本季獎金按 ${g.months}/3 計（不以轉正日按天數切分）`:'';
+}
 function calcProduction(){
   const ships=parseInt(document.getElementById('prod-shipments').value)||0;
   const ontime=prodIsLegacyQuarter()?0:(parseFloat(document.getElementById('prod-ontime').value)||0);
@@ -5271,11 +5290,14 @@ async function saveProduction(){
   const t=prodV1Scores(), noinc=!!document.getElementById('prod-noincident')?.checked;
   const detail = `出貨 ${ships} 件（${fmt(ship.total)}）＋ 準時率 ${legacy?'Q3 不計':ontime+'%'}（${fmt(ot.bonus)}）＋ 評分${legacy?'（原四項）':'（六面向）'} ${score}/100（${fmt(scoreObj.bonus)}）${legacy?`｜六面向試評 ${prodV1Weighted(t,noinc)}/100`:''}`;
   const empP=employees.find(e=>e.name===name);
-  const pr=empP?probationRatio(empP):{ratio:1,note:''};
+  const pr=prodRatio(empP);
+  const graceReason=((document.getElementById('prod-grace-reason')||{}).value||'').trim();
+  if(pr.grace&&!graceReason){showToast('請填寫「核定理由」（會印在確認表上）');return;}
   const finalB=Math.round(bonus*pr.ratio);
   const scores={mode:legacy?'v1-transition':'v1',ontime,t1:t[0],t2:t[1],t3:t[2],t4:t[3],t5:t[4],t6:t[5],noincident:noinc,trial_total:legacy?prodV1Weighted(t,noinc):null};
+  if(pr.grace) scores.grace={...pr.grace,reason:graceReason};
   if(legacy) Object.assign(scores,{e1:getStarScore('prod-s1'),e2:getStarScore('prod-s2'),e3:getStarScore('prod-s3'),e4:getStarScore('prod-s4')});
-  const ok=await saveKpiDraft({employee_id:empP?empP.id:null,dept:'生產部',name,role_title:empP?empP.role_title:'生管',ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:finalB,detail});
+  const ok=await saveKpiDraft({employee_id:empP?empP.id:null,dept:'生產部',name,role_title:empP?empP.role_title:'生管',ship_count:ships,scores,score_total:score,kpi_bonus:scoreObj.bonus,ship_bonus:ship.total,probation_ratio:pr.ratio,final_bonus:finalB,detail:detail+(pr.note||'')});
   if (ok) showToast(`📝 已存草稿：${name} 試算 ${fmt(finalB)}${pr.ratio<1?`（比例 ${(pr.ratio*100).toFixed(1)}%）`:''}｜到「KPI覆核」放行`);
 }
 
