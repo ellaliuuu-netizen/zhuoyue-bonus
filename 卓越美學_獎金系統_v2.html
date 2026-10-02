@@ -4924,7 +4924,7 @@ async function generateSalesConfirmSheets(kind){
       <tbody>${ncRows||'<tr><td colspan="7" class="c">本季無新客</td></tr>'}</tbody>
       <tfoot><tr><td colspan="6">新客獎金小計（${ncIn.length} 位 × ${fmt(ncUnit)}）</td><td class="r">${fmt(ncTot)}</td></tr></tfoot></table>
       <p class="note">新客＝全公司首次成交之客戶（一客只計一次）；以客戶付清訂金為認列時點，訂金入帳當月認列、次月同月薪一起發放。</p>
-      ${!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>${(yr===2026&&qq==='Q3')?'第三季月獎金（新客、出貨）因制度於 2026/10/2 說明，統一於 2026/10/5 與月薪同日、另筆匯款發放。':'新客、出貨獎金依制度按月結算，於次月同月薪一起發放（另筆匯款）；本表僅彙整列示，不重複發放。'}</p>`:''}
+      ${!isMonth?`<p class="note" style="color:#7a5c3d;font-size:11px"><b>發放時間說明：</b>${(yr===2026&&qq==='Q3')?'第三季月獎金（新客、出貨）因制度於 2026/10/2 說明，統一於 2026/10/5 與月薪同日、另筆匯款發放。':'新客、出貨獎金依制度按月結算，於次月同月薪一起發放；本表僅彙整列示，不重複發放。'}</p>`:''}
       <h2>二、出貨獎金（逐月）</h2>
       <table><thead><tr><th>月份</th><th class="r">計獎出貨金額（未稅）</th><th class="r">不計獎金額</th><th class="c">適用比例</th><th class="r">出貨獎金</th></tr></thead>
       <tbody>${monthRows.join('')}</tbody><tfoot><tr><td colspan="4">出貨獎金小計</td><td class="r">${fmt(shipTot)}</td></tr></tfoot></table>
