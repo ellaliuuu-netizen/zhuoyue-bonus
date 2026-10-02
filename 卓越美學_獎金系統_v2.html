@@ -4619,7 +4619,10 @@ function planUnassignedGuard(){
 
 // PURCHASE
 // 採購部 v1 確認版（2026 Q4 起）：件數＋到料準時率＋議價成效＋新廠商＋評分三面向（議價移出另計）；兼任補貼取消。Q3 以前依 v4
-function purIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && appSettings.quarter==='Q4'); }
+// 2026-10-02 協理裁示：採購同仁未曾看過 v4，2026 Q3 起直接適用 v1 確認版（比照企劃部）
+function purIsV1(){ const y=Number(appSettings.year)||0; return y>2026 || (y===2026 && (appSettings.quarter==='Q3'||appSettings.quarter==='Q4')); }
+// Q3 過渡：到料準時率不計（9/29 才宣布「未登錄＝未準時」，自 Q4 起適用），僅列試算；兼任生管補貼 2,000 全額發給
+function purIsQ3Transition(){ return Number(appSettings.year)===2026 && appSettings.quarter==='Q3'; }
 let _purOT=null;
 function purApplyMode(){
   const v1=purIsV1();
@@ -4628,7 +4631,7 @@ function purApplyMode(){
   const w=v1?['50%','33%','17%']:['30%','20%','10%'];
   ['pur-w2','pur-w3','pur-w4'].forEach((id,i)=>{const e=document.getElementById(id); if(e) e.textContent=w[i];});
   const d=document.getElementById('pur-desc');
-  if(d) d.textContent=v1?'2026 Q4 起依《採購部獎金制度 v1 確認版》：季獎金＝件數 ＋ 到料準時率 ＋ 議價成效 ＋ 新廠商開發 ＋ 評分（五項直接加總）':'2026 Q3 以前依 v4：季獎金＝出貨件數獎金 ＋ 評分加成 ＋ 兼任生管補貼';
+  if(d) d.textContent=v1?('2026 Q3 起依《採購部獎金制度 v1 確認版》：季獎金＝件數 ＋ 到料準時率 ＋ 議價成效 ＋ 新廠商開發 ＋ 評分（五項直接加總）'+(purIsQ3Transition()?'｜本季（Q3）到料準時率不計、僅試算；另發兼任生管補貼 2,000':'')):'2026 Q3 以前依 v4：季獎金＝出貨件數獎金 ＋ 評分加成 ＋ 兼任生管補貼';
   if(v1) loadPurOnTime();
 }
 function purQuarterBounds(){
@@ -4665,13 +4668,18 @@ function purV1Parts(){
   const ships=parseInt(document.getElementById('pur-shipments').value)||0;
   const ship=purTieredShipBonus(ships);
   const otRate=parseFloat(document.getElementById('pur-ontime').value);
-  const ot=isNaN(otRate)?{bonus:0,breakdown:'未填準時率'}:prodOnTimeBonus(otRate);
+  let ot=isNaN(otRate)?{bonus:0,breakdown:'未填準時率'}:prodOnTimeBonus(otRate);
+  const q3=purIsQ3Transition();
+  const regRate=(_purOT&&(_purOT.ok+_purOT.late+_purOT.overdue))?Math.round(_purOT.ok/(_purOT.ok+_purOT.late+_purOT.overdue)*1000)/10:null;
+  if(q3){ const tri=isNaN(otRate)?null:prodOnTimeBonus(otRate).bonus, triReg=regRate==null?null:prodOnTimeBonus(regRate).bonus;
+    ot={bonus:0,breakdown:`第三季不計（僅試算：含未登錄 ${isNaN(otRate)?'—':otRate+'%'}→${tri==null?'—':fmt(tri)}；只計已登錄 ${regRate??'—'}%→${triReg==null?'—':fmt(triReg)}）`,trial:tri,regRate,trialReg:triReg}; }
+  const supp=q3?(appSettings.purSupplement||2000):0;
   const save=parseInt(document.getElementById('pur-save').value)||0;
   const bargain=Math.min(1000,Math.round(save*0.05));
   const nNew=parseInt(document.getElementById('pur-newsup').value)||0;
   const newsup=nNew*500;
   const score=calcPurScore(), sc=purScoreBonusV1(score);
-  return {ships,ship,otRate:isNaN(otRate)?null:otRate,ot,save,bargain,nNew,newsup,score,sc,base:ship.total+ot.bonus+bargain+newsup+sc.bonus};
+  return {ships,ship,otRate:isNaN(otRate)?null:otRate,ot,save,bargain,nNew,newsup,score,sc,supp,base:ship.total+ot.bonus+bargain+newsup+sc.bonus+supp};
 }
 function calcPurchaseV1(){
   const emp=employees.find(e=>e.id===document.getElementById('pur-emp-sel').value);
@@ -4683,7 +4691,8 @@ function calcPurchaseV1(){
   html+=`<div class="res-item"><span class="res-item-dot"></span><strong>議價成效獎金：${fmt(P.bargain)}</strong>（節省 ${fmt(P.save)} × 5%，上限 1,000）</div>`;
   html+=`<div class="res-item"><span class="res-item-dot"></span><strong>新廠商開發獎金：${fmt(P.newsup)}</strong>（${P.nNew} 家 × 500）</div>`;
   html+=`<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(P.sc.bonus)}</strong>（${P.sc.label} ／ 加權總分 ${P.score}/100）</div>`;
-  html+=`<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>五項加總 = <strong>${fmt(P.base)}</strong></div>`;
+  if(P.supp) html+=`<div class="res-item"><span class="res-item-dot"></span><strong>兼任生管補貼：${fmt(P.supp)}</strong>（2026 Q3 特例全額發給，Q4 起取消）</div>`;
+  html+=`<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>${P.supp?'各項':'五項'}加總 = <strong>${fmt(P.base)}</strong></div>`;
   if(pr.ratio<1) html+=`<div class="res-item" style="color:var(--red)"><span class="res-item-dot"></span>試用期比例派：原始 ${fmt(P.base)}、實發 ${fmt(total)}${pr.note}</div>`;
   document.getElementById('pur-breakdown').innerHTML=html;
 }
@@ -4692,8 +4701,8 @@ async function savePurchaseV1(){
   if(!emp){showToast('請選擇採購人員');return;}
   const P=purV1Parts(), pr=probationRatio(emp), bonus=Math.round(P.base*pr.ratio);
   const scores={mode:'v1',s2:getStarScore('pur-s2'),s3:getStarScore('pur-s3'),s4:getStarScore('pur-s4'),
-    ontime:P.otRate,ot_bonus:P.ot.bonus,ot_stats:_purOT,save:P.save,bargain:P.bargain,newsup_n:P.nNew,newsup:P.newsup,score_bonus:P.sc.bonus};
-  const detail=`v1｜件數 ${P.ships}（${fmt(P.ship.total)}）＋ 到料準時 ${P.otRate??'—'}%（${fmt(P.ot.bonus)}）＋ 議價 ${fmt(P.bargain)} ＋ 新廠商 ${P.nNew} 家（${fmt(P.newsup)}）＋ 評分 ${P.score}/100（${fmt(P.sc.bonus)}）${pr.note}`;
+    ontime:P.otRate,ot_bonus:P.ot.bonus,ot_stats:_purOT,ot_q3:P.supp?{trial:P.ot.trial,regRate:P.ot.regRate,trialReg:P.ot.trialReg}:null,supplement_v1:P.supp,save:P.save,bargain:P.bargain,newsup_n:P.nNew,newsup:P.newsup,score_bonus:P.sc.bonus};
+  const detail=`v1｜件數 ${P.ships}（${fmt(P.ship.total)}）＋ 到料準時 ${P.otRate??'—'}%（${fmt(P.ot.bonus)}${P.supp?'，Q3 不計':''}）${P.supp?`＋ 兼任補貼 ${fmt(P.supp)}`:''}＋ 議價 ${fmt(P.bargain)} ＋ 新廠商 ${P.nNew} 家（${fmt(P.newsup)}）＋ 評分 ${P.score}/100（${fmt(P.sc.bonus)}）${pr.note}`;
   const ok=await saveKpiDraft({employee_id:emp.id,dept:'採購部',name:emp.name,role_title:emp.role_title,ship_count:P.ships,scores,score_total:P.score,
     kpi_bonus:P.sc.bonus+P.ot.bonus+P.bargain+P.newsup,ship_bonus:P.ship.total,probation_ratio:pr.ratio,final_bonus:bonus,detail});
   if(ok) showToast(`📝 已存草稿：${emp.name} 試算 ${fmt(bonus)}｜到「KPI覆核」放行`);
@@ -5022,7 +5031,8 @@ function purV1Sheet(k,yr,qq,ship,lines,pname){
   const rows=(lines||[]).map((l,i)=>`<tr><td class="c">${i+1}</td><td>${l.product_code}</td><td>${pname(l.product_code)||l.item_name_raw||''}</td><td>${l.customer_name||''}</td><td class="r">${(l.order_qty||0).toLocaleString()}</td><td class="r">${(l.shipped_qty||0).toLocaleString()}</td><td class="c">${l.bonus_settled_month} 月</td></tr>`).join('');
   const W=[['缺料危機處理',50,'s2'],['跨部門協調追蹤',33,'s3'],['備料預測與成本優化',17,'s4']];
   const ot=prodOnTimeBonus(Number(sc.ontime||0));
-  const sub=(k.ship_bonus||0)+(sc.ot_bonus||0)+(sc.bargain||0)+(sc.newsup||0)+(sc.score_bonus||0);
+  const supp=Number(sc.supplement_v1||0), q3=sc.ot_q3;
+  const sub=(k.ship_bonus||0)+(sc.ot_bonus||0)+(sc.bargain||0)+(sc.newsup||0)+(sc.score_bonus||0)+supp;
   return `<section class="sheet"><h1>採購部個人獎金確認表</h1>
     <div class="meta">${yr} ${qq}｜${k.name}（${k.role_title||'採購'}）｜依《採購部獎金制度 v1 確認版》｜產出日 ${new Date().toISOString().slice(0,10)}</div>
     <h2>一、出貨件數獎金</h2>
@@ -5032,6 +5042,7 @@ function purV1Sheet(k,yr,qq,ship,lines,pname){
     <h2>二、到料準時率獎金</h2>
     <table><tbody><tr><td>準時／延遲／逾期未到／預計到貨日未登錄</td><td class="r">${st.ok??'—'}／${st.late??'—'}／${st.overdue??'—'}／${st.missing??'—'}</td></tr>
     <tr><td>本季到料準時率</td><td class="r">${sc.ontime!=null?sc.ontime+'%':'—'}</td></tr><tr><td>計算式</td><td class="r">${ot.breakdown}</td></tr><tr><td>到料準時率獎金</td><td class="r"><b>${fmt(sc.ot_bonus||0)}</b></td></tr></tbody></table>
+    ${q3?`<p class="note" style="font-size:11px;color:#333"><b>第三季處理：</b>「預計到貨日未登錄者以未準時計」自 2026 年第四季起適用，本季到料準時率獎金不計，僅列試算供參考：含未登錄 ${sc.ontime!=null?sc.ontime+'%':'—'}，試算 ${q3.trial==null?'—':fmt(q3.trial)}；只計已登錄 ${q3.regRate??'—'}%，試算 ${q3.trialReg==null?'—':fmt(q3.trialReg)}。第四季起請於 Notion 確實登錄預計與實際到貨日。</p>`:''}
     <p class="note">準時＝實際到貨日在預計到貨日（首次登錄之正本）當天或之前；依預計到貨日所屬季度計算，逾期未到者計為延遲；未登錄預計到貨日者以未準時計；供應商延誤經協理核定者不列入。達 70% 起發：1,000＋（準時率−70）×100，100% 另加 1,000。</p>
     <h2>三、議價成效與新廠商開發</h2>
     <table><tbody><tr><td>本季議價節省金額（協理核准、驗收合格）</td><td class="r">${fmt(sc.save||0)}</td></tr><tr><td>議價成效獎金（× 5%，上限 1,000）</td><td class="r"><b>${fmt(sc.bargain||0)}</b></td></tr>
@@ -5043,9 +5054,11 @@ function purV1Sheet(k,yr,qq,ship,lines,pname){
     <p class="note">級距：未達 60 分 0 元｜60–74 分 600｜75–84 分 1,200｜85 分以上 1,800。無特殊事例者以 3 分計。</p>
     <h2>五、本季合計</h2>
     <table><tbody><tr><td>件數獎金</td><td class="r">${fmt(k.ship_bonus||0)}</td></tr><tr><td>到料準時率獎金</td><td class="r">${fmt(sc.ot_bonus||0)}</td></tr><tr><td>議價成效獎金</td><td class="r">${fmt(sc.bargain||0)}</td></tr><tr><td>新廠商開發獎金</td><td class="r">${fmt(sc.newsup||0)}</td></tr><tr><td>評分加成</td><td class="r">${fmt(sc.score_bonus||0)}</td></tr>
+    ${supp?`<tr><td>兼任生管補貼</td><td class="r">${fmt(supp)}</td></tr>`:''}
     ${ratio<1?`<tr><td>小計</td><td class="r">${fmt(sub)}</td></tr><tr><td>試用期比例</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
     ${addon?`<tr><td>主管加給（協理個案核給）</td><td class="r">${fmt(addon)}</td></tr>`:''}
     </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
+    ${supp?`<p class="note" style="font-size:11px;color:#333">兼任生管補貼：依制度，正式生管人員到職後即取消。本季（2026 Q3）生管人員仍在試用期間，由您負責帶訓並同步處理生管事務，公司體恤您的辛勞，本季補貼 ${fmt(supp)} 元仍全額發給。<b>自 2026 Q4 起，依制度取消本項補貼。</b></p>`:''}
     <h2>六、確認與異議處理程序</h2>
     <table><thead><tr><th class="c">步驟</th><th>內容</th><th class="c">時限</th></tr></thead><tbody>
       <tr><td class="c">1</td><td>同仁核對本表之件數、準時率、評分與金額；如有疑義，於「異議／補充」欄具體載明後交回</td><td class="c">收到起 2 個工作日內</td></tr>
