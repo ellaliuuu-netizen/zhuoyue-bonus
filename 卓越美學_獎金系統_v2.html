@@ -4326,6 +4326,14 @@ async function savePlanningV1(){
 function planV1Sheet(k,yr,qq,DISPUTE){
   const sc=k.scores||{}, P=sc.plan_v1||{}, g=P.grace, addon=Number(k.mgr_addon||0), ratio=Number(k.probation_ratio||1);
   const rows=(P.lines||[]).map((l,i)=>`<tr${l.rate?'':' style="color:#999"'}><td class="c">${i+1}</td><td>${l.code}</td><td>${l.name}</td><td class="c">${l.month} 月</td><td>${l.level||'—'}</td><td>${l.kind}</td><td class="r">${(l.rate||0).toLocaleString()}</td></tr>`).join('');
+  // 2026-10-02 協理要求：比照研發部，列出「若本季全期為正式錄用」之預估（僅供參考，不發放）
+  const _fullRate=l=>{ if(l.full!=null) return Number(l.full)||0; const kd=l.kind||'';
+    if(/試用包|不計|不發放/.test(kd.replace('（轉正前月份，不計）',''))) return 0;
+    if(kd.startsWith('承接')) return PLAN_V1_INHERIT; const b=PLAN_V1_RATE[l.level]||150; return kd.startsWith('首發')?b:b/2; };
+  const _lines=P.lines||[], _before=_lines.filter(l=>/轉正前月份/.test(l.kind||''));
+  const _fullPieceRaw=_lines.reduce((t,l)=>t+_fullRate(l),0), _fullPiece=Math.round(_fullPieceRaw*(P.mult??1));
+  const _fullKpi=Number(P.kpiFull??k.kpi_bonus??0), _fullTot=_fullPiece+_fullKpi;
+  const _showFull=g||ratio<1;
   const kn=['文案品質','執行效率','主動服務','學習成長','客戶滿意度','專案企劃'];
   const kr=kn.map((n,i)=>`<tr><td>${['①','②','③','④','⑤','⑥'][i]} ${n}</td><td class="c">${sc['s'+(i+1)]??'—'}</td></tr>`).join('');
   return `<section class="sheet"><h1>企劃部個人獎金確認表</h1>
@@ -4348,7 +4356,13 @@ function planV1Sheet(k,yr,qq,DISPUTE){
     ${ratio<1?`<tr><td>試用期比例（正式錄用天數 ÷ 當季總天數）</td><td class="r">× ${(ratio*100).toFixed(1)}%</td></tr>`:''}
     ${addon?`<tr><td>主管加給（協理個案核給）</td><td class="r">${fmt(addon)}</td></tr>`:''}
     </tbody><tfoot><tr><td><b>本季實發</b></td><td class="r"><b>${fmt(k.final_bonus||0)}</b></td></tr></tfoot></table>
-    ${DISPUTE(4)}
+    ${_showFull?`<h2>四、若本季全期為正式錄用之預估（僅供參考，不發放）</h2>
+    <table><thead><tr><th>項目</th><th class="r">本季實發</th><th class="r">若全期為正式錄用</th></tr></thead><tbody>
+    <tr><td>件數獎金（計件 ${_lines.filter(l=>_fullRate(l)>0).length} 件${_before.length?`，其中 ${_before.length} 件為轉正前月份`:''}）</td><td class="r">${fmt(k.ship_bonus||0)}</td><td class="r">${fmt(_fullPiece)}</td></tr>
+    <tr><td>KPI 表現獎金（${k.score_total||0} / 30）</td><td class="r">${fmt(k.kpi_bonus||0)}</td><td class="r">${fmt(_fullKpi)}</td></tr>
+    </tbody><tfoot><tr><td>合計</td><td class="r">${fmt(k.final_bonus||0)}</td><td class="r"><b>${fmt(_fullTot)}</b></td></tr></tfoot></table>
+    <p class="note">本表以本季實際結算品項與評分試算，呈現轉正後同等表現下之獎金水準，僅供參考、不另發放；下季實際金額依當季件數、全公司加成與評分計算。</p>`:''}
+    ${DISPUTE(_showFull?5:4)}
     <div class="cbox">本人確認：以上件數、評分與金額之計算方式與實際情況相符。如有疑義請依上述程序於 2 個工作日內提出。
     <p>異議／補充：____________________________________________________</p>
     <div class="sign">本人簽名：________________　　日期：____________</div></div></section>`;
