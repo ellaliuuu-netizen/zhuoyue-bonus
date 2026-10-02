@@ -4873,8 +4873,9 @@ async function generateSalesConfirmSheets(kind){
   const eM=lastM===12?1:lastM+1, eY=lastM===12?yr+1:yr, qEnd=`${eY}-${String(eM).padStart(2,'0')}-01`;
   const payDay=`${eY}-${String(eM).padStart(2,'0')}-05`;
   const periodLabel=isMonth?`${yr} 年 ${qm[0]} 月`:`${yr} ${qq}`;
-  const emps=employees.filter(e=>e.dept==='業務部'&&e.is_active);
-  if(!emps.length){ showToast('沒有在職業務人員'); return; }
+  // 協理本人只試算不發放，不產出確認表（2026-10-02 協理裁示）
+  const emps=employees.filter(e=>e.dept==='業務部'&&e.is_active&&!(e.role_title||'').includes('協理'));
+  if(!emps.length){ showToast('沒有需產出確認表的業務人員'); return; }
   const keysOf=e=>[e.name,e.csv_sales_alias].filter(Boolean).map(x=>x.trim());
   const ncAll=await _newClientFirstOrders();
   const {data:recs}=await sb.from('sales_records').select('ship_date,invoice_no,customer_name,item_name_raw,product_code,qty,amount,sales_person,month').eq('year',yr).in('month',qm).order('ship_date');
@@ -6574,7 +6575,7 @@ async function fillDeptAutoCount(inputId, noteId){
 // ===== 本季發放總表：把分散在三張表的錢合併成一張給財務的清單 =====
 // 研發成交在 rd_deal_bonuses(released)、研發打樣在 rd_monthly_settlement(paid)、
 // 其他部門季獎金與團隊加成在 bonus_records。只看任一張都會漏。
-let _payoutRows=[];
+let _payoutRows=[]; let _payoutTrial=[];
 async function loadPayoutSummary(){
   const el=document.getElementById('payout-content'); if(!el) return;
   const yr=appSettings.year, q=appSettings.quarter;
@@ -6643,6 +6644,24 @@ async function loadPayoutSummary(){
     }
     return '本季尚未結算，或結算結果為 0（請確認該部門是否已完成結算）';
   };
+  // 2026-10-02 協理裁示：協理本人獎金一律「試算・不發放」，不列入給財務的總表、總額與匯出檔
+  const _isTrial=a=>{ const e=employees.find(x=>x.name===a.name)||{}; return (e.role_title||a.role||'').includes('協理'); };
+  const _trialNames=new Set(Object.values(agg).filter(_isTrial).map(a=>a.name));
+  _payoutTrial=[];
+  for(const nm of _trialNames){
+    const e=employees.find(x=>x.name===nm)||{};
+    const keys=[e.name,e.csv_sales_alias].filter(Boolean).map(x=>x.trim());
+    const {data:rs}=await sb.from('sales_records').select('amount,qty,item_name_raw,product_code,sales_person,month').eq('year',yr).in('month',qm);
+    let ship=0; const lines=[];
+    for(const m of qm){
+      const amt=(rs||[]).filter(r=>r.month===m&&keys.includes((r.sales_person||'').trim())&&!saleExcludeReason(r)).reduce((t,r)=>t+Number(r.amount||0),0);
+      const ratio=amt>=4000000?0.0035:amt>=2000000?0.0028:amt>=1000000?0.0022:amt>=500000?0.0018:0.0015;
+      const b=amt>0?Math.round(amt*ratio):0; ship+=b; lines.push(`${m}月 ${Math.round(amt).toLocaleString()}×千分之${(ratio*1000).toFixed(1)}＝${b.toLocaleString()}`);
+    }
+    const a=agg[nm];
+    _payoutTrial.push({name:nm, role:e.role_title||a.role, dept:a.dept, ship, other:a.deal+a.sampling+a.dept_bonus+a.team, detail:lines.join('｜')});
+    delete agg[nm];
+  }
   _payoutRows=Object.values(agg).map(a=>({...a, total:a.deal+a.sampling+a.sales+a.dept_bonus+a.team}))
     .map(a=>({...a, zeroReason: a.total>0?'':reasonOf(a)}))
     .sort((a,b)=>(a.dept||'').localeCompare(b.dept||'')||b.total-a.total);
@@ -6686,6 +6705,9 @@ function renderPayoutSummary(){
     <div style="font-size:19px;font-weight:700">應發放總額：${grand.toLocaleString()} 元</div>
     ${deferAll?`<div style="font-size:12px;color:#b3541e;margin-top:3px">另有暫緩累積 ${deferAll.toLocaleString()} 元（本季無成交認列，待日後出貨當季一併發放，不列入本次）</div>`:''}
   </div>`;
+  if(_payoutTrial.length){
+    html+=`<div class="info-box" style="margin-top:14px;font-size:12px;background:var(--surface-3)"><b>協理（試算・不發放）</b>　不列入上方應發放總額，也不會出現在「匯出給財務」的檔案中。<br>${_payoutTrial.map(t=>`${esc2(t.name)}（${esc2(t.role||'')}）：業務出貨獎金試算 <b>${t.ship.toLocaleString()}</b> 元　<span style="color:var(--ink-faint)">${esc2(t.detail)}</span>${t.other?`；其他試算 ${t.other.toLocaleString()} 元`:''}　<span class="badge badge-gray">試算・不發放</span>`).join('<br>')}</div>`;
+  }
   el.innerHTML=html;
 }
 function exportPayoutCSV(){
