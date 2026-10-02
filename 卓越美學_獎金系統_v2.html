@@ -1186,7 +1186,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         <div class="card">
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="prod-name" placeholder="例：陳生管" /></div>
+            <div class="form-group"><label class="form-label">姓名</label><select class="form-select" id="prod-name"><option value="">— 請選擇 —</option></select></div>
             <div class="form-group"><label class="form-label">當季出貨件數（系統自動帶，可手改）</label>
               <input class="form-input" type="number" id="prod-shipments" placeholder="0" min="0" />
               <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
@@ -2137,6 +2137,10 @@ function populateEmpSelects() {
   fillSelect('rd-emp-sel', employees.filter(e => e.dept === '研發部' && e.is_active && e.role_level !== 'assistant'));
   fillSelect('plan-emp-sel', planEmps);
   fillSelect('pur-emp-sel', purEmps);
+  // 生產部：值存姓名（saveProduction／草稿回填皆以姓名對應）；2026-10-02 由手打改下拉，避免暱稱（如「阿信」）對不到員工、試用期比例失效
+  { const ps=document.getElementById('prod-name'); if(ps&&ps.tagName==='SELECT'){ const cur=ps.value;
+      ps.innerHTML='<option value="">— 請選擇 —</option>'+employees.filter(e=>e.dept==='生產部'&&e.is_active).map(e=>`<option value="${e.name}">${e.name}（${e.role_title||''}）</option>`).join('');
+      if(cur) ps.value=cur; } }
   fillSelect('special-emp-sel', allActiveEmps.map(e=>({...e, name:`${e.name}（${e.dept}）`})));
   fillSelect('o-sales', salesEmps);
 
@@ -5255,7 +5259,7 @@ function calcProduction(){
 
 async function saveProduction(){
   const name=document.getElementById('prod-name').value.trim();
-  if(!name){showToast('請輸入姓名');return;}
+  if(!name){showToast('請選擇生管人員');return;}
   const ships=parseInt(document.getElementById('prod-shipments').value)||0;
   const legacy=prodIsLegacyQuarter();
   const ontime=legacy?null:(parseFloat(document.getElementById('prod-ontime').value)||0);
