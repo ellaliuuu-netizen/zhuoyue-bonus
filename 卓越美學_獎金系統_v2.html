@@ -534,6 +534,11 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">本季訂單數</div>
           <div style="font-family:'Noto Serif TC',serif;font-size:20px;font-weight:600" id="sidebar-orders">—</div>
         </div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:6px" title="出貨件數＝訂單品項累計出貨達下單量 80% 而結算的品項數（生管／採購／企劃件數獎金用）">
+          <div style="font-size:11px;color:var(--ink-faint);margin-bottom:2px">本季出貨件數</div>
+          <div style="font-family:'Noto Serif TC',serif;font-size:20px;font-weight:600" id="sidebar-ship-pieces">—</div>
+          <div style="font-size:11px;color:var(--ink-faint);margin-top:2px" id="sidebar-ship-qty"></div>
+        </div>
       </div>
       <div>
         <div class="sidebar-label">快速入口</div>
@@ -621,10 +626,15 @@ table tr:hover td{background:rgba(247,240,222,.5);}
         </div>
         <div class="section-desc">資料來源＝「銷貨匯入」的會計銷貨明細，與獎金認列同一份；本頁為檢視，新增請走銷貨匯入</div>
         <div id="shipments-readonly-notice" class="read-only-notice" style="display:none">👁 查看模式</div>
+        <div class="stats-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px">
+          <div class="stat-box green"><div class="stat-val" id="ship-stat-pieces">—</div><div class="stat-label">本季總出貨件數</div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">訂單品項出貨達 80% 結算（件數獎金用）</div></div>
+          <div class="stat-box"><div class="stat-val" id="ship-stat-qty">—</div><div class="stat-label">本季出貨總數量（個）</div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px">不含 PIF／代購／折讓</div></div>
+          <div class="stat-box"><div class="stat-val" id="ship-stat-rows">—</div><div class="stat-label">出貨明細筆數</div><div style="font-size:11px;color:var(--ink-faint);margin-top:4px" id="ship-stat-month"></div></div>
+        </div>
         <div class="card">
           <div class="card-header"><div class="card-title">本季出貨紀錄</div></div>
           <div class="table-wrap"><table>
-            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>產品編號</th><th>品名</th><th>本次件數</th><th>系統配對訂單</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
+            <thead><tr><th>出貨日期</th><th>發票號碼</th><th>客戶</th><th>產品編號</th><th>品名</th><th>本次出貨數量</th><th>系統配對訂單</th><th>訂單進度（累計/下單）</th><th class="td-center">開票狀態</th><th class="td-center">資料來源</th></tr></thead>
             <tbody id="shipments-tbody"><tr><td colspan="10" style="text-align:center;color:var(--ink-faint);padding:24px">載入中...</td></tr></tbody>
           </table></div>
         </div>
@@ -2326,6 +2336,7 @@ async function loadOrders() {
     }
   }
   document.getElementById('sidebar-orders').textContent = orders.length || '0';
+  loadShipSummary();
   document.getElementById('dash-orders').textContent = orders.length || '—';
   document.getElementById('dash-completed').textContent = completed.length || '—';
 
@@ -2784,7 +2795,29 @@ async function saveOrder() {
 }
 
 // SHIPMENTS
+// 2026-10-02 協理要求：出貨紀錄頁與側邊欄顯示本季總出貨件數
+// 件＝訂單品項累計出貨達下單量 80% 而結算（bonus_settled_at 落在本季），與生管／採購／企劃件數同一口徑；
+// 數量＝本季銷貨明細出貨量合計，排除 PIF／代購／折讓等不計獎金列
+async function loadShipSummary(){
+  const qm=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
+  const y=appSettings.year, qs=`${y}-${String(qm[0]).padStart(2,'0')}-01`;
+  const eM=qm[2]===12?1:qm[2]+1, eY=qm[2]===12?y+1:y, qe=`${eY}-${String(eM).padStart(2,'0')}-01`;
+  const {data:ol}=await sb.from('order_lines_public').select('id,bonus_settled_at').gte('bonus_settled_at',qs).lt('bonus_settled_at',qe);
+  const pieces=(ol||[]).length;
+  const byM={}; (ol||[]).forEach(o=>{const m=Number((o.bonus_settled_at||'').slice(5,7)); byM[m]=(byM[m]||0)+1;});
+  let qty=null, rows=null;
+  const {data:recs,error}=await sb.from('sales_records').select('qty,amount,item_name_raw,product_code').eq('year',y).eq('quarter',appSettings.quarter);
+  if(!error&&recs){ rows=recs.length; qty=recs.filter(r=>!saleExcludeReason(r)).reduce((t,r)=>t+Number(r.qty||0),0); }
+  const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+  set('sidebar-ship-pieces', pieces.toLocaleString()+' 件');
+  set('sidebar-ship-qty', qty!==null?`出貨 ${qty.toLocaleString()} 個`:'');
+  set('ship-stat-pieces', pieces.toLocaleString()+' 件');
+  set('ship-stat-qty', qty!==null?qty.toLocaleString():'—');
+  set('ship-stat-rows', rows!==null?rows.toLocaleString():'—');
+  set('ship-stat-month', qm.map(m=>`${m}月 ${byM[m]||0} 件`).join('｜'));
+}
 async function loadShipments() {
+  loadShipSummary();
   // 同 loadOrders：出貨的真實來源是會計銷貨明細 sales_records（舊 shipments 表未使用）
   const { data: recs } = await sb.from('sales_records')
     .select('id, ship_date, invoice_no, customer_name, item_name_raw, product_code, qty, note, source_order_no, matched_order_no, match_note')
