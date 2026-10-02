@@ -3725,8 +3725,9 @@ async function saveRdSample(){
   }
 
   // === 新增模式 ===
-  // 編號重複提示：同編號在制度上代表「同一支樣品」。送不同客戶請於原紀錄加選客戶（件數計 1 件），
-  // 確為另一支樣品才另立編號。此處僅提示，不阻擋。
+  // 編號重複檢查：同編號在制度上代表「同一支樣品」。送不同客戶請於原紀錄加選客戶（件數計 1 件），
+  // 確為另一支樣品才另立編號。2026-10-02 協理裁示由「提示」改為「擋下」：
+  // 課長／其他角色一律不能以既有編號新增；僅協理確認後可例外（S26093006 9/30、10/1 重複登錄案）。
   const {data:_sameCode}=await sb.from('rd_samples')
     .select('sample_date,item_name,rd_sample_customers(rd_customers(short_name))')
     .eq('sample_code',code).order('sample_date',{ascending:false});
@@ -3739,7 +3740,13 @@ async function saveRdSample(){
       `・同一支樣品送不同客戶 → 請改用該筆的「修改」加選客戶，打樣件數計 1 件\n`+
       `・確為另一支樣品 → 請確認編號後再繼續\n\n`+
       `仍要以此編號新增一筆嗎？`;
-    if(!confirm(_msg))return;
+    if(currentRole!=='manager'){
+      alert(`編號 ${code} 已有 ${_sameCode.length} 筆登打紀錄，不能重複新增：\n${_list}\n\n`+
+        `・同一支樣品送不同客戶 → 請改用該筆的「修改」加選客戶，打樣件數計 1 件\n`+
+        `・確為另一支樣品 → 請改用新的打樣編號\n・如有特殊情況請洽協理`);
+      return;
+    }
+    if(!confirm('【協理例外新增】\n'+_msg))return;
   }
   const {data:user}=await sb.auth.getUser();
   const {data:s,error}=await sb.from('rd_samples').insert({
