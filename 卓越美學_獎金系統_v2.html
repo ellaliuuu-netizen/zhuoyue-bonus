@@ -3035,7 +3035,7 @@ async function settleSalesMonth(){
     const ncCount=(ncByEmp[emp.id]||new Set()).size;
     const ncBonus=ncCount*ncUnit;
     const amt=amtByEmp[emp.id]||0;
-    let ratio=0.0015,rlabel='千分之 1.5';
+    let ratio=0.0015,rlabel=amt>0?'千分之 1.5':'—';
     if(amt>=4000000){ratio=0.0035;rlabel='千分之 3.5';}
     else if(amt>=2000000){ratio=0.0028;rlabel='千分之 2.8';}
     else if(amt>=1000000){ratio=0.0022;rlabel='千分之 2.2';}
@@ -3058,7 +3058,7 @@ async function settleSalesMonth(){
       note:[isTrial?'協理本人：僅試算、不發放':null, pr.note, ncCount?`新客 ${[...(ncByEmp[emp.id]||[])].join('、')}（訂金 ${ym} 入帳，次月同月薪一起發放）`:null].filter(Boolean).join('｜')||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,month'});
-    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:isTrial?'試算・不發放（已記錄）':(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+    results.push({name:emp.name,nc:ncCount,amt,rlabel,ncBonus,shipBonus,total,exc:excByEmp[emp.id]||0,status:error?'❌ '+error.message:isTrial?'試算・不發放（已記錄）':`已結算・待發放（${m===12?y+1:y}/${m===12?1:m+1}/5 同月薪）${pr.ratio<1?pr.note:''}`});
   }
   document.getElementById('sales-m-content').innerHTML=`<table><thead><tr><th>業務</th><th>新客</th><th>出貨金額（計獎）</th><th>比例</th><th>新客獎金</th><th>出貨獎金</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${r.nc}</td><td>${fmtNum(Math.round(r.amt))}${r.exc?`<div style="font-size:10px;color:#b3541e">已排除 ${fmtNum(Math.round(r.exc))}</div>`:''}</td><td>${r.rlabel}</td><td>${fmt(r.ncBonus)}</td><td>${fmt(r.shipBonus)}</td><td><strong>${fmt(r.total)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
   if(excTotal>0){
@@ -3112,7 +3112,7 @@ async function settleSalesQuarter(){
       status:'paid',note:pr.note||null,settled_by:currentUser.id,
       settled_at:new Date().toISOString(),updated_at:new Date().toISOString()
     },{onConflict:'employee_id,year,quarter'});
-    results.push({name:emp.name,rev,bonus:finalBonus,label,status:error?'❌ '+error.message:(pr.ratio<1?`已發 ${pr.note}`:'已發')});
+    results.push({name:emp.name,rev,bonus:finalBonus,label,status:error?'❌ '+error.message:`已結算・待發放（季度結算後之次月發放）${pr.ratio<1?pr.note:''}`});
   }
   document.getElementById('sales-q-content').innerHTML=`<table><thead><tr><th>業務</th><th>已回款</th><th>級距</th><th>實發</th><th>狀態</th></tr></thead><tbody>${results.map(r=>`<tr><td>${r.name}</td><td>${fmtNum(Math.round(r.rev))}</td><td>${r.label}</td><td><strong>${fmt(r.bonus)}</strong></td><td style="font-size:11px">${r.status}</td></tr>`).join('')}</tbody></table>`;
   showToast(`✓ ${y} ${q} 業務季結算完成`);
