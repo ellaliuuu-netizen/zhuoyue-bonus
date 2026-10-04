@@ -728,7 +728,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card">
             <div class="card-header">
               <div class="card-title">🏆 季底結算（自動）</div>
-              <button class="btn btn-primary manager-only" onclick="settleSalesQuarter()">執行結算（${appSettings?.quarter||'本季'}）</button>
+              <button class="btn btn-primary manager-only" onclick="settleSalesQuarter()" id="sales-q-settle-btn">執行結算（本季）</button>
             </div>
             <div class="info-box">點「執行結算」會：匯總各業務當季回款金額 → 6 級距季度回款達標獎金。回款以會計部每月 1 日前提供之回款資料為準（已出貨未收款不計）；⚠️ 回款資料尚未接入系統，接入前本季無法結算</div>
             <div id="sales-q-content"><div class="empty-state"><div class="empty-icon">🏆</div><div style="font-size:14px">點「執行結算」開始</div></div></div>
@@ -2134,8 +2134,7 @@ function populateEmpSelects() {
   const purEmps = employees.filter(e => e.dept === '採購部' && e.is_active);
   const allActiveEmps = employees.filter(e => e.is_active);
 
-  fillSelect('sales-emp-sel', salesEmps);
-  fillSelect('sales-q-emp-sel', salesEmps);
+  { const qb=document.getElementById('sales-q-settle-btn'); if(qb) qb.textContent=`執行結算（${appSettings.year} ${appSettings.quarter}）`; }
   // 個人試算 dropdown 排除助理（助理沒個人成交獎金，走團隊 5% 池）
   fillSelect('rd-emp-sel', employees.filter(e => e.dept === '研發部' && e.is_active && e.role_level !== 'assistant'));
   fillSelect('plan-emp-sel', planEmps);
