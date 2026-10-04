@@ -1187,9 +1187,6 @@ table tr:hover td{background:rgba(247,240,222,.5);}
           <div class="card-header"><div class="card-title">🏭 生管試算</div></div>
           <div class="form-row">
             <div class="form-group"><label class="form-label">姓名</label><select class="form-select" id="prod-name" onchange="prodGraceUI()"><option value="">— 請選擇 —</option></select></div>
-            <div class="form-group" id="prod-grace-box" style="display:none"><label class="form-label">核定理由（轉正當月整月計入，印在個人獎金確認表）</label>
-              <input class="form-input" id="prod-grace-reason" placeholder="例：試用期間表現良好" />
-              <div id="prod-grace-note" style="font-size:11px;color:#6b4f8a"></div></div>
             <div class="form-group"><label class="form-label">當季出貨件數（系統自動帶，可手改）</label>
               <input class="form-input" type="number" id="prod-shipments" placeholder="0" min="0" />
               <div id="prod-ship-note" style="font-size:11px;color:var(--ink-faint)"></div></div>
@@ -1222,6 +1219,9 @@ table tr:hover td{background:rgba(247,240,222,.5);}
             <div class="res-label">季獎金合計</div><div class="res-value" id="prod-total">—</div>
             <div class="res-breakdown" id="prod-breakdown"></div>
           </div>
+          <div class="form-group" id="prod-grace-box" style="display:none;margin-top:14px"><label class="form-label">核定理由（轉正當月整月計入，印在個人獎金確認表）</label>
+            <input class="form-input" id="prod-grace-reason" placeholder="例：試用期間表現良好" />
+            <div id="prod-grace-note" style="font-size:11px;color:#6b4f8a"></div></div>
           <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn btn-gold" onclick="calcProduction()">試算</button>
             <button class="btn btn-primary manager-only" onclick="saveProduction()">存草稿</button>
@@ -5267,12 +5267,15 @@ function calcProduction(){
   const score = calcProdScore();
   const scoreObj = prodScoreBonus(score);
   const total = ship.total + ot.bonus + scoreObj.bonus;
+  prodGraceUI();
+  const _empC=employees.find(e=>e.name===document.getElementById('prod-name').value), _prC=prodRatio(_empC), _finalC=Math.round(total*_prC.ratio);
   show('prod-result');
-  document.getElementById('prod-total').textContent=fmt(total);
+  document.getElementById('prod-total').textContent=fmt(_finalC);
   let html = `<div class="res-item"><span class="res-item-dot"></span><strong>件數獎金：${fmt(ship.total)}</strong>${ships>=20?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ship.breakdown+'</span>':''}</div>`;
   html += `<div class="res-item"><span class="res-item-dot"></span><strong>準時率獎金：${fmt(ot.bonus)}</strong>${prodIsLegacyQuarter()?'（2026 Q3 過渡規定不計）':(ontime>=70?'<br><span style="font-size:11px;color:var(--ink-faint);margin-left:14px">'+ot.breakdown+'</span>':'')}</div>`;
   html += `<div class="res-item"><span class="res-item-dot"></span><strong>評分獎金：${fmt(scoreObj.bonus)}</strong>（${scoreObj.label} ／ 總分 ${score}/100）</div>`;
   html += `<div class="res-item" style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px"><span class="res-item-dot"></span>直接加總：${fmt(ship.total)} ＋ ${fmt(ot.bonus)} ＋ ${fmt(scoreObj.bonus)} = <strong>${fmt(total)}</strong></div>`;
+  if(_prC.ratio<1) html += `<div class="res-item" style="color:${_prC.grace?'#6b4f8a':'var(--red)'}"><span class="res-item-dot"></span>${_prC.grace?`公司核定 ${_prC.grace.fromMonth} 月起整月計入：× ${_prC.grace.months}/3`:`試用期比例 × ${(_prC.ratio*100).toFixed(1)}%${_prC.note}`} → 實發 <strong>${fmt(_finalC)}</strong></div>`;
   document.getElementById('prod-breakdown').innerHTML=html;
 }
 
@@ -5482,7 +5485,7 @@ function switchPage(page){
   if(page==='planning')initPlanning();
   if(page==='products')loadProductMaster();
   if(page==='purchase'){fillDeptAutoCount('pur-shipments','pur-ship-note'); purApplyMode();}
-  if(page==='production'){fillDeptAutoCount('prod-shipments','prod-ship-note'); prodApplyMode();}
+  if(page==='production'){fillDeptAutoCount('prod-shipments','prod-ship-note'); prodApplyMode(); prodGraceUI();}
   if(page==='reconcile')loadReconcile();
   if(page==='kpireview')loadKpiReview();
   if(page==='sales-import')loadSalesStaging();
