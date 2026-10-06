@@ -1092,7 +1092,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('企劃部')">產生確認表</button>
             </div>
           </div>
-          <div class="info-box">產出該季已放行的企劃部獎金明細。2026 Q3 起（v1）：計件品項逐筆（字卡等級、首發／追加／承接、單價）＋季度加成＋KPI 六項＋公司核定事項＋合計＋異議處理程序＋簽收欄。</div>
+          <div class="info-box">產出所選季度的企劃部獎金明細（草稿即可產出，簽回無誤後再到「KPI覆核」放行）。2026 Q3 起（v1）：計件品項逐筆（字卡等級、首發／追加／承接、單價）＋季度加成＋KPI 六項＋公司核定事項＋合計＋異議處理程序＋簽收欄。</div>
         </div>
       </div>
 
@@ -1237,7 +1237,7 @@ table tr:hover td{background:rgba(247,240,222,.5);}
               <button class="btn btn-outline btn-sm" onclick="generateDeptConfirmSheets('生產部')">產生確認表</button>
             </div>
           </div>
-          <div class="info-box">產出該季已放行的生管獎金明細：件數逐級距算式＋計件品項清單＋準時率獎金算式＋評分（2026 Q3 為原四項＋六面向試評；Q4 起六面向加權）＋合計＋異議處理程序＋簽收欄。</div>
+          <div class="info-box">產出所選季度的生管獎金明細（草稿即可產出，簽回無誤後再到「KPI覆核」放行）：件數逐級距算式＋計件品項清單＋準時率獎金算式＋評分（2026 Q3 為原四項＋六面向試評；Q4 起六面向加權）＋合計＋異議處理程序＋簽收欄。</div>
         </div>
       </div>
 
@@ -4802,7 +4802,7 @@ async function generateDeptConfirmSheets(dept){
   const selId = dept==='企劃部' ? 'plan-sheet-q' : 'prod-sheet-q';
   const qq = document.getElementById(selId).value;
   const {data:ks} = await sb.from('kpi_scores').select('*').eq('dept',dept).eq('year',yr).eq('quarter',qq);
-  if(!ks || !ks.length){ showToast(`${yr} ${qq} ${dept}尚無評分紀錄（要先存草稿並在 KPI 覆核放行）`); return; }
+  if(!ks || !ks.length){ showToast(`${yr} ${qq} ${dept}尚無評分紀錄（請先在部門頁評分並存草稿）`); return; }
   const {data:lines} = await sb.from('order_lines')
     .select('product_code,item_name_raw,customer_name,order_qty,shipped_qty,bonus_settled_month')
     .eq('bonus_settled_year',yr).eq('bonus_settled_quarter',qq).order('bonus_settled_month');
@@ -5082,7 +5082,7 @@ async function generatePurConfirmSheets(){
   const yr = appSettings.year;
   const qq = document.getElementById('pur-sheet-q').value;
   const {data:ks} = await sb.from('kpi_scores').select('*').eq('dept','採購部').eq('year',yr).eq('quarter',qq);
-  if(!ks || !ks.length){ showToast(`${yr} ${qq} 採購部尚無評分紀錄（要先存草稿並在 KPI 覆核放行）`); return; }
+  if(!ks || !ks.length){ showToast(`${yr} ${qq} 採購部尚無評分紀錄（請先在部門頁評分並存草稿）`); return; }
   const qm = ({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[qq];
   const {data:lines} = await sb.from('order_lines')
     .select('product_code,item_name_raw,customer_name,order_qty,shipped_qty,sign_date,bonus_settled_month')
