@@ -1814,8 +1814,12 @@ table tr:hover td{background:rgba(247,240,222,.5);}
       </div>
 
       <div style="display:flex;gap:10px">
-        <div class="form-group" style="flex:1"><label class="form-label">確樣日 *</label><input class="form-input" type="date" id="cf-date" /></div>
+        <div class="form-group" style="flex:1"><label class="form-label">確樣日 *</label><input class="form-input" type="date" id="cf-date" onchange="cfLateRefresh()" /></div>
         <div class="form-group" style="flex:1"><label class="form-label">確樣人 *（誰確誰領 20%）</label><select class="form-select" id="cf-confirmer" onchange="cfState.confirmerManual=true"></select></div>
+      </div>
+      <div class="form-group" id="cf-late-wrap" style="display:none;border:1px solid #b3541e;background:#fbf0ea;border-radius:6px;padding:8px 10px">
+        <div id="cf-late-msg" style="font-size:12px;color:#b3541e;margin-bottom:6px;line-height:1.6"></div>
+        <textarea class="form-input" id="cf-late-reason" rows="2" placeholder="補登原因（必填，供協理覆核留底）：例：客戶 9/17 以 LINE 確認，正式編號 9/25 才建立"></textarea>
       </div>
 
       <div style="display:flex;gap:10px;align-items:flex-end">
@@ -2430,7 +2434,7 @@ async function toggleShipmentRefund(shipmentId, isRefunded){
   await loadShipments();
 }
 async function loadProducts() {
-  const { data } = await sb.from('products').select('product_code, product_name, formula_type, primary_owner_employee_id').order('product_code');
+  const { data } = await sb.from('products').select('product_code, product_name, formula_type, primary_owner_employee_id, created_at').order('product_code');
   products = data || [];
   const dl = document.getElementById('o-product-codes');
   if (dl) dl.innerHTML = products.map(p => `<option value="${p.product_code}">${p.product_name}</option>`).join('');
@@ -5682,12 +5686,37 @@ function computeDealSegments(sc){
 
 // ===== 研發個人確認表（每人一張、只出自己；打樣月結逐月 + 成交三段每品項）=====
 // 制度：打樣未達合格件數=0；達標=1000+(件-合格件數)×55、上限88（合格件數 同仁18／課長13）；成交三段主責50/打樣30/確樣20
+// 確樣登錄截止日＝季末次月第 RD_CONFIRM_CUTOFF_WD 個工作天（制度：截止後才產正式確認表）
+const RD_CONFIRM_CUTOFF_WD=5;
+function rdConfirmCutoff(endY, endM){
+  const d=new Date(endY, endM-1, 1); let n=0;
+  while(true){ const w=d.getDay(); if(w!==0&&w!==6){ n++; if(n===RD_CONFIRM_CUTOFF_WD) break; } d.setDate(d.getDate()+1); }
+  return rdLocalDate(d);
+}
 async function generateRdConfirmSheets(){
   const A=appSettings.aValue||3000;
   const yr=appSettings.year;
   const qMonths=({Q1:[1,2,3],Q2:[4,5,6],Q3:[7,8,9],Q4:[10,11,12]})[appSettings.quarter]||[];
   const pad=m=>String(m).padStart(2,'0');
   const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
+  // 0) 產表前檢查：①是否已過確樣登錄截止日 ②是否有正式編號已建立、但還沒登錄確樣
+  //    （2026 Q3 曾因確樣於產表後才補登，同仁拿到的表缺品項）
+  const cutoff=rdConfirmCutoff(endY, endM), today=rdLocalDate(), genAt=new Date();
+  {
+    const {data:doneCodes}=await sb.from('rd_sample_customers').select('official_product_code').eq('confirm_status','confirmed').not('official_product_code','is',null);
+    const done=new Set((doneCodes||[]).map(r=>r.official_product_code));
+    const since=`${yr}-${pad(qMonths[0])}-01`;
+    const missing=products.filter(p=>p.created_at && rdLocalDate(p.created_at)>=since && !done.has(p.product_code));
+    const warns=[];
+    if(today<cutoff) warns.push(`尚未到本季確樣登錄截止日 <b>${cutoff}</b>。截止前產出的表僅供預覽，正式發給同仁請於截止日後再產一次。`);
+    if(missing.length) warns.push(`下列 <b>${missing.length}</b> 個正式編號於本季起建立，但<b>尚無確樣紀錄</b>，產表後不會出現在任何人的表上。請先與研發課長確認是否已確樣未登錄（非研發品項可略過）：`+
+      `<div style="max-height:180px;overflow:auto;margin-top:6px;font-size:12px;border:1px solid #e0d3b0;border-radius:4px;padding:6px">`+
+      missing.map(p=>`${p.product_code}　${p.product_name||''}　<span style="color:var(--ink-faint)">（建立 ${rdLocalDate(p.created_at)}）</span>`).join('<br>')+`</div>`);
+    if(warns.length){
+      const ok=await confirmCard('產表前檢查', warns.map(w=>`<p style="margin:0 0 10px">⚠️ ${w}</p>`).join(''), '了解，仍要產表');
+      if(!ok) return;
+    }
+  }
   // 1) 合格打樣件數（approved/auto_approved，且未因逾期登打被排除）本季各月各人
   const {data:samples,error:e1}=await sb.from('rd_samples')
     .select('employee_id, sample_date, approval_status')
@@ -5735,7 +5764,7 @@ async function generateRdConfirmSheets(){
   const sampleBonus=(n,empId)=>rdSamplingBonus(n,empId); // 複用系統既有公式，確保與畫面一致
   // 2) 成交三段（現有確樣 → 依發獎引擎預估）
   const {data:scs,error:e2}=await sb.from('rd_sample_customers')
-    .select('id, official_product_code, confirmed_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
+    .select('id, official_product_code, confirmed_at, confirm_logged_at, confirmed_by, change_level, is_oem, formula_type_override, owner_override_employee_id, recognized_at, rd_customers(short_name), rd_samples(employee_id, formula_type, employees!rd_samples_employee_id_fkey(name, role_level)), rd_deal_owner_splits(employee_id, pct, role)')
     .eq('confirm_status','confirmed');
   if(e2){showToast('讀取確樣失敗：'+e2.message);return;}
   // 本季已認列的成交，一律以「發獎明細」為準（覆核台可改金額、可指定孤兒段接手人），不由引擎重算
@@ -5795,7 +5824,7 @@ async function generateRdConfirmSheets(){
       });
     }
     allRows.push({code:sc.official_product_code||'—', name:p?.product_name||'', cust:sc.rd_customers?.short_name||'',
-      confirmed:(sc.confirmed_at||'').slice(0,10), recognized, recAt:(sc.recognized_at||'').slice(0,10), who});
+      confirmed:(sc.confirmed_at||'').slice(0,10), logged:sc.confirm_logged_at?rdLocalDate(sc.confirm_logged_at):'', recognized, recAt:(sc.recognized_at||'').slice(0,10), who});
   });
   // 3) 每人一張
   const rd=employees.filter(e=>e.dept==='研發部'&&e.is_active);
@@ -5884,7 +5913,7 @@ async function generateRdConfirmSheets(){
   const allSorted=allRows.slice().sort((a,b)=>(b.confirmed||'').localeCompare(a.confirmed||''));
   const allTable=allSorted.length?`<h2>附表、全研發部確樣品項一覽（供交叉核對）</h2>
     <table><thead><tr><th>正式編號</th><th>品名</th><th>客戶</th><th>確樣日</th><th class="c">出貨認列</th><th>主責</th><th>打樣</th><th>確樣</th></tr></thead><tbody>
-    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}</td><td class="c">${r.recognized?'✅ 本季':(r.recAt?`✅ 已認列<br><span style="font-size:10px;color:#777">${esc(r.recAt)}</span>`:'待出貨')}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
+    ${allSorted.map(r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.cust)}</td><td>${esc(r.confirmed)}${r.logged&&r.logged!==r.confirmed?`<br><span style="font-size:10px;color:#777">${esc(r.logged.slice(5).replace('-','/'))} 登錄</span>`:''}</td><td class="c">${r.recognized?'✅ 本季':(r.recAt?`✅ 已認列<br><span style="font-size:10px;color:#777">${esc(r.recAt)}</span>`:'待出貨')}</td><td>${esc(r.who['主責']||'—')}${r.who['協作']?`<br><span style="font-size:10px;color:#777">協作 ${esc(r.who['協作'])}</span>`:''}</td><td>${esc(r.who['打樣']||'—')}</td><td>${esc(r.who['確樣']||'—')}</td></tr>`).join('')}
     </tbody></table>
     <p class="note">本表列出全研發部所有確樣品項與三段歸屬，不含金額。<b>若你參與了其中某個品項，但該段別沒有列出你的名字，請在下方異議欄註明。</b></p>`:'';
   // 同一品項的三段要排在一起，段內固定順序，避免同一支產品被別支插在中間
@@ -5963,7 +5992,7 @@ async function generateRdConfirmSheets(){
       </tbody></table>
       <p class="note">依制度，試用期（到職起三個月）內不計獎金，<b>需經過試用期考核、評估適任與否後，才會納入公司營運季獎金鼓勵制度</b>。判定方式：打樣以「打樣日」判定、成交以「出貨認列日」判定。<b style="color:#1a7f5a">惟公司考量轉正當月的整月投入，得以整月計算該月打樣件數</b>，故上表僅列出「轉正月之前」未計入之月份。試用期內確樣但轉正後才出貨者，該筆成交獎金於出貨當季照常計入。</p>`:'';
     pages+=`<section class="sheet"><h1>研發個人獎金確認表</h1>
-      <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）</div>
+      <div class="meta">${yr} ${appSettings.quarter}｜<b>${esc(e.name)}</b>（${esc(e.role_title)}）<br><span style="font-size:11px;color:#777">資料截至 ${rdLocalDate(genAt)} ${String(genAt.getHours()).padStart(2,'0')}:${String(genAt.getMinutes()).padStart(2,'0')}｜本季確樣登錄截止日 ${cutoff}${today<cutoff?'｜<b style="color:#b3541e">截止日前產出・預覽版</b>':''}｜截止日後登錄之確樣，列入下一季確認表</span></div>
       ${e.role_level==='assistant'?`<h2>一、獎金計算方式</h2>
       <table><tbody><tr><td>職務</td><td class="r"><b>研發助理</b></td></tr>
       <tr><td>獎金基準</td><td class="r"><b>全團隊成交池 × 5% 分潤</b></td></tr></tbody></table>
@@ -6139,6 +6168,11 @@ function dealFlags(rows, sc, cum){
     flags.push({lv:'high',t:'三段集中同一人（確樣人同時領主責/打樣）'});
   if(sc?.change_level==='major') flags.push({lv:'high',t:'主責被重新認定（大幅改動換主責）'});
   if(rows.some(r=>r.is_orphan_halved)) flags.push({lv:'high',t:'離職孤兒段折半（需指定接手人）'});
+  // 確樣登錄時效：只對有實際登錄時間的紀錄判定（2026-10 前的舊資料無此時間，不追溯）
+  if(sc?.confirm_logged_at){
+    const li=rdConfirmLateIssues(sc.confirmed_at, rows[0].official_product_code, sc.confirm_logged_at);
+    if(li.length) flags.push({lv:'high',t:'逾期補登確樣：'+li.join('；')+(sc.confirm_late_reason?`｜原因：${sc.confirm_late_reason}`:'')});
+  }
   const p=products.find(x=>x.product_code===rows[0].official_product_code);
   const ft=sc?.formula_type_override||p?.formula_type||sc?.rd_samples?.formula_type;
   if(FORMULA_BASE[ft]>=0.8&&cb&&mgrIds.includes(cb)) flags.push({lv:'mid',t:`高基數劑型(${FORMULA_BASE[ft]})－池子較大，建議核對`});
@@ -6263,7 +6297,7 @@ async function fillOwner(scId, code){
 async function loadDealBonuses(){
   const el=document.getElementById('rd-deal-content'); if(!el)return;
   const {data,error}=await sb.from('rd_deal_bonuses')
-    .select('*, employees(name), rd_sample_customers(change_level, confirmed_by, sampler_note, formula_type_override, is_oem, rd_customers(short_name), rd_samples(formula_type))')
+    .select('*, employees(name), rd_sample_customers(change_level, confirmed_by, confirmed_at, confirm_logged_at, confirm_late_reason, sampler_note, formula_type_override, is_oem, rd_customers(short_name), rd_samples(formula_type))')
     .eq('status','pending_review').order('recognized_at',{ascending:false});
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   const {data:agg}=await sb.from('rd_deal_bonuses').select('employee_id, amount').eq('year',appSettings.year).eq('quarter',appSettings.quarter);
@@ -7157,7 +7191,7 @@ const FORMULA_BASE={liquid:0.3,essence:0.4,emulsion_ow:0.8,emulsion_wo:1.0,speci
 
 async function openConfirmModal(sampleId){
   const {data:s,error}=await sb.from('rd_samples')
-    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, sampler_note, sampler_sample_ids, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
+    .select('*, rd_sample_customers(id, customer_id, official_product_code, confirm_status, confirmed_at, confirmed_by, formula_type_override, is_oem, change_level, changed_architectures, owner_override_employee_id, split_reason, sampler_note, sampler_sample_ids, confirm_late_reason, rd_customers(id, short_name), rd_deal_owner_splits(employee_id, pct, role))')
     .eq('id',sampleId).single();
   if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
   cfState={sampleId, sample:s, scRows:s.rd_sample_customers||[], activeScId:null};
@@ -7210,6 +7244,7 @@ function onConfirmCustomerChange(){
     if(exSamp.length)(cfState.allSamples||[]).forEach(x=>{if(exSamp.includes(x.employee_id))cfState.samplerPicks.add(x.id);});
   }
   document.getElementById('cf-sampler-note').value=rc.sampler_note||'';
+  document.getElementById('cf-late-reason').value=rc.confirm_late_reason||'';
   renderSamplerCandidates();
   document.getElementById('cf-formula-override').value=rc.formula_type_override||'';
   document.getElementById('cf-oem').checked=!!rc.is_oem;
@@ -7256,6 +7291,7 @@ function onConfirmCustomerChange(){
   document.querySelectorAll('#cf-split-rows input,#cf-split-rows select,#cf-split-reason').forEach(el=>el.disabled=_lock);
   const _hint=document.getElementById('cf-splitsonly-hint');
   if(_hint)_hint.style.display=_lock?'block':'none';
+  cfLateRefresh();
 }
 
 function onConfirmProductChange(){
@@ -7443,6 +7479,42 @@ async function saveSamplerSplitsOnly(){
   loadRdSamples();
 }
 
+// ===== 確樣登錄時效（2026-10 起）=====
+// 確樣後應於 RD_CONFIRM_LOG_DAYS 個工作天內登錄；逾期或確樣日早於正式編號建立日 → 須填補登原因，並在覆核台標紅。
+// 不自動改確樣日：登錄的是課長，自動延後確樣日會讓打樣同仁的成交認列受影響，故改由協理逐案覆核。
+const RD_CONFIRM_LOG_DAYS=3;
+function rdWorkdaysAfter(fromStr, toStr){
+  if(!fromStr||!toStr||toStr<=fromStr) return 0;
+  const d=new Date(fromStr+'T00:00:00'), end=new Date(toStr+'T00:00:00'); let n=0;
+  while(d<end){ d.setDate(d.getDate()+1); const w=d.getDay(); if(w!==0&&w!==6) n++; }
+  return n;
+}
+function rdLocalDate(t){ const d=t?new Date(t):new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// 回傳此筆確樣的時效問題（空陣列＝無問題）。loggedAt 未給＝以今天登錄判定
+function rdConfirmLateIssues(confirmedAt, code, loggedAt){
+  const out=[]; if(!confirmedAt) return out;
+  const logDay=loggedAt?rdLocalDate(loggedAt):rdLocalDate();
+  const wd=rdWorkdaysAfter(confirmedAt, logDay);
+  if(wd>RD_CONFIRM_LOG_DAYS) out.push(`登錄較確樣日晚 ${wd} 個工作天（${logDay.slice(5).replace('-','/')} 登錄）`);
+  const p=products.find(x=>x.product_code===code);
+  const pc=p?.created_at?rdLocalDate(p.created_at):'';
+  if(pc && confirmedAt<pc) out.push(`確樣日早於正式編號建立日（編號 ${pc.slice(5).replace('-','/')} 建立）`);
+  return out;
+}
+// 只有「這次是新確樣」才檢查；已確樣的重開／調整不檢查（今天≠當初登錄日）
+function cfLateRefresh(){
+  const wrap=document.getElementById('cf-late-wrap'); if(!wrap) return [];
+  const rc=(cfState?.scRows||[]).find(r=>r.id===cfState.activeScId)||{};
+  const isNew=rc.confirm_status!=='confirmed';
+  const issues=isNew?rdConfirmLateIssues(document.getElementById('cf-date').value, document.getElementById('cf-product').value):[];
+  wrap.style.display=(issues.length||rc.confirm_late_reason)?'block':'none';
+  document.getElementById('cf-late-msg').innerHTML=issues.length
+    ? `⚠️ ${issues.join('；')}。<br>確樣應於確樣日後 ${RD_CONFIRM_LOG_DAYS} 個工作天內登錄。請填寫補登原因，此筆將送協理覆核。`
+    : '補登原因（當初登錄時填寫）';
+  document.getElementById('cf-late-reason').disabled=!isNew;
+  return issues;
+}
+
 async function saveConfirm(){
   if(cfState.splitsOnly){ return saveSamplerSplitsOnly(); }
   const scId=cfState.activeScId;
@@ -7467,6 +7539,10 @@ async function saveConfirm(){
   const samplerNote=document.getElementById('cf-sampler-note').value.trim();
   const _nonAsst=new Set((cfState.allSamples||[]).filter(x=>cfState.samplerPicks?.has(x.id)&&x.employee_id&&x.employees?.role_level!=='assistant').map(x=>x.employee_id));
   if(_nonAsst.size>=2 && !samplerNote){showToast('多人打樣：請填「打樣群組備註」，說明為何這幾筆算同一支（留底供覆核）');return;}
+  const _wasConfirmed=(cfState.scRows.find(r=>r.id===scId)||{}).confirm_status==='confirmed';
+  const _lateIssues=cfLateRefresh();
+  const _lateReason=document.getElementById('cf-late-reason').value.trim();
+  if(_lateIssues.length && !_lateReason){showToast('此筆為逾期補登：請填寫補登原因（送協理覆核）');document.getElementById('cf-late-reason').focus();return;}
   const upd={
     official_product_code:code, confirm_status:'confirmed', confirmed_at:date, confirmed_by:confirmer, sampler_note:samplerNote||null,
     sampler_sample_ids:[...(cfState.samplerPicks||[])],
@@ -7476,6 +7552,7 @@ async function saveConfirm(){
     owner_override_employee_id:lv==='major'?(document.getElementById('cf-owner-override').value||null):(ownerSet||null),
     split_reason:lv==='minor'?null:reason
   };
+  if(!_wasConfirmed) upd.confirm_late_reason=_lateIssues.length?_lateReason:null;
   // B：送出前再核對一次（凸顯打樣編號＋打樣日，防綁錯打樣）
   const s=cfState.sample, prod=products.find(p=>p.product_code===code), confName=employees.find(e=>e.id===confirmer)?.name||'';
   const A=appSettings.aValue||3000, ft=upd.formula_type_override||prod?.formula_type||s.formula_type, base=FORMULA_BASE[ft];
