@@ -5687,6 +5687,8 @@ function computeDealSegments(sc){
 // ===== 研發個人確認表（每人一張、只出自己；打樣月結逐月 + 成交三段每品項）=====
 // 制度：打樣未達合格件數=0；達標=1000+(件-合格件數)×55、上限88（合格件數 同仁18／課長13）；成交三段主責50/打樣30/確樣20
 // 確樣登錄截止日＝季末次月第 RD_CONFIRM_CUTOFF_WD 個工作天（制度：截止後才產正式確認表）
+// 已由協理確認「不需研發確樣」的正式編號（試用包／分裝／代購），產表前檢查不再列出
+const RD_NO_CONFIRM_CODES=new Set(['JP000084','JP000089','JP000090','JP000102','JP000103']);
 const RD_CONFIRM_CUTOFF_WD=5;
 function rdConfirmCutoff(endY, endM){
   const d=new Date(endY, endM-1, 1); let n=0;
@@ -5701,12 +5703,13 @@ async function generateRdConfirmSheets(){
   const qLast=qMonths[qMonths.length-1], endY=qLast===12?yr+1:yr, endM=qLast===12?1:qLast+1;
   // 0) 產表前檢查：①是否已過確樣登錄截止日 ②是否有正式編號已建立、但還沒登錄確樣
   //    （2026 Q3 曾因確樣於產表後才補登，同仁拿到的表缺品項）
+  await rdRerecognize();
   const cutoff=rdConfirmCutoff(endY, endM), today=rdLocalDate(), genAt=new Date();
   {
     const {data:doneCodes}=await sb.from('rd_sample_customers').select('official_product_code').eq('confirm_status','confirmed').not('official_product_code','is',null);
     const done=new Set((doneCodes||[]).map(r=>r.official_product_code));
     const since=`${yr}-${pad(qMonths[0])}-01`;
-    const missing=products.filter(p=>p.created_at && rdLocalDate(p.created_at)>=since && !done.has(p.product_code));
+    const missing=products.filter(p=>p.created_at && rdLocalDate(p.created_at)>=since && !done.has(p.product_code) && !RD_NO_CONFIRM_CODES.has(p.product_code));
     const warns=[];
     if(today<cutoff) warns.push(`尚未到本季確樣登錄截止日 <b>${cutoff}</b>。截止前產出的表僅供預覽，正式發給同仁請於截止日後再產一次。`);
     if(missing.length) warns.push(`下列 <b>${missing.length}</b> 個正式編號於本季起建立，但<b>尚無確樣紀錄</b>，產表後不會出現在任何人的表上。請先與研發課長確認是否已確樣未登錄（非研發品項可略過）：`+
@@ -6096,6 +6099,13 @@ async function recognizeRdDeals(orderId, shipmentId, shipDate){
 }
 
 // 研發認列（吃銷貨明細 sales_records）：新品 + 同編號累計達 500 罐 → 算三段寫待覆核；認列具冪等
+// 確樣被修改／取消／改綁時，資料庫觸發器會作廢該筆「未放行」的發獎明細並清除認列時間
+// （trg_reset_deal_on_confirm_change／trg_reset_deal_on_split_change，2026-10-12）。
+// 協理操作後立即重掃，讓明細依新確樣重建；課長操作則待協理下次產表或開覆核台時重建。
+async function rdRerecognize(){
+  if(currentRole!=='manager') return 0;
+  try{ return await recognizeFromSales(); }catch(e){ console.warn('rdRerecognize',e); return 0; }
+}
 async function recognizeFromSales(){
   // 認列閘門＝「已確樣且尚未認列」（下方 rd_sample_customers 查詢），不再依賴會計銷貨的「新品／舊品追加」標記。
   // 原因：該標記實際與「是否已開發票」連動，非產品新舊——同一支產品同一天出貨會同時出現兩種標記
@@ -6420,6 +6430,7 @@ async function approveRequest(reqId){
     if(q.action==='rebind') await executeRebind(q.sample_customer_id, q.target_sample_customer_id);
     else await executeCancel(q.sample_customer_id);
   }catch(e){showToast('執行失敗：'+(e.message||e));return;}
+  await rdRerecognize();
   const meEmp=employees.find(e=>e.name===currentUserName);
   await sb.from('rd_confirm_change_requests').update({status:'approved', reviewed_by:meEmp?.id||null, reviewed_at:new Date().toISOString(), review_note:note}).eq('id',reqId);
   showToast('✅ 已核准並執行');
@@ -7626,6 +7637,7 @@ async function saveConfirm(){
     const {error:e4}=await sb.from('rd_deal_owner_splits').insert(samplerRows);
     if(e4){showToast('確樣已存，但打樣分潤寫入失敗：'+e4.message);return;}
   }
+  if(_wasConfirmed) await rdRerecognize();
   showToast('✅ 確樣已儲存');
   closeModal('confirmSampleModal');
   loadRdSamples();
@@ -7694,6 +7706,7 @@ async function submitRebind(){
       if(rbState.action==='rebind') await executeRebind(rbState.sourceScId, targetId);
       else await executeCancel(rbState.sourceScId);
     }catch(e){showToast('執行失敗：'+(e.message||e));return;}
+    await rdRerecognize();
     showToast(rbState.action==='rebind'?'✅ 已改綁':'✅ 已取消確樣');
   }else{
     const meEmp=employees.find(e=>e.name===currentUserName);
@@ -7731,7 +7744,8 @@ async function executeCancel(scId){
   const {error}=await sb.from('rd_sample_customers').update({official_product_code:null, confirm_status:'none', confirmed_at:null, confirmed_by:null,
     formula_type_override:null, is_oem:false, change_level:null, changed_architectures:null, owner_override_employee_id:null, split_reason:null, change_lock:false}).eq('id',scId);
   if(error)throw new Error(error.message);
-  await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId);
+  const {error:e9}=await sb.from('rd_deal_owner_splits').delete().eq('sample_customer_id',scId);
+  if(e9)throw new Error(e9.message);
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
