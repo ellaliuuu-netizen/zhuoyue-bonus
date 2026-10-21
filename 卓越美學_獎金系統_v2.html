@@ -42,15 +42,15 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--surface-2);color:var
 
 /* APP */
 #app{display:none;}
-.app-header{background:var(--ink);color:#fff;padding:0 32px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,.2);}
+.app-header{background:var(--ink);color:#fff;padding:0 32px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,.2);}
 .logo{display:flex;align-items:center;gap:12px;}
 .logo-mark{width:34px;height:34px;border:1.5px solid var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Noto Serif TC',serif;font-size:15px;color:var(--gold);}
 .logo h1{font-family:'Noto Serif TC',serif;font-size:17px;font-weight:500;}
-.header-right{display:flex;align-items:center;gap:10px;}
-.user-badge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 12px;border-radius:20px;font-size:12px;}
-.role-dot{width:7px;height:7px;border-radius:50%;}
-.quarter-badge{background:rgba(200,169,110,.2);border:1px solid rgba(200,169,110,.4);color:var(--gold);padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;}
-.btn-logout{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;}
+.header-right{display:flex;align-items:center;gap:12px;}
+.user-badge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:7px 16px;border-radius:20px;font-size:15px;}
+.role-dot{width:9px;height:9px;border-radius:50%;}
+.quarter-badge{background:rgba(200,169,110,.2);border:1px solid rgba(200,169,110,.4);color:var(--gold);padding:7px 16px;border-radius:20px;font-size:15px;font-weight:600;cursor:pointer;}
+.btn-logout{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.85);padding:7px 16px;border-radius:6px;font-size:15px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;}
 .btn-logout:hover{background:rgba(255,255,255,.12);color:#fff;}
 
 /* NAV */
@@ -496,8 +496,8 @@ table tr:hover td{background:rgba(247,240,222,.5);}
   <header class="app-header">
     <div class="logo"><div class="logo-mark">卓</div><h1>獎金計算系統</h1><span style="font-size:11px;color:rgba(255,255,255,.3);margin-left:6px">v2</span></div>
     <div class="header-right">
-      <div class="user-badge"><div class="role-dot" id="role-dot"></div><span id="user-display-name">—</span><span id="user-role-label" style="color:rgba(255,255,255,.4)"></span></div>
-      <div class="quarter-badge" id="pending-review-badge" onclick="openTodoCenter()" style="display:none;position:relative;background:rgba(200,120,64,.18);border-color:rgba(222,140,90,.4);color:#ffd9c2" title="待辦中心（點擊處理）">🔔 待辦<span id="pending-review-dot" style="display:none;position:absolute;top:-7px;right:-7px;background:#e5484d;color:#fff;border-radius:999px;min-width:18px;height:18px;line-height:18px;font-size:11px;font-weight:700;text-align:center;padding:0 4px;box-shadow:0 0 0 2px #241f1a">0</span></div>
+      <div class="user-badge"><div class="role-dot" id="role-dot"></div><span id="user-display-name">—</span><span id="user-role-label" style="color:rgba(255,255,255,.7)"></span></div>
+      <div class="quarter-badge" id="pending-review-badge" onclick="openTodoCenter()" style="display:none;position:relative;background:rgba(200,120,64,.18);border-color:rgba(222,140,90,.4);color:#ffd9c2" title="待辦中心（點擊處理）">🔔 待辦<span id="pending-review-dot" style="display:none;position:absolute;top:-7px;right:-7px;background:#e5484d;color:#fff;border-radius:999px;min-width:21px;height:21px;line-height:21px;font-size:13px;font-weight:700;text-align:center;padding:0 4px;box-shadow:0 0 0 2px #241f1a">0</span></div>
       <div class="quarter-badge" id="quarter-badge-btn" onclick="openModal('quarterModal')">📅 2026 Q2</div>
       <button class="btn-logout" onclick="doLogout()">登出</button>
     </div>
