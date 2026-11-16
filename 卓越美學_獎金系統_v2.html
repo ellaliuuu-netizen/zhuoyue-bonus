@@ -3507,8 +3507,8 @@ async function loadRdSamples(){
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
   const nameCount={}; data.forEach(x=>{const n=(x.item_name||'').trim();if(n)nameCount[n]=(nameCount[n]||0)+1;});
-  const {data:_codeReqs}=await sb.from('rd_sample_code_change_requests').select('sample_id,new_code').eq('status','pending');
-  const codeReqMap={}; (_codeReqs||[]).forEach(r=>{codeReqMap[r.sample_id]=r.new_code;});
+  const {data:_codeReqs}=await sb.from('rd_sample_code_change_requests').select('id,sample_id,new_code,requested_by').eq('status','pending');
+  const codeReqMap={}; (_codeReqs||[]).forEach(r=>{codeReqMap[r.sample_id]=r;});
   el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const scRows=s.rd_sample_customers||[];
     const custs=scRows.length?scRows.map(rc=>{
@@ -3527,9 +3527,10 @@ async function loadRdSamples(){
       actions.push(`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${s.id}')">${allDone?'🎯 確樣已登':'🎯 確樣'}</button>`);
     }
     if(isMgr||isMine) actions.push(`<button class="btn btn-outline btn-sm" onclick="openEditRdSampleModal('${s.id}')">✏️ 修改</button>`);
-    const pendCode=codeReqMap[s.id];
+    const pendReq=codeReqMap[s.id], pendCode=pendReq?.new_code;
     // 樣品編號一般角色唯讀 → 改走「申請改編號」，協理核准後才生效（2026-11-16）
     if(!isMgr && (isMine||currentRole==='rd_manager') && !pendCode) actions.push(`<button class="btn btn-outline btn-sm" onclick="requestSampleCodeChange('${s.id}')">🔢 申請改編號</button>`);
+    if(pendReq && currentUser && pendReq.requested_by===currentUser.id) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelCodeChange('${pendReq.id}')">↩ 撤回改編號申請</button>`);
     if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
     if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
     const editBadge=s.edit_reason?`<div style="font-size:11px;color:#a68a3a">📝 修改: ${s.edit_reason}</div>`:'';
@@ -3659,6 +3660,12 @@ async function requestSampleCodeChange(id){
   if(e){showToast(/uq_code_req_one_pending|duplicate key/i.test(e.message||'')?'這筆已有待審的改編號申請':'送出失敗：'+e.message);return;}
   showToast('✓ 已送出改編號申請（待協理核准）');
   loadRdSamples();
+}
+async function cancelCodeChange(reqId){
+  if(!confirm('確定撤回這筆改編號申請？\n\n撤回後編號維持原樣，需要時可重新申請。'))return;
+  const {error}=await sb.rpc('cancel_sample_code_change',{p_req:reqId});
+  if(error){showToast('撤回失敗：'+error.message);return;}
+  showToast('✓ 已撤回申請');loadRdSamples();loadPendingReviews();
 }
 async function approveCodeChange(reqId){
   if(!confirm('確定核准這筆編號修正？\n\n核准後樣品編號會立即更新。'))return;
