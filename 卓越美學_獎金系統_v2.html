@@ -3507,6 +3507,8 @@ async function loadRdSamples(){
   if(error){el.innerHTML=`<div class="empty-state">載入失敗：${error.message}</div>`;return;}
   if(!data||!data.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div style="font-size:14px">本月尚無打樣紀錄</div></div>';return;}
   const nameCount={}; data.forEach(x=>{const n=(x.item_name||'').trim();if(n)nameCount[n]=(nameCount[n]||0)+1;});
+  const {data:_codeReqs}=await sb.from('rd_sample_code_change_requests').select('sample_id,new_code').eq('status','pending');
+  const codeReqMap={}; (_codeReqs||[]).forEach(r=>{codeReqMap[r.sample_id]=r.new_code;});
   el.innerHTML=`<table><thead><tr><th>打樣日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>劑型</th><th>客戶</th><th>交樣日期</th><th>狀態</th><th>延遲</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
     const scRows=s.rd_sample_customers||[];
     const custs=scRows.length?scRows.map(rc=>{
@@ -3525,6 +3527,9 @@ async function loadRdSamples(){
       actions.push(`<button class="btn btn-gold btn-sm" onclick="openConfirmModal('${s.id}')">${allDone?'🎯 確樣已登':'🎯 確樣'}</button>`);
     }
     if(isMgr||isMine) actions.push(`<button class="btn btn-outline btn-sm" onclick="openEditRdSampleModal('${s.id}')">✏️ 修改</button>`);
+    const pendCode=codeReqMap[s.id];
+    // 樣品編號一般角色唯讀 → 改走「申請改編號」，協理核准後才生效（2026-11-16）
+    if(!isMgr && (isMine||currentRole==='rd_manager') && !pendCode) actions.push(`<button class="btn btn-outline btn-sm" onclick="requestSampleCodeChange('${s.id}')">🔢 申請改編號</button>`);
     if(isPendingEdit && (isMgr||isMine)) actions.push(`<button class="btn btn-outline btn-sm" onclick="cancelRdSampleEdit('${s.id}')">↩ 取消修改</button>`);
     if(isMgr) actions.push(`<button class="btn btn-outline btn-sm" onclick="deleteRdSample('${s.id}')">刪除</button>`);
     const editBadge=s.edit_reason?`<div style="font-size:11px;color:#a68a3a">📝 修改: ${s.edit_reason}</div>`:'';
@@ -3544,7 +3549,8 @@ async function loadRdSamples(){
     }
     const dupWarn=(s.item_name&&nameCount[s.item_name.trim()]>1)?`<div style="font-size:10px;color:#b3541e">⚠ 同品名 ${nameCount[s.item_name.trim()]} 筆，認打樣日</div>`:'';
     const routineTag=s.is_routine?`<div style="font-size:10px;color:#5d8aa8">🔧 日常工作（不計獎金與件數）</div>`:'';
-    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}</td><td>${s.item_name||'—'}${dupWarn}${routineTag}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
+    const codeReqTag=pendCode?`<div style="font-size:10px;color:#a68a3a">⏳ 申請改為 ${pendCode}（待協理核准）</div>`:'';
+    return `<tr><td>${s.sample_date}</td><td><strong>${s.sample_code}</strong>${s.version?' '+s.version:''}${codeReqTag}</td><td>${s.item_name||'—'}${dupWarn}${routineTag}</td><td>${empCell}</td><td>${rdFormulaLabel(s.formula_type)}</td><td>${custs}</td><td>${s.delivery_date||'—'}</td><td>${rdStatusBadge(s.approval_status)}${s.approval_reason?`<div style="font-size:11px;color:var(--ink-faint)">補登原因: ${s.approval_reason}</div>`:''}${editBadge}</td><td>${s.delay_days||0} 天</td><td>${actions.join(' ')||'—'}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -3632,6 +3638,39 @@ async function openEditRdSampleModal(id){
   updateRdsDelayInfo();
   document.getElementById('rds-date').onchange=updateRdsDelayInfo;
   openModal('newRdSampleModal');
+}
+
+// ===== 打樣編號修正申請（2026-11-16）：同仁送出 → 協理核准才真正改編號 =====
+async function requestSampleCodeChange(id){
+  const {data:s,error}=await sb.from('rd_samples').select('sample_code,sample_date,item_name').eq('id',id).single();
+  if(error||!s){showToast('讀取失敗：'+(error?.message||'找不到紀錄'));return;}
+  const nc=(prompt(`申請修改樣品編號\n\n${s.sample_date}　${s.item_name||''}\n目前編號：${s.sample_code}\n\n請輸入正確編號：`)||'').trim();
+  if(!nc)return;
+  if(nc===s.sample_code){showToast('新編號與目前編號相同');return;}
+  const {data:dup}=await sb.from('rd_samples').select('sample_date,item_name').eq('sample_code',nc);
+  if(dup&&dup.length){
+    alert(`編號 ${nc} 已被使用：\n`+dup.map(x=>`　・${x.sample_date}　${x.item_name||'—'}`).join('\n')+`\n\n若那一筆也是登打錯誤，請先申請修正那一筆，協理核准後再申請這一筆。`);
+    return;
+  }
+  const reason=(prompt(`修正原因（必填）：\n例：誤KEY，正確編號為 ${nc}`)||'').trim();
+  if(!reason){showToast('未填原因，已取消申請');return;}
+  const {data:u}=await sb.auth.getUser();
+  const {error:e}=await sb.from('rd_sample_code_change_requests').insert({sample_id:id,old_code:s.sample_code,new_code:nc,reason,requested_by:u.user.id});
+  if(e){showToast(/uq_code_req_one_pending|duplicate key/i.test(e.message||'')?'這筆已有待審的改編號申請':'送出失敗：'+e.message);return;}
+  showToast('✓ 已送出改編號申請（待協理核准）');
+  loadRdSamples();
+}
+async function approveCodeChange(reqId){
+  if(!confirm('確定核准這筆編號修正？\n\n核准後樣品編號會立即更新。'))return;
+  const {error}=await sb.rpc('approve_sample_code_change',{p_req:reqId,p_note:null});
+  if(error){showToast('核准失敗：'+error.message);return;}
+  showToast('✓ 已核准，編號已更新');loadPendingReviews();loadRdSamples();
+}
+async function rejectCodeChange(reqId){
+  const note=prompt('退回原因：');if(!note)return;
+  const {error}=await sb.rpc('reject_sample_code_change',{p_req:reqId,p_note:note});
+  if(error){showToast('退回失敗：'+error.message);return;}
+  showToast('✓ 已退回');loadPendingReviews();loadRdSamples();
 }
 
 async function cancelRdSampleEdit(id){
@@ -3941,11 +3980,13 @@ async function deleteRdSample(id){
 
 async function loadPendingReviews(){
   const {data}=await sb.from('rd_samples').select('*, employees!rd_samples_employee_id_fkey(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false});
-  const n=data?.length||0;
+  const {data:codeReqs}=await sb.from('rd_sample_code_change_requests').select('id,old_code,new_code,reason,requested_at,rd_samples(sample_date,item_name,employees!rd_samples_employee_id_fkey(name))').eq('status','pending').order('requested_at',{ascending:false});
+  const codeRows=(codeReqs||[]).map(q=>`<tr><td>${q.rd_samples?.sample_date||'—'}</td><td><strong>${q.old_code}</strong> → <strong style="color:#a68a3a">${q.new_code}</strong></td><td>${q.rd_samples?.item_name||'—'}</td><td>${q.rd_samples?.employees?.name||'-'}</td><td><span class="badge badge-gold">🔢 改編號</span></td><td>${q.reason}</td><td><button class="btn btn-primary btn-sm" onclick="approveCodeChange('${q.id}')">✓ 核准</button> <button class="btn btn-outline btn-sm" onclick="rejectCodeChange('${q.id}')">退回</button></td></tr>`).join('');
+  const n=(data?.length||0)+(codeReqs?.length||0);
   const cnt=document.getElementById('rds-pending-count');
   if(cnt)cnt.textContent=`${n} 筆`;
   const emptyHtml='<div class="empty-state"><div class="empty-icon">✓</div><div style="font-size:14px">沒有待審核項目</div></div>';
-  const html = (!n)?emptyHtml:`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${data.map(s=>{
+  const html = (!n)?emptyHtml:`<table><thead><tr><th>日期</th><th>樣品編號</th><th>品項</th><th>研發</th><th>類型</th><th>原因</th><th>動作</th></tr></thead><tbody>${codeRows}${(data||[]).map(s=>{
     const isEdit=!!s.edit_reason;
     const typeBadge=isEdit?'<span class="badge badge-gold">📝 修改</span>':`<span class="badge badge-blue">⏰ 補登 ${s.delay_days}天</span>`;
     const reasonText=isEdit?s.edit_reason:(s.approval_reason||'（隔天補登）');
@@ -3962,13 +4003,15 @@ async function loadTodoCenter(){
   const isMgr=(currentRole==='manager');
   if(badge) badge.style.display=isMgr?'':'none';
   if(!isMgr) return;
-  const [smp, dl, rq, cy] = await Promise.all([
+  const [smp, dl, rq, cy, cr] = await Promise.all([
     sb.from('rd_samples').select('sample_date,sample_code,item_name,delay_days,approval_reason,edit_reason,employees!rd_samples_employee_id_fkey(name)').eq('approval_status','pending_review').order('sample_date',{ascending:false}),
     sb.from('rd_deal_bonuses').select('official_product_code,segment,amount,recognized_at,employees(name)').eq('status','pending_review').order('recognized_at',{ascending:false}),
     sb.from('rd_confirm_change_requests').select('action,requested_at,official_product_code,src:rd_sample_customers!rd_confirm_change_requests_sample_customer_id_fkey(official_product_code,rd_customers(short_name))').eq('status','pending').order('requested_at',{ascending:false}),
-    sb.from('rd_monthly_settlement').select('year,month,sample_count,carryover_deadline,employees(name)').eq('status','pending_carryover').order('carryover_deadline')
+    sb.from('rd_monthly_settlement').select('year,month,sample_count,carryover_deadline,employees(name)').eq('status','pending_carryover').order('carryover_deadline'),
+    sb.from('rd_sample_code_change_requests').select('old_code,new_code,reason,rd_samples(sample_date,item_name,delay_days,employees!rd_samples_employee_id_fkey(name))').eq('status','pending')
   ]);
-  const sD=smp.data||[], dD=dl.data||[], rD=rq.data||[], cD=cy.data||[];
+  const crD=(cr.data||[]).map(q=>({sample_date:q.rd_samples?.sample_date,sample_code:`${q.old_code} → ${q.new_code}`,item_name:q.rd_samples?.item_name,delay_days:q.rd_samples?.delay_days,employees:q.rd_samples?.employees,edit_reason:'🔢 改編號：'+q.reason}));
+  const sD=[...crD,...(smp.data||[])], dD=dl.data||[], rD=rq.data||[], cD=cy.data||[];
   const pD=await _pendingDepositOrders();
   const nS=sD.length, nD=dD.length, nR=rD.length, nC=cD.length, nP=pD.length, total=nS+nD+nR+nC+nP;
   if(dot){ dot.style.display=total>0?'':'none'; dot.textContent=total; }
